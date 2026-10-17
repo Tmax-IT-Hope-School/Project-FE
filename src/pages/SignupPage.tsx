@@ -21,6 +21,7 @@ import {
   getNameError,
   getNicknameError,
   hasRequiredConsents,
+  hasSignupInfo,
   isAllConsented,
   makeAllConsents,
   parseSignupStep,
@@ -278,10 +279,20 @@ export function SignupPage() {
   const [consents, setConsents] = useState<SignupConsents>(makeAllConsents(false))
   // "보기" 로 열어 둔 동의 항목. 아무것도 안 열었으면 null
   const [openedKey, setOpenedKey] = useState<ConsentKey | null>(null)
+  // 이 화면을 열 때 이미 가입을 마친 사람이었는지. 처음 한 번만 봅니다.
+  // (매번 보면, 방금 가입을 마친 순간에도 "가입함" 이 되어 다짐 화면 대신 홈으로 튕길 수 있습니다)
+  // 테스트 계정은 빼 줍니다. 시연할 때 /signup 을 직접 열어 가입 화면을 보여 줄 수 있게 하려는 것입니다. (LoginPage 의 handleTestLogin)
+  const [isAlreadySignedUp] = useState(
+    () => isLoggedIn && user?.id !== testUser.id && hasSignupInfo(),
+  )
 
   // 로그인도 안 했고 구글로 시작하지도 않았으면 가입할 방법이 없습니다. 로그인 화면에서 [Google로 시작하기] 를 누르게 합니다.
   // (이 탭의 구글 정보가 지워졌을 때도 여기로 옵니다. 예: 탭을 닫았다 다시 열기)
   if (!isLoggedIn && googleSignup === null) return <Navigate to="/login" replace />
+
+  // 이미 가입을 마친 사람은 홈으로 보냅니다. 온보딩이 남았으면 홈을 지키는 RequireAuth 가 온보딩으로 보냅니다. (#453)
+  // 여기서 막지 않으면 가입 정보(닉네임·동의·동의한 시각)를 확인 없이 새로 덮어쓰게 됩니다.
+  if (isAlreadySignedUp) return <Navigate to="/" replace />
 
   // 만 14세 미만이면 입력 화면 대신 안내 화면을 보여줍니다.
   if (isOver14 === false) return <UnderFourteenView />
