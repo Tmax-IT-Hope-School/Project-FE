@@ -9,10 +9,10 @@ import { useStudySessions } from '@/hooks/useStudySessions'
 import { useSuggestionChecks } from '@/hooks/useSuggestionChecks'
 import { useSuggestions } from '@/hooks/useSuggestions'
 import { cn } from '@/lib/cn'
-import { getTodayKey, moveDateKey, toDayKey } from '@/lib/date'
+import { getTodayKey, moveDateKey } from '@/lib/date'
+import { getDaySummary } from '@/lib/daySummary'
 import { getPhoneFocusEnabled } from '@/lib/phoneFocus'
 import { MOOD_OPTIONS } from '@/lib/quickCheckIn'
-import { getStudyMs } from '@/lib/studyTime'
 import {
   PROMISE_EXAMPLES,
   PROMISE_MAX_LENGTH,
@@ -155,12 +155,8 @@ export function CheckPage() {
   const yesterdayPlans = getPlans(yesterdayKey).filter((plan) => plan.kind !== 'play')
   const targetMinutes = yesterdayPlans.reduce((sum, plan) => sum + plan.targetMinutes, 0)
 
-  // 어제 시작한 공부 기록의 순공시간(일시정지한 시간은 뺌)을 더합니다.
-  const actualMinutes = Math.round(
-    sessions
-      .filter((session) => toDayKey(session.startedAt) === yesterdayKey)
-      .reduce((sum, session) => sum + getStudyMs(session) / 60000, 0),
-  )
+  // 어제 시작한 공부 기록의 순공시간(일시정지한 시간은 뺌)입니다. 노는 기록은 공부가 아니라서 들어가지 않습니다. (lib/daySummary.ts 규칙 10)
+  const actualMinutes = getDaySummary(yesterdayKey, yesterdayPlans, sessions).studyMinutes
 
   // 달성률은 소수점을 버립니다. (99.5% 를 100% 로 보여주면서 "다 못 채웠어?" 를 묻는 일이 없게)
   // lib/daySummary.ts 의 규칙 5 와 같습니다.
