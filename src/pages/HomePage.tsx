@@ -24,7 +24,7 @@ import { isSafetyBrakeOnNow } from '@/lib/focusMode'
 import { loadInitialPlan } from '@/lib/initialPlan'
 import { getInsightsToShow } from '@/lib/insights'
 import { getCareLimits } from '@/lib/careLimits'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import { getDayProgress, getPlanProgress } from '@/lib/planProgress'
 import { loadData } from '@/lib/storage'
 import { sortPlansForNow } from '@/lib/timeline'
@@ -129,7 +129,7 @@ export function HomePage() {
   // 노는 기록까지 들어 있는 전체 기록입니다. 계획별 실제 시간(`12 / 50분`)은 노는 계획에도 보여야 해서 따로 읽습니다. (#238)
   const [allSessions] = useState<StudySession[]>(loadAllSessions)
   // 계획 화면에서 저장한 과목 목록입니다. 과목 태그의 이름과 색을 찾는 데 씁니다.
-  const [subjects] = useState<Subject[]>(loadSubjects)
+  const subjects = useSubjects()
   // 온보딩에서 내가 적은 시험 날짜와 공부하는 이유입니다. (lib/firstMe.ts)
   const [firstMe] = useState(() =>
     getFirstMe(loadData<unknown>('onboarding-answers', null), new Date()),

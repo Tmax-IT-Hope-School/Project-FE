@@ -27,7 +27,7 @@ import {
   toDateKey,
 } from '@/lib/dailyRecords'
 import { getTodayKey, isDateKey, isMonthKey, toDayDate } from '@/lib/date'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import { loadData } from '@/lib/storage'
 import { getStudyStreak, hasStudiedToday } from '@/lib/streak'
 import { thinkingHabitsQuery } from '@/lib/thinkingHabits'
@@ -86,7 +86,7 @@ export function RecordsPage() {
 
   // 공부 기록은 타이머가 저장해 둔 것을 읽기만 합니다. 과목은 계획 화면에서 저장한 목록을 씁니다.
   const [sessions] = useState<StudySession[]>(loadSessions)
-  const [subjects] = useState<Subject[]>(loadSubjects)
+  const subjects = useSubjects()
 
   // 최근 날짜가 맨 앞에 오도록 날짜별로 묶습니다.
   const days = groupSessionsByDate(sessions)

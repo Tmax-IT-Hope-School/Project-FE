@@ -15,16 +15,9 @@ interface SubjectBadgeProps {
 const colorStyles: Record<SubjectColor, string> = {
   red: 'bg-red-100 text-red-800',
   orange: 'bg-orange-100 text-orange-800',
-  yellow: 'bg-yellow-100 text-yellow-800',
-  lime: 'bg-lime-100 text-lime-800',
   green: 'bg-green-100 text-green-800',
-  teal: 'bg-teal-100 text-teal-800',
-  sky: 'bg-sky-100 text-sky-800',
   blue: 'bg-blue-100 text-blue-800',
-  indigo: 'bg-indigo-100 text-indigo-800',
   purple: 'bg-purple-100 text-purple-800',
-  pink: 'bg-pink-100 text-pink-800',
-  slate: 'bg-slate-100 text-slate-800',
 }
 
 /**

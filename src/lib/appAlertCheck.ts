@@ -38,7 +38,7 @@ import { getDayProgress } from '@/lib/planProgress'
 import { isWithinQuietHours } from '@/lib/safetyBrake'
 import { loadData, loadRecord } from '@/lib/storage'
 import { hasStudiedToday } from '@/lib/streak'
-import { loadSubjects } from '@/lib/subjects'
+import { getSubjectsSnapshot } from '@/lib/subjects'
 import { getMondayKey } from '@/lib/weeklyFacts'
 import { getWeeklyGoalProgress, loadPastWeeklyGoals } from '@/lib/weeklyGoal'
 import type { StudyPlan } from '@/types'
@@ -106,7 +106,7 @@ export function checkAppAlerts(now: Date = new Date()): void {
   // 노는 기록·노는 계획은 공부가 아니라서 뺍니다.
   const sessions = allSessions.filter((session) => session.kind !== 'play')
   const todayPlans = allPlans.filter((plan) => plan.date === todayKey && plan.kind !== 'play')
-  const subjects = loadSubjects()
+  const subjects = getSubjectsSnapshot()
 
   /* ---------- 1) 타이머 목표 시간을 채워서 끝냈을 때 ---------- */
   const timerDoneId = makeAlertId('timerDone', todayKey)

@@ -13,10 +13,10 @@ import {
   loadInitialPlan,
 } from '@/lib/initialPlan'
 import { loadOnboardingAnswers } from '@/lib/onboardingSteps'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import { ROUTINES_KEY, formatWeekdays, loadRoutines, markRoutinesFilled } from '@/lib/routines'
 import { saveData } from '@/lib/storage'
-import type { InitialPlan, Subject } from '@/types'
+import type { InitialPlan } from '@/types'
 import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -65,7 +65,7 @@ export function OnboardingPlanPage() {
   // 이미 세운 처음 계획. 없으면 null 입니다.
   const [savedPlan] = useState(loadInitialPlan)
   // 계획 화면에서 저장한 과목 목록 (저장된 게 없으면 예시 과목)
-  const [subjects] = useState<Subject[]>(loadSubjects)
+  const subjects = useSubjects()
 
   const [dailyHours, setDailyHours] = useState(getDefaultDailyHours)
   const [daysPerWeek, setDaysPerWeek] = useState(DEFAULT_DAYS_PER_WEEK)

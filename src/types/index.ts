@@ -25,19 +25,7 @@ export interface AuthUser {
  * 과목 태그에 쓸 수 있는 색 (12가지).
  * 색을 더하려면 여기에 적은 뒤 타입 검사가 알려 주는 곳(색 이름표·색 표)을 모두 채우면 됩니다. (lib/subjects.ts 참고)
  */
-export type SubjectColor =
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'lime'
-  | 'green'
-  | 'teal'
-  | 'sky'
-  | 'blue'
-  | 'indigo'
-  | 'purple'
-  | 'pink'
-  | 'slate'
+export type SubjectColor = 'red' | 'orange' | 'green' | 'blue' | 'purple'
 
 /** 과목 (예: 수학, 영어) */
 export interface Subject {

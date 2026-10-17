@@ -21,7 +21,7 @@ import {
   type OnboardingStep,
 } from '@/lib/onboardingSteps'
 import { loadData, removeData, saveData } from '@/lib/storage'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import {
   buildSubjectLevel,
   getScoreRange,
@@ -126,14 +126,14 @@ interface SubjectLevelInputProps {
 
 /**
  * 과목마다 최근 성적(등급 또는 점수)과 자신감(1~5)을 받는 입력칸입니다. (#88)
- * 과목 목록은 과목 관리에서 만든 것(loadSubjects)을 그대로 씁니다.
+ * 과목 목록은 과목 관리에서 만든 것(useSubjects)을 그대로 씁니다.
  *
  * 성적과 자신감을 둘 다 적은 과목만 답으로 저장합니다. 한쪽만 적은 과목에는 안내 문구를 보여줍니다.
  * 적지 않은 과목은 그냥 비워 두면 됩니다. (전부 비우면 "건너뛰기")
  */
 function SubjectLevelInput({ value, onChange }: SubjectLevelInputProps) {
   // 과목 목록은 처음 한 번만 불러옵니다.
-  const [subjects] = useState(loadSubjects)
+  const subjects = useSubjects()
   const [drafts, setDrafts] = useState(() => toLevelDrafts(value))
 
   function handleChangeDraft(subjectId: string, patch: Partial<LevelDraft>) {

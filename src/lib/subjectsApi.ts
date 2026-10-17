@@ -11,11 +11,6 @@
  *   실패          400 값이 틀림 · 401 로그인 풀림 · 404 없는 과목(남의 과목 포함)
  *                 409 같은 이름이 있음 / 계획이나 공부 기록이 있는 과목을 지움
  *   서버가 준 message 는 사람이 읽는 한국어 문장이라 화면에 그대로 보여줘도 됩니다. (getApiErrorMessage)
- *
- * ⚠️ 색이 서버와 어긋나 있습니다. 서버는 5가지(red · orange · green · blue · purple)만 받는데 FE 의 SubjectColor 는 12가지입니다.
- * 나머지 7가지를 보내면 400 입니다. (BE docs/API.md 에도 적혀 있고, 팀이 FE 를 5가지로 줄일지 BE 에 더할지 정해야 합니다)
- * 그래서 이 파일은 색을 바꾸지 않고 그대로 보내고, 서버가 거절하면 그 이유를 에러로 돌려줍니다.
- * 화면을 옮길 때 색 고르기를 5가지로 줄이려면 SERVER_SUBJECT_COLORS 를 쓰세요.
  */
 import { ApiError, api } from '@/lib/api'
 import { shouldRetryQuery } from '@/lib/queryRetry'
@@ -26,8 +21,8 @@ import type { Subject, SubjectColor } from '@/types'
 /** 서버 응답을 기다리는 최대 시간(밀리초). 서버가 멈춰도 로딩이 영원히 끝나지 않으면 안 되기 때문입니다. */
 const REQUEST_TIMEOUT_MS = 10000
 
-/** 서버가 받는 과목 색. FE 의 SubjectColor 12가지 중 5가지입니다. (위의 ⚠️ 참고) */
-export const SERVER_SUBJECT_COLORS: SubjectColor[] = ['red', 'orange', 'green', 'blue', 'purple']
+/** 서버가 받는 과목 색. FE 가 쓰는 색(SUBJECT_COLORS)과 같은 5가지입니다. */
+export const SERVER_SUBJECT_COLORS: SubjectColor[] = SUBJECT_COLORS
 
 /** 서버가 받는 과목 이름의 최대 글자 수 (앞뒤 공백을 지운 뒤 1 ~ 30자) */
 export const SUBJECT_NAME_MAX_LENGTH = 30

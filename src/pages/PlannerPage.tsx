@@ -22,7 +22,8 @@ import { scalePlanMinutes } from '@/lib/goalAdjust'
 import { getTodayCareDecision } from '@/lib/careInputs'
 import { getRecentAverageMinutes } from '@/lib/goalAdjustInput'
 import { loadCheckInsByDate } from '@/lib/insightEvidence'
-import { SUBJECT_COLORS, SUBJECT_COLOR_LABELS, loadSubjects } from '@/lib/subjects'
+import { useSubjectManager } from '@/hooks/useSubjects'
+import { SUBJECT_COLORS, SUBJECT_COLOR_LABELS } from '@/lib/subjects'
 import { SUBJECT_NAME_MAX_LENGTH } from '@/lib/subjectsApi'
 import { getPlanProgress, getPlayProgress } from '@/lib/planProgress'
 import { PLAN_RESULT_LABELS, getPlanResult, type PlanResult } from '@/lib/planResult'
@@ -48,16 +49,9 @@ import { Link } from 'react-router-dom'
 const subjectColorStyles: Record<SubjectColor, string> = {
   red: 'bg-red-50 text-red-600',
   orange: 'bg-orange-50 text-orange-600',
-  yellow: 'bg-yellow-50 text-yellow-700',
-  lime: 'bg-lime-50 text-lime-700',
   green: 'bg-green-50 text-green-600',
-  teal: 'bg-teal-50 text-teal-700',
-  sky: 'bg-sky-50 text-sky-700',
   blue: 'bg-blue-50 text-blue-600',
-  indigo: 'bg-indigo-50 text-indigo-600',
   purple: 'bg-purple-50 text-purple-600',
-  pink: 'bg-pink-50 text-pink-700',
-  slate: 'bg-slate-100 text-slate-600',
 }
 
 /* 계획 결과 → 표시 색. 초록 = 했음, 노랑·주황 = 아쉬움, 회색 = 못 했어요. (빨강으로 혼내지 않습니다) 색만으로 구분하지 않도록 글자도 같이 보여줍니다. (#313) */
@@ -82,16 +76,9 @@ const planResultStyles: Record<PlanResult, string> = {
 const colorSwatchStyles: Record<SubjectColor, string> = {
   red: 'bg-red-500',
   orange: 'bg-orange-500',
-  yellow: 'bg-yellow-500',
-  lime: 'bg-lime-500',
   green: 'bg-green-500',
-  teal: 'bg-teal-500',
-  sky: 'bg-sky-500',
   blue: 'bg-blue-500',
-  indigo: 'bg-indigo-500',
   purple: 'bg-purple-500',
-  pink: 'bg-pink-500',
-  slate: 'bg-slate-500',
 }
 /** 과목을 새로 만들 때 처음 골라 두는 색 */
 const DEFAULT_SUBJECT_COLOR: SubjectColor = 'blue'
@@ -100,16 +87,9 @@ const DEFAULT_SUBJECT_COLOR: SubjectColor = 'blue'
 const blockColorStyles: Record<SubjectColor, { block: string; fill: string }> = {
   red: { block: 'border-red-300 bg-red-50 text-red-900', fill: 'bg-red-200' },
   orange: { block: 'border-orange-300 bg-orange-50 text-orange-900', fill: 'bg-orange-200' },
-  yellow: { block: 'border-yellow-300 bg-yellow-50 text-yellow-900', fill: 'bg-yellow-200' },
-  lime: { block: 'border-lime-300 bg-lime-50 text-lime-900', fill: 'bg-lime-200' },
   green: { block: 'border-green-300 bg-green-50 text-green-900', fill: 'bg-green-200' },
-  teal: { block: 'border-teal-300 bg-teal-50 text-teal-900', fill: 'bg-teal-200' },
-  sky: { block: 'border-sky-300 bg-sky-50 text-sky-900', fill: 'bg-sky-200' },
   blue: { block: 'border-blue-300 bg-blue-50 text-blue-900', fill: 'bg-blue-200' },
-  indigo: { block: 'border-indigo-300 bg-indigo-50 text-indigo-900', fill: 'bg-indigo-200' },
   purple: { block: 'border-purple-300 bg-purple-50 text-purple-900', fill: 'bg-purple-200' },
-  pink: { block: 'border-pink-300 bg-pink-50 text-pink-900', fill: 'bg-pink-200' },
-  slate: { block: 'border-slate-300 bg-slate-50 text-slate-900', fill: 'bg-slate-200' },
 }
 // 노는 계획과, 과목이 지워진 계획의 블록 색 (회색)
 const defaultBlockStyle = {
@@ -609,19 +589,68 @@ interface SubjectManagerProps {
   /** 지금까지 등록된 과목 목록 */
   subjects: Subject[]
   /** 입력 검사를 통과했을 때, 새 과목 이름과 색을 부모에게 넘깁니다. */
-  onAdd: (name: string, color: SubjectColor) => void
+  onAdd: (name: string, color: SubjectColor) => Promise<string | null>
+  /** 과목 이름을 바꿀 때. 서버가 거절하면 이유 문장, 성공하면 null 을 돌려줍니다. */
+  onRename: (subject: Subject, name: string) => Promise<string | null>
   /** 과목의 삭제 버튼(×)을 눌렀을 때 호출됩니다. */
-  onDelete: (subject: Subject) => void
+  onDelete: (subject: Subject) => void | Promise<void>
 }
 
 /** 과목을 추가·삭제하는 카드입니다. */
-function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
+function SubjectManager({ subjects, onAdd, onRename, onDelete }: SubjectManagerProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState<SubjectColor>(DEFAULT_SUBJECT_COLOR)
   const [nameError, setNameError] = useState('')
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  // 서버에 보내는 동안 "과목 추가" 를 한 번 더 눌러 두 번 보내지 않게 막습니다.
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 이름을 고치는 중인 과목의 번호와 고치는 중인 글자, 실패했을 때의 안내. 고치는 중이 아니면 null 입니다.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editError, setEditError] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
+
+  function handleStartEdit(subject: Subject) {
+    setEditingId(subject.id)
+    setEditName(subject.name)
+    setEditError('')
+  }
+
+  function handleCancelEdit() {
+    setEditingId(null)
+    setEditError('')
+  }
+
+  async function handleSaveEdit(subject: Subject) {
+    if (isRenaming) return
+    const trimmedName = editName.trim()
+    if (trimmedName === '') {
+      setEditError('과목 이름을 입력해 주세요.')
+      return
+    }
+    if (trimmedName === subject.name) {
+      handleCancelEdit()
+      return
+    }
+    // 다른 과목과 이름이 같으면 계획·기록에서 구분할 수 없어서 막습니다.
+    if (subjects.some((other) => other.id !== subject.id && other.name === trimmedName)) {
+      setEditError('이미 있는 과목이에요.')
+      return
+    }
+    setIsRenaming(true)
+    const error = await onRename(subject, trimmedName)
+    setIsRenaming(false)
+    if (error !== null) {
+      setEditError(error)
+      return
+    }
+    handleCancelEdit()
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isSubmitting) return
     const trimmedName = name.trim()
 
     if (trimmedName === '') {
@@ -634,7 +663,14 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
       return
     }
 
-    onAdd(trimmedName, color)
+    setIsSubmitting(true)
+    const error = await onAdd(trimmedName, color)
+    setIsSubmitting(false)
+    if (error !== null) {
+      // 서버가 거절한 이유를 입력칸 아래에 보여 줍니다. 적은 이름은 그대로 두어 고칠 수 있게 합니다.
+      setNameError(error)
+      return
+    }
     setName('')
     setNameError('')
   }
@@ -657,6 +693,15 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
                 <span title={subject.name} className="min-w-0 truncate">
                   {subject.name}
                 </span>
+                {/* ✎: 이름 바꾸기. 누르는 영역은 × 와 같이 40px 로 둡니다. */}
+                <button
+                  type="button"
+                  onClick={() => handleStartEdit(subject)}
+                  aria-label={`${subject.name} 이름 바꾸기`}
+                  className="-my-2.5 -mr-1 inline-flex h-10 w-8 cursor-pointer items-center justify-center text-sm leading-none opacity-70 hover:opacity-100"
+                >
+                  ✎
+                </button>
                 <button
                   type="button"
                   onClick={() => onDelete(subject)}
@@ -669,6 +714,47 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
                 </button>
               </span>
             ))}
+          </div>
+        )}
+
+        {/* 이름을 고치는 중인 과목이 있을 때만 보입니다. 서버가 거절하면 이유를 입력칸 아래에 보여 줍니다. */}
+        {editingId !== null && (
+          <div
+            role="group"
+            aria-label="과목 이름 바꾸기"
+            className="flex flex-col gap-2 rounded-xl bg-slate-50 p-3"
+          >
+            <Input
+              name="subjectRename"
+              label="과목 이름 바꾸기"
+              maxLength={SUBJECT_NAME_MAX_LENGTH}
+              value={editName}
+              onChange={(event) => {
+                setEditName(event.target.value)
+                setEditError('')
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                event.preventDefault()
+                const target = subjects.find((subject) => subject.id === editingId)
+                if (target) void handleSaveEdit(target)
+              }}
+              error={editError}
+            />
+            <div className="flex gap-2">
+              <Button
+                disabled={isRenaming}
+                onClick={() => {
+                  const target = subjects.find((subject) => subject.id === editingId)
+                  if (target) void handleSaveEdit(target)
+                }}
+              >
+                {isRenaming ? '저장하는 중…' : '저장'}
+              </Button>
+              <Button variant="secondary" onClick={handleCancelEdit}>
+                취소
+              </Button>
+            </div>
           </div>
         )}
 
@@ -710,8 +796,8 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
             </div>
           </div>
 
-          <Button type="submit" className="w-full">
-            과목 추가
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? '추가하는 중…' : '과목 추가'}
           </Button>
         </form>
 
@@ -1410,12 +1496,8 @@ export function PlannerPage() {
     setViewParam(nextView)
   }
 
-  // 새로고침해도 과목 목록이 유지되도록 localStorage 에서 불러옵니다. (처음 한 번은 예시 과목으로 시작)
-  const [subjects, setSubjects] = useState<Subject[]>(loadSubjects)
-
-  useEffect(() => {
-    saveData('subjects', subjects)
-  }, [subjects])
+  // 과목 목록. 진짜 로그인이면 서버에서 받아 서버에 추가·삭제하고, 테스트 로그인이면 이 기기(localStorage)에 저장합니다. (hooks/useSubjects.ts)
+  const { subjects, addSubject, removeSubject, renameSubject } = useSubjectManager()
 
   // 계획을 만들고 옮기고 지울 때 구글 캘린더도 같이 바꿉니다. (연결했을 때만, #316)
   const calendar = usePlanCalendarSync({ subjects, setGoogleEventId })
@@ -1615,14 +1697,18 @@ export function PlannerPage() {
     for (const plan of copiedPlans) calendar.onPlanAdded(plan, todayKey)
   }
 
-  // 새 과목을 목록 맨 뒤에 추가합니다.
-  function handleAddSubject(name: string, color: SubjectColor) {
-    const newSubject: Subject = { id: `subject-${Date.now()}`, name, color }
-    setSubjects((prev) => [...prev, newSubject])
+  // 새 과목을 목록 맨 뒤에 추가합니다. 서버가 거절하면(같은 이름 등) 그 이유 문장을 돌려줍니다. 성공하면 null 입니다.
+  function handleAddSubject(name: string, color: SubjectColor): Promise<string | null> {
+    return addSubject(name, color)
+  }
+
+  // 과목 이름을 바꿉니다. 서버가 거절하면(같은 이름 등) 그 이유 문장을 돌려줍니다. 성공하면 null 입니다.
+  function handleRenameSubject(subject: Subject, name: string): Promise<string | null> {
+    return renameSubject(subject.id, name)
   }
 
   // 그 과목으로 등록된 계획이 있으면(날짜 상관없이) 몇 개인지 알려주고 한 번 더 확인합니다.
-  function handleDeleteSubject(target: Subject) {
+  async function handleDeleteSubject(target: Subject) {
     // 지금 타이머로 재고 있는 과목은 지우지 못하게 합니다.
     // 지우면 타이머 화면에서 과목이 사라지고, 정지를 눌러도 기록이 저장되지 않기 때문입니다.
     const timer = loadData<{ startedAt?: unknown } | null>('timer', null)
@@ -1653,8 +1739,13 @@ export function PlannerPage() {
         : `"${target.name}" 과목을 삭제할까요?`
 
     if (!window.confirm(message)) return
+    // 서버가 거절하면(계획이나 기록이 붙은 과목 등) 서버가 준 이유를 보여 주고, 루틴도 지우지 않습니다.
+    const error = await removeSubject(target.id)
+    if (error !== null) {
+      window.alert(error)
+      return
+    }
     for (const routine of relatedRoutines) deleteRoutine(routine.id)
-    setSubjects((prev) => prev.filter((subject) => subject.id !== target.id))
   }
 
   // 플래너 보기에 넘기는 값. 구글 일정을 섞을 때와 아닐 때 똑같이 씁니다.
@@ -1861,6 +1952,7 @@ export function PlannerPage() {
           <SubjectManager
             subjects={subjects}
             onAdd={handleAddSubject}
+            onRename={handleRenameSubject}
             onDelete={handleDeleteSubject}
           />
         </>

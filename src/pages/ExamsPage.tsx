@@ -17,7 +17,7 @@ import {
   parseScore,
   splitExams,
 } from '@/lib/exams'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import type { Exam, ExamSubjectScore, ExamType, Subject } from '@/types'
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -70,7 +70,7 @@ export function ExamsPage() {
   const navigate = useNavigate()
   const { exams, addExam, updateExam, deleteExam } = useExams()
   // 과목은 계획 화면에서 저장한 목록을 읽기만 합니다. (처음 한 번은 예시 과목)
-  const [subjects] = useState<Subject[]>(loadSubjects)
+  const subjects = useSubjects()
 
   const [form, setForm] = useState<ExamFormState>(createEmptyForm)
   // 고치는 중인 시험의 id. null 이면 새로 추가하는 중입니다.

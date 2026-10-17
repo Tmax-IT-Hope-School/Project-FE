@@ -3,6 +3,7 @@ import { BottomTabNav } from '@/components/layout/BottomTabNav'
 import { Header } from '@/components/layout/Header'
 import { IosInstallGuide } from '@/components/layout/IosInstallGuide'
 import { PageBoundary } from '@/components/layout/PageBoundary'
+import { SubjectsGate } from '@/components/layout/SubjectsGate'
 import { RecordsSubNav } from '@/components/layout/RecordsSubNav'
 import { FocusUnlockScreen } from '@/components/ui/FocusUnlockScreen'
 import { useAiMessageNotifications } from '@/hooks/useAiMessageNotifications'
@@ -13,6 +14,7 @@ import { useCallReminder } from '@/hooks/useCallReminder'
 import { useFocusMode, useFocusModeAutoUnlock } from '@/hooks/useFocusMode'
 import { useScrollToTopOnPageChange } from '@/hooks/useScrollToTopOnPageChange'
 import { cn } from '@/lib/cn'
+import { needsSubjectsPath } from '@/lib/dataMode'
 import { isRecordsCardPath, isRecordsTabPath } from '@/lib/recordsMenu'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -41,6 +43,8 @@ export function Layout() {
   const focusAutoUnlock = useFocusModeAutoUnlock(focusMode.isOn)
   // 집중 모드 중에 타이머가 아닌 주소로 가려고 하면(뒤로 가기·주소 직접 입력 등) 해제 화면을 먼저 보여줍니다.
   const isBlockedByFocusMode = focusMode.isOn && pathname !== '/timer'
+  // 과목이 필요한 화면인지. 그렇다면 열기 전에 서버에서 과목을 받아 둡니다. (진짜 로그인일 때만)
+  const needsSubjects = needsSubjectsPath(pathname)
 
   return (
     // pb-14: 모바일에서 하단 탭(높이 h-14)이 마지막 내용을 가리지 않도록 아래 여백을 줍니다. (하단 탭이 있을 때만)
@@ -77,7 +81,14 @@ export function Layout() {
         ) : (
           // 화면 파일을 받는 동안에는 이 본문 칸에만 스켈레톤을 보여줍니다. 헤더 · 하단 탭은 그대로입니다. (PageBoundary)
           <PageBoundary>
-            <Outlet />
+            {/* 과목이 필요한 화면은 열기 전에 서버에서 과목을 받아 둡니다. (진짜 로그인일 때만. components/layout/SubjectsGate.tsx) */}
+            {needsSubjects ? (
+              <SubjectsGate>
+                <Outlet />
+              </SubjectsGate>
+            ) : (
+              <Outlet />
+            )}
           </PageBoundary>
         )}
       </main>

@@ -22,7 +22,7 @@ import {
   getStudyMinutesBeforeExam,
   parseScore,
 } from '@/lib/exams'
-import { loadSubjects } from '@/lib/subjects'
+import { useSubjects } from '@/hooks/useSubjects'
 import { THINKING_TEST_PATH } from '@/lib/thinkingTest'
 import type { Exam, ExamReflection, ExamSubjectScore, StudySession, Subject } from '@/types'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -394,7 +394,7 @@ export function ExamResultPage() {
   const { exams, updateExam } = useExams()
   const { sessions } = useStudySessions()
   // 과목은 계획 화면에서 저장한 목록을 읽기만 합니다. (처음 한 번은 예시 과목)
-  const [subjects] = useState<Subject[]>(loadSubjects)
+  const subjects = useSubjects()
 
   const exam = exams.find((item) => item.id === examId)
 
