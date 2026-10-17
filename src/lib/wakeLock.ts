@@ -11,23 +11,43 @@
 
 // 지금 걸어 둔 "화면 꺼짐 방지". 안 걸었으면 null 입니다.
 let screenLock: WakeLockSentinel | null = null
+// 브라우저에게 요청을 보내 놓고 아직 답을 기다리는 중인 요청. 없으면 null 입니다.
+// 기다리는 사이에 keepScreenOn 이 또 불리면(개발 모드의 StrictMode 등) 요청을 한 번 더 보내지 않고 이 요청을 같이 기다립니다.
+let pendingRequest: Promise<void> | null = null
+// 지금 화면을 켜 두고 싶은 상태인지. 요청을 기다리는 사이에 letScreenSleep 이 불렸으면 false 가 되어,
+// 답이 늦게 도착해도 걸지 않고 바로 풉니다. (안 그러면 아무도 안 풀어 주는 잠금이 남습니다)
+let isWanted = false
 
-/** 화면이 자동으로 꺼지지 않게 합니다. 이미 걸려 있으면 아무것도 하지 않습니다. */
+/** 화면이 자동으로 꺼지지 않게 합니다. 이미 걸려 있거나 거는 중이면 아무것도 새로 하지 않습니다. */
 export async function keepScreenOn(): Promise<void> {
   if (!('wakeLock' in navigator)) return
+  isWanted = true
   // released: 브라우저가 스스로 풀어 버렸는지. (다른 탭에 다녀오면 풀립니다)
   if (screenLock !== null && !screenLock.released) return
+  if (pendingRequest !== null) return pendingRequest
 
-  try {
-    screenLock = await navigator.wakeLock.request('screen')
-  } catch {
-    // 거절당해도 앱은 계속 돌아가야 합니다.
-    screenLock = null
-  }
+  pendingRequest = (async () => {
+    try {
+      const lock = await navigator.wakeLock.request('screen')
+      if (isWanted) {
+        screenLock = lock
+      } else {
+        // 기다리는 사이에 "이제 꺼도 돼" 가 왔습니다. 걸지 않고 바로 풉니다.
+        await lock.release().catch(() => {})
+      }
+    } catch {
+      // 거절당해도 앱은 계속 돌아가야 합니다.
+      screenLock = null
+    } finally {
+      pendingRequest = null
+    }
+  })()
+  return pendingRequest
 }
 
 /** 화면 꺼짐 방지를 풉니다. 배터리를 아끼려고, 타이머가 멈추면 바로 풉니다. */
 export async function letScreenSleep(): Promise<void> {
+  isWanted = false
   const lock = screenLock
   screenLock = null
   if (lock === null || lock.released) return
