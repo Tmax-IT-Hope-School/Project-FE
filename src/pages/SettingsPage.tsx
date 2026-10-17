@@ -822,13 +822,14 @@ function WebPushSection() {
         </Button>
       )}
       {/* 켜다가 실패하면 이유를 보여 줍니다. (서버에 푸시가 아직 꺼져 있음 · 권한 거부 등) */}
-      {mutation.isError && (
-        <p role="status" className="text-sm break-keep text-red-700">
-          {mutation.error instanceof WebPushError
+      {/* 안내 칸은 항상 화면에 두고 안의 글자만 바꿉니다. 칸이 글자와 함께 새로 생기면 화면 읽기 프로그램이 못 읽을 수 있습니다. */}
+      <p role="alert" className="text-sm break-keep text-red-700">
+        {mutation.isError
+          ? mutation.error instanceof WebPushError
             ? mutation.error.message
-            : '알림 설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'}
-        </p>
-      )}
+            : '알림 설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'
+          : ''}
+      </p>
     </div>
   )
 }
