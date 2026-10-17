@@ -101,20 +101,23 @@ export async function logoutOnServer(): Promise<void> {
   const authHeaders =
     token !== null && token !== TEST_TOKEN ? { Authorization: `Bearer ${token}` } : undefined
 
-  await Promise.all([
-    // 이 기기의 푸시 알림도 끕니다. 같은 기기를 다른 사람이 쓰면, 내 알림(생각 습관 작전)이 그 사람에게 가지 않게 하려는 것입니다.
-    // 실패해도 로그아웃은 계속합니다.
-    authHeaders ? turnOffWebPush(authHeaders).catch(() => undefined) : unsubscribeThisDevice(),
-    authHeaders
-      ? api<void>('/auth/logout', {
-          method: 'POST',
-          headers: authHeaders,
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        }).catch(() => {
-          // 일부러 아무것도 하지 않습니다. (위 설명)
-        })
-      : Promise.resolve(),
-  ])
+  if (!authHeaders) {
+    // 서버가 모르는 테스트 로그인이거나 로그인 정보가 없으면, 이 기기의 구독만 지웁니다.
+    await unsubscribeThisDevice()
+    return
+  }
+
+  // 이 기기의 푸시 알림도 끕니다. 같은 기기를 다른 사람이 쓰면, 내 알림(생각 습관 작전)이 그 사람에게 가지 않게 하려는 것입니다.
+  // 순서가 중요합니다. 서버의 로그인 토큰을 먼저 무효로 만들면 구독 삭제가 401 로 거절돼 서버에 구독이 남으므로,
+  // 구독 삭제를 끝낸 뒤에 로그아웃을 알립니다. (둘 다 실패해도 로그아웃은 계속합니다)
+  await turnOffWebPush(authHeaders).catch(() => undefined)
+  await api<void>('/auth/logout', {
+    method: 'POST',
+    headers: authHeaders,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch(() => {
+    // 일부러 아무것도 하지 않습니다. (위 설명)
+  })
 }
 
 /**

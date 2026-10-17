@@ -9,6 +9,9 @@ import type { AiMessage } from '@/types'
 
 const STORAGE_KEY = 'ai-messages'
 
+/** 이미 휴대폰 알림을 보냈거나 보낼 필요가 없는 메시지의 id 를 적어 두는 저장소 이름. (hooks/useAiMessageNotifications.ts) */
+export const NOTIFIED_IDS_KEY = 'ai-message-notified-ids'
+
 /**
  * 알림 목록이 바뀌었을 때 보내는 신호의 이름입니다.
  * 헤더의 빨간 점이 이 신호를 듣고 바로 바뀝니다. (hooks/useAiMessages.ts)
@@ -58,4 +61,15 @@ export function markAllAiMessagesRead(messages: AiMessage[]): void {
 /** 안 읽은 알림이 몇 개인지 셉니다. */
 export function countUnreadAiMessages(messages: AiMessage[]): number {
   return messages.filter((message) => !message.read).length
+}
+
+/**
+ * 이 메시지들은 휴대폰 알림을 보내지 않은 것으로 적어 둡니다.
+ * 처음 서버에서 받은 옛 메시지들이 한꺼번에 알림으로 뜨는 것을 막으려고 씁니다. (알림 화면에는 그대로 보입니다)
+ */
+export function markAsNotified(ids: string[]): void {
+  if (ids.length === 0) return
+  const notifiedIds = new Set(loadList<string>(NOTIFIED_IDS_KEY))
+  for (const id of ids) notifiedIds.add(id)
+  saveData(NOTIFIED_IDS_KEY, [...notifiedIds])
 }

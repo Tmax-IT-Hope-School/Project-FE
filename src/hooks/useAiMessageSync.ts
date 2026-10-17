@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { ApiError } from '@/lib/api'
-import { loadAiMessages, saveAiMessages } from '@/lib/aiMessages'
+import { loadAiMessages, markAsNotified, saveAiMessages } from '@/lib/aiMessages'
 import {
   fetchNewServerMessages,
   getLatestServerMessageId,
@@ -43,9 +43,12 @@ export function useAiMessageSync(): void {
       running = true
       try {
         const current = loadAiMessages()
-        const received = await fetchNewServerMessages(getLatestServerMessageId(current))
+        const latestId = getLatestServerMessageId(current)
+        const received = await fetchNewServerMessages(latestId)
         // 받는 동안 다른 곳에서 알림이 바뀌었을 수 있어서, 합치기 직전에 다시 읽습니다.
         const merged = mergeServerMessages(loadAiMessages(), received)
+        // 이 기기에서 처음 받는 메시지들은 옛 메시지일 수 있어서, 휴대폰 알림을 한꺼번에 띄우지 않습니다. (알림 화면에는 보입니다)
+        if (latestId === null) markAsNotified(received.map((message) => message.id))
         if (merged && !cancelled) saveAiMessages(merged)
         failures = 0
       } catch (error) {

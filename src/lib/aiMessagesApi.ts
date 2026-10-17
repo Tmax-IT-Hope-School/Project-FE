@@ -13,6 +13,9 @@
  * 서버 문서가 stick 을 3 ~ 4, event 를 "이벤트마다 다름" 이라고만 해서, 팀이 정하면 KIND_TO_CARE_LEVEL 만 고치면 됩니다.
  */
 import { ApiError, api } from '@/lib/api'
+import { loadAiMessages, saveAiMessages } from '@/lib/aiMessages'
+import { getAuthToken } from '@/lib/authStorage'
+import { TEST_TOKEN } from '@/lib/testLogin'
 import type { AiMessage, CareLevel } from '@/types'
 
 /** 서버 응답을 기다리는 최대 시간(밀리초). 서버가 멈춰도 알림 받기가 영원히 걸려 있으면 안 되기 때문입니다. */
@@ -188,4 +191,36 @@ export function nextPollDelayMs(failures: number): number {
   const base = 60_000
   const max = 600_000
   return Math.min(max, base * 2 ** Math.max(0, failures))
+}
+
+/**
+ * 서버에서 받은 메시지(번호가 숫자인 것)를 이 기기의 알림 목록에서 뺍니다. 이 앱이 만든 알림은 그대로 둡니다.
+ * 로그아웃할 때 부릅니다. 서버 메시지는 서버에 있어서 다시 로그인하면 받아 올 수 있고,
+ * 안 지우면 같은 기기에서 다음 사람이 로그인했을 때 앞사람 메시지가 보이고, 앞사람의 마지막 번호로 받기를 이어서 다음 사람의 메시지가 빠집니다.
+ */
+export function clearServerMessages(): void {
+  const current = loadAiMessages()
+  const kept = current.filter((message) => !isServerMessageId(message.id))
+  if (kept.length !== current.length) saveAiMessages(kept)
+}
+
+/**
+ * 안 읽은 서버 메시지를 서버에도 "읽었어" 라고 알립니다. 알림 화면을 열어 읽음으로 바꿀 때 부릅니다.
+ * 안 알리면 다른 기기에서 로그인하거나 사이트 데이터를 지운 뒤 다시 받을 때 옛 메시지가 "안 읽음" 으로 돌아옵니다.
+ * 로그인 정보가 없거나 테스트 로그인이면 아무것도 안 합니다. 실패해도 조용히 넘어갑니다. (읽음 표시는 이 기기에서는 이미 됐습니다)
+ */
+export async function markServerMessagesRead(
+  messages: { id: string; read: boolean }[],
+): Promise<void> {
+  const token = getAuthToken()
+  if (token === null || token === TEST_TOKEN) return
+  for (const message of messages) {
+    if (message.read || !isServerMessageId(message.id)) continue
+    try {
+      await markMessageReadOnServer(message.id)
+    } catch (error) {
+      // 로그인이 풀린 것(401)이면 더 보내도 같습니다.
+      if (error instanceof ApiError && error.status === 401) return
+    }
+  }
 }

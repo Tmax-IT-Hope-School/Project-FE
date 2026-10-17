@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAiMessages } from '@/hooks/useAiMessages'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { countUnreadAiMessages, loadAiMessages, markAllAiMessagesRead } from '@/lib/aiMessages'
+import { markServerMessagesRead } from '@/lib/aiMessagesApi'
 import type { CareLevel } from '@/lib/careLevel'
 import { cn } from '@/lib/cn'
 import { getMessageSettings } from '@/lib/messageSettings'
@@ -134,7 +135,12 @@ export function NotificationsPage() {
   // 안 읽은 것이 있을 때만 저장합니다. 저장하면 화면이 다시 그려지는데, 그때는 0개라서 다시 저장하지 않습니다.
   const unreadCount = countUnreadAiMessages(messages)
   useEffect(() => {
-    if (unreadCount > 0) markAllAiMessagesRead(loadAiMessages())
+    if (unreadCount > 0) {
+      const current = loadAiMessages()
+      markAllAiMessagesRead(current)
+      // 서버 메시지는 서버에도 읽었다고 알립니다. (다른 기기에서 다시 받을 때 안 읽음으로 돌아오지 않게)
+      void markServerMessagesRead(current)
+    }
   }, [unreadCount])
 
   // 지금 보이는 알림에 나오는 관리 강도만 범례에 보여줍니다. (작은 단계부터)

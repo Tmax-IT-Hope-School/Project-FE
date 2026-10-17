@@ -1,4 +1,9 @@
-import { AI_MESSAGES_CHANGE_EVENT, countUnreadAiMessages, loadAiMessages } from '@/lib/aiMessages'
+import {
+  AI_MESSAGES_CHANGE_EVENT,
+  NOTIFIED_IDS_KEY,
+  countUnreadAiMessages,
+  loadAiMessages,
+} from '@/lib/aiMessages'
 import { getCareLimits } from '@/lib/careLimits'
 import { getTodayKey } from '@/lib/date'
 import { loadExamDates, loadSavedWritings } from '@/lib/diarySafety'
@@ -14,9 +19,8 @@ import { loadData, loadList, saveData } from '@/lib/storage'
 import { useAuth } from '@/hooks/useAuth'
 import { useEffect } from 'react'
 
-// 한 번 알림을 보낸 메시지의 id 를 저장해 두는 키. 새로고침하거나 다른 페이지로 가도
-// 똑같은 메시지로 또 알림이 뜨지 않게 막아줍니다.
-const NOTIFIED_IDS_KEY = 'ai-message-notified-ids'
+// 한 번 알림을 보낸 메시지의 id 를 저장해 두는 키는 lib/aiMessages.ts 의 NOTIFIED_IDS_KEY 입니다.
+// 새로고침하거나 다른 페이지로 가도 똑같은 메시지로 또 알림이 뜨지 않게 막아줍니다.
 
 // 오늘 알림을 몇 번 보냈는지 저장해 두는 키. 하루 메시지 수(#60)를 지키는 데 씁니다.
 const SENT_TODAY_KEY = 'ai-message-sent-today'
