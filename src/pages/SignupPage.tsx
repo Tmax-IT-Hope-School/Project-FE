@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { SchoolField } from '@/components/ui/SchoolField'
+import { TermsView } from '@/components/ui/TermsView'
 import { useAuth } from '@/hooks/useAuth'
 import { getGoogleAuthErrorMessage, signupWithGoogle } from '@/lib/authApi'
 import { cn } from '@/lib/cn'
@@ -139,30 +140,6 @@ function SignupSteps({ current }: SignupStepsProps) {
         )
       })}
     </ol>
-  )
-}
-
-interface TermsViewProps {
-  terms: TermsDocument
-}
-
-/** 약관·동의 안내문 한 편을 보여줍니다. 글이 길면 팝업(Modal) 안에서 스크롤됩니다. */
-function TermsView({ terms }: TermsViewProps) {
-  return (
-    <div className="flex flex-col gap-4 text-sm break-keep text-slate-700">
-      <p>{terms.intro}</p>
-      {terms.sections.map((section) => (
-        <section key={section.title}>
-          <h3 className="font-semibold text-slate-900">{section.title}</h3>
-          <ul className="mt-1.5 flex list-disc flex-col gap-1.5 pl-5">
-            {section.items.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      <p className="text-xs text-slate-500">마지막으로 고친 날: {terms.updatedAt}</p>
-    </div>
   )
 }
 
