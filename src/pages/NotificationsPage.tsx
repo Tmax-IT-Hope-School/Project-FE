@@ -5,6 +5,7 @@ import { useQueryParam } from '@/hooks/useQueryParam'
 import { countUnreadAiMessages, loadAiMessages, markAllAiMessagesRead } from '@/lib/aiMessages'
 import type { CareLevel } from '@/lib/careLevel'
 import { cn } from '@/lib/cn'
+import { getMessageSettings } from '@/lib/messageSettings'
 import type { AiMessage } from '@/types'
 
 interface CareLevelStyle {
@@ -103,6 +104,8 @@ function formatDayLabel(time: number): string {
 export function NotificationsPage() {
   // 이 화면을 보는 동안 새 알림이 쌓여도 바로 목록에 보입니다. (hooks/useAiMessages.ts)
   const messages = useAiMessages()
+  // 아래 안내 문구에 보여 줄, 사용자가 정한 연락 금지 시간과 하루 횟수입니다.
+  const settings = getMessageSettings()
 
   // 보고 있는 탭. /notifications?tab=ai 처럼 주소에 담겨서, 새로고침하거나 뒤로 가도 그대로입니다.
   const [tabParam, setTab] = useQueryParam('tab', 'all')
@@ -208,7 +211,9 @@ export function NotificationsPage() {
 
       <div className="flex flex-col gap-3 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <p className="text-sm text-slate-600">
-          밤 11시 ~ 아침 7시에는 보내지 않아. 횟수와 시간은 설정에서 바꿀 수 있어.
+          {settings.dailyCount === 0
+            ? '지금은 메시지를 보내지 않도록 꺼 두었어. 설정에서 바꿀 수 있어.'
+            : `${settings.quietStart} ~ ${settings.quietEnd} 에는 보내지 않아. 횟수와 시간은 설정에서 바꿀 수 있어.`}
         </p>
         <Link
           to="/settings"
