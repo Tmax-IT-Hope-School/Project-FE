@@ -89,6 +89,15 @@ const EMPTY_LEVEL_DRAFT: LevelDraft = { kind: 'grade', scoreText: '', confidence
 /** 자신감 버튼에 보이는 숫자 (1 ~ 5) */
 const CONFIDENCE_CHOICES = [1, 2, 3, 4, 5]
 
+// 자신감 버튼의 뜻. 화면에는 양끝만 보이지만, 스크린리더는 버튼마다 뜻을 같이 읽어 줍니다.
+const CONFIDENCE_LABELS: Record<number, string> = {
+  1: '전혀 자신 없어요',
+  2: '별로 자신 없어요',
+  3: '보통이에요',
+  4: '꽤 자신 있어요',
+  5: '아주 자신 있어요',
+}
+
 /** 성적 종류 고르기 버튼에 보이는 글자 */
 const SCORE_KIND_OPTIONS: { kind: ScoreKind; label: string }[] = [
   { kind: 'grade', label: '등급' },
@@ -233,6 +242,7 @@ function SubjectLevelInput({ value, onChange }: SubjectLevelInputProps) {
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
+                      aria-label={`${choice}, ${CONFIDENCE_LABELS[choice]}`}
                       onClick={() => handleChangeDraft(subject.id, { confidence: choice })}
                       className={cn(
                         'h-10 rounded-lg border-2 text-sm font-medium',

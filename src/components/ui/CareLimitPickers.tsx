@@ -94,6 +94,8 @@ export function HarshnessPicker({ value, onChange, className }: HarshnessPickerP
               key={level}
               type="button"
               aria-pressed={isSelected}
+              // 숫자만 읽히지 않게 뜻도 같이 읽어 줍니다. 예) "3단계, 따끔하게 …"
+              aria-label={`${level}단계, ${harshnessDescriptions[level]}`}
               onClick={() => onChange(level)}
               className={cn(
                 'h-10 cursor-pointer rounded-lg border text-sm font-medium transition-colors',
