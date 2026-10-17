@@ -555,7 +555,10 @@ function WeeklyReport({ allPlans, sessions }: ReportSectionProps) {
         <h2 className="text-lg font-bold text-slate-900">다음 주 개선안</h2>
         <p className="mt-2 text-sm break-keep text-slate-500">
           다음 주에 해 볼 개선안은{' '}
-          <Link to="/suggestions" className="text-brand font-semibold hover:underline">
+          <Link
+            to="/suggestions"
+            className="text-brand inline-flex min-h-10 items-center font-semibold hover:underline"
+          >
             개선안 고르기
           </Link>
           에서 고를 수 있어.
@@ -1047,7 +1050,10 @@ function MonthlyReport({ allPlans, sessions }: ReportSectionProps) {
         <h2 className="text-lg font-bold text-slate-900">이번 달 판정된 실험</h2>
         <p className="mt-2 text-sm break-keep text-slate-500">
           실험 결과는{' '}
-          <Link to="/report?view=weekly" className="text-brand font-semibold hover:underline">
+          <Link
+            to="/report?view=weekly"
+            className="text-brand inline-flex min-h-10 items-center font-semibold hover:underline"
+          >
             주간 리포트
           </Link>
           의 &quot;실험&quot; 에서 확인할 수 있어.

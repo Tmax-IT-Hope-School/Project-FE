@@ -145,6 +145,8 @@ export function isCallTimeInQuietHours(savedTime: unknown, quietHours: QuietHour
  *   isBusyForCall('/diary/reflection', false)   -> true   (성찰 일기 쓰는 중)
  *   isBusyForCall('/exams/abc/result', false)   -> true   (시험 결과 쓰는 중)
  *   isBusyForCall('/exams', false)              -> false  (시험 목록은 괜찮음)
+ *
+ * 주소만으로는 다 알 수 없어서(계획 · 시험 추가 · 건의 · 비밀번호 칸), 글을 적는 칸에 커서가 있을 때도 바쁜 것으로 봅니다. (isTypingInField)
  */
 export function isBusyForCall(pathname: string, isFocusModeOn: boolean): boolean {
   if (isFocusModeOn) return true
@@ -154,4 +156,35 @@ export function isBusyForCall(pathname: string, isFocusModeOn: boolean): boolean
     pathname === '/check' ||
     /^\/exams\/[^/]+\/result$/.test(pathname)
   )
+}
+
+/** 글자를 적는 칸으로 치는 input 종류들. 체크박스·버튼·색 고르기처럼 글을 적지 않는 것은 뺍니다. */
+const TEXT_INPUT_TYPES = [
+  'text',
+  'search',
+  'email',
+  'password',
+  'number',
+  'tel',
+  'url',
+  'time',
+  'date',
+]
+
+/**
+ * 지금 글을 적는 칸(글 칸 · 여러 줄 칸 · 시각·숫자 칸)에 커서가 있는지 확인합니다. (hooks/useCallReminder.ts 가 document.activeElement 를 넘깁니다)
+ * 화면을 옮기면 적던 내용이 사라지므로, 이때는 전화가 화면을 넘기지 않습니다.
+ *
+ *   <input type="text"> · <textarea> · <input type="time"> · 글 편집 칸(contenteditable) -> true
+ *   <input type="checkbox"> · <button> · 아무 데도 아님(null) -> false
+ */
+export function isTypingInField(
+  element: { tagName: string; type?: string; isContentEditable?: boolean } | null,
+): boolean {
+  if (element === null) return false
+  if (element.isContentEditable === true) return true
+  const tag = element.tagName.toUpperCase()
+  if (tag === 'TEXTAREA') return true
+  if (tag === 'INPUT') return TEXT_INPUT_TYPES.includes((element.type ?? 'text').toLowerCase())
+  return false
 }

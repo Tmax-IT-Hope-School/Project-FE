@@ -14,6 +14,8 @@
  * 시험 번호가 아니라 시험 날짜로 묻습니다. 시험이 아직 이 기기에만 저장돼서 서버에 시험 번호가 없기 때문입니다.
  */
 import { ApiError, api } from '@/lib/api'
+import { getAuthToken } from '@/lib/authStorage'
+import { TEST_TOKEN } from '@/lib/testLogin'
 import { queryOptions } from '@tanstack/react-query'
 
 /** 서버 응답을 기다리는 최대 시간(밀리초) */
@@ -46,6 +48,8 @@ function isExamThinkingGap(value: unknown): value is ExamThinkingGap {
 
 /** 받아옵니다. 아직 생각 습관 테스트를 안 했으면(404) 에러가 아니라 null 입니다. */
 async function fetchExamThinkingGap(examDate: string): Promise<ExamThinkingGap | null> {
+  // 테스트 로그인의 가짜 토큰은 서버가 모릅니다. 서버를 부르면 늘 401 이라, 부르지 않고 "아직 없음" 으로 둡니다.
+  if (getAuthToken() === TEST_TOKEN) return null
   try {
     const result = await api<unknown>(
       `/thinking-tests/exam-gap?examDate=${encodeURIComponent(examDate)}`,
