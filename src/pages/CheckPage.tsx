@@ -13,6 +13,8 @@ import { getApiErrorMessage } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { getTodayKey, moveDateKey } from '@/lib/date'
 import { getDaySummary } from '@/lib/daySummary'
+import { shouldShowCrisisHelp } from '@/lib/diarySafety'
+import { SUPPORT_PATH } from '@/lib/helpLines'
 import { getPhoneFocusEnabled } from '@/lib/phoneFocus'
 import { MOOD_OPTIONS } from '@/lib/quickCheckIn'
 import {
@@ -25,6 +27,7 @@ import {
 } from '@/lib/todayPromise'
 import type { CheckIn, Suggestion } from '@/types'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 /** 컨디션 버튼에 쓰는 숫자 (1 최악 ~ 5 최고) */
 const CONDITION_OPTIONS = [1, 2, 3, 4, 5]
@@ -89,6 +92,7 @@ export function CheckPage() {
   const todayKey = getTodayKey()
   const yesterdayKey = moveDateKey(todayKey, -1)
 
+  const navigate = useNavigate()
   const { getCheckIn, saveCheckIn, checkIns } = useCheckIns()
   // 오늘 체크인을 서버로도 보냅니다. (#321) 테스트 로그인이면 send.canSync 가 false 라 보내지 않습니다.
   const send = useSendCheckIn()
@@ -210,6 +214,11 @@ export function CheckPage() {
     // 이 기기에 먼저 저장하고, 서버로도 보냅니다. 서버에 못 보내도 이 기기의 체크인은 그대로입니다.
     saveCheckIn(checkIn)
     sendToServer(checkIn)
+    // 적은 글(기타 사유 · 오늘의 약속)에 위기 표현이 있거나 기분이 오래 낮으면 도움 안내로 보냅니다. (일기와 같은 규칙)
+    const needsHelp = shouldShowCrisisHelp({
+      texts: [checkIn.missReasonNote ?? '', checkIn.promiseIf ?? '', checkIn.promiseThen ?? ''],
+      diaryMoods: [{ date: todayKey, mood }],
+    })
 
     // 어제 약속에 답했으면, 약속을 정한 어제 체크인에 그 답을 적습니다. 안 골랐으면 "모름" 이라 남기지 않습니다. (#79)
     if (yesterdayCheckIn !== undefined && askedPromise !== null && promiseKept !== null) {
@@ -224,6 +233,7 @@ export function CheckPage() {
       }
     }
     setIsSaved(true)
+    if (needsHelp) navigate(SUPPORT_PATH)
   }
 
   /**

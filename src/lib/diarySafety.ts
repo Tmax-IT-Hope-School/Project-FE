@@ -1,5 +1,6 @@
 /**
- * 일기·성찰 일기를 저장할 때, 도움 연결 안내(위기 표현·기분 저하)를 보여줘야 하는지 판단합니다. (#95)
+ * 글을 저장할 때, 도움 연결 안내(위기 표현·기분 저하)를 보여줘야 하는지 판단합니다. (#95)
+ * 일기·성찰 일기·체크인·주간 회고·시험 회고·집중 모드 해제 이유를 저장할 때 씁니다.
  *
  * 안전 브레이크(getSafetyBrakeResult)에 "방금 쓴 글" 과 "최근 기분 기록" 을 넘겨서 showHelp 를 확인합니다.
  * 최근 기분 기록은 매일 체크인(#24)에 저장된 기분과, 호출하는 쪽이 넘겨 주는 일기 기분을 합쳐서 씁니다.
@@ -7,6 +8,7 @@
 import { loadExams } from '@/lib/exams'
 import { getSafetyBrakeResult, type ExamDateInput, type MoodRecordInput } from '@/lib/safetyBrake'
 import { loadData } from '@/lib/storage'
+import { loadWeeklyReviews } from '@/lib/weeklyReview'
 import type { CheckIn, DiaryEntry, ReflectionEntry } from '@/types'
 
 /**
@@ -25,12 +27,27 @@ function loadCheckInMoods(): MoodRecordInput[] {
   return checkIns.map((checkIn) => ({ date: checkIn.date, mood: checkIn.mood }))
 }
 
+/** 글자만 남깁니다. 저장된 값이 깨져서 글자가 아니면 빈 글자로 봅니다. */
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** 집중 모드를 직접 풀 때 적은 이유들 (자동으로 풀린 안내 문구는 뺍니다). 저장 이름은 focusMode.ts 와 같습니다. */
+function loadUnlockReasons(): string[] {
+  const saved = loadData<unknown>('focus-unlocks', [])
+  if (!Array.isArray(saved)) return []
+  return saved
+    .filter((record) => typeof record === 'object' && record !== null && record.isAuto !== true)
+    .map((record) => textOf((record as Record<string, unknown>).reason))
+}
+
 /**
  * 지금까지 저장된 글과 기분을 모두 모아서 돌려줍니다. (알림을 보내기 전 안전 브레이크 확인용)
  *
- * - 체크인(#24): 기분 + 오늘의 약속 글
+ * - 체크인(#24): 기분 + 오늘의 약속 글 + 못 채운 이유 '기타' 에 적은 한 줄
  * - 일기(#63): 기분 + 일기 원문 (저장 이름 'diary', useDiaryEntries 와 같습니다)
  * - 성찰 일기(#70): 답변 글 (저장 이름 'reflection-entries', useReflectionEntries 와 같습니다)
+ * - 주간 회고(#82) · 시험 회고(#80) · 집중 모드 해제 이유(#69): 적은 글
  */
 export function loadSavedWritings(): { texts: string[]; moods: MoodRecordInput[] } {
   const checkIns = loadEntries<CheckIn>('checkins')
@@ -39,9 +56,19 @@ export function loadSavedWritings(): { texts: string[]; moods: MoodRecordInput[]
 
   return {
     texts: [
-      ...checkIns.flatMap((checkIn) => [checkIn.promiseIf ?? '', checkIn.promiseThen ?? '']),
+      ...checkIns.flatMap((checkIn) => [
+        textOf(checkIn.promiseIf),
+        textOf(checkIn.promiseThen),
+        textOf(checkIn.missReasonNote),
+      ]),
       ...diaries.map((diary) => diary.content ?? ''),
       ...reflections.flatMap((reflection) => reflection.answers ?? []),
+      ...loadWeeklyReviews().flatMap((review) => [review.best, review.regret, review.change]),
+      ...loadExams().flatMap((exam) => [
+        textOf(exam.reflection?.regret),
+        textOf(exam.reflection?.nextChange),
+      ]),
+      ...loadUnlockReasons(),
     ],
     moods: [
       ...checkIns.map((checkIn) => ({ date: checkIn.date, mood: checkIn.mood })),
