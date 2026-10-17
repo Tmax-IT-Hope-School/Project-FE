@@ -76,6 +76,8 @@ export interface StoredSetting<K extends AutoSettingKey = AutoSettingKey> {
   reason: string
   /** 사용자가 직접 바꿨으면 true — AI 는 다시 바꾸지 않습니다 */
   locked: boolean
+  /** AI 가 바꾸기 전 값 — [되돌리기] 를 누르면 이 값으로 돌아갑니다 (#390). AI 가 바꾼 적 없으면 없음 */
+  before?: AutoSettingValues[K]
 }
 
 export type StoredSettings = { [K in AutoSettingKey]: StoredSetting<K> }
@@ -300,7 +302,13 @@ export function applyProposals(
       suggestions.push(proposal)
       continue
     }
-    next[proposal.key] = { value: proposal.value, source, reason: proposal.reason, locked: false }
+    next[proposal.key] = {
+      value: proposal.value,
+      source,
+      reason: proposal.reason,
+      locked: false,
+      before: setting.value,
+    }
     changes.push({
       key: proposal.key,
       from: setting.value,
@@ -323,6 +331,27 @@ export function setByUser<K extends AutoSettingKey>(
   value: AutoSettingValues[K],
 ): StoredSettings {
   return { ...current, [key]: { value, source: 'user', reason: '내가 정했어요', locked: true } }
+}
+
+/** AI 가 바꾼 설정이라 [되돌리기] 를 보여 줄지 */
+export function canRevert(setting: StoredSetting): boolean {
+  return (setting.source === 'test' || setting.source === 'data') && setting.before !== undefined
+}
+
+/**
+ * [되돌리기] — AI 가 바꾸기 전 값으로 돌리고 잠급니다. (#390, 「4.8 설정」)
+ * 되돌린 것도 사용자가 정한 것이라 AI 는 다시 바꾸지 않습니다.
+ *
+ *   countdown { value: true, source: 'test', before: false } -> { value: false, source: 'user', locked: true }
+ *   AI 가 바꾼 적 없는 설정                                    -> 그대로
+ */
+export function revertSetting(current: StoredSettings, key: AutoSettingKey): StoredSettings {
+  const setting = current[key] as StoredSetting
+  if (!canRevert(setting)) return current
+  return {
+    ...current,
+    [key]: { value: setting.before, source: 'user', reason: '되돌렸어요', locked: true },
+  }
 }
 
 /** 온보딩에서 미리 채워 둘 제재 최대 한도 · 말투 수위 (사용자가 꼭 확인합니다, 「4.1」 5번) */
@@ -385,6 +414,10 @@ export function loadAutoSettings(): StoredSettings {
         source: item.source ?? 'default',
         reason: typeof item.reason === 'string' ? item.reason : base[key].reason,
         locked: item.locked === true,
+        // 되돌릴 값도 모양이 맞을 때만 씁니다.
+        ...(typeof item.before === typeof base[key].value
+          ? { before: item.before as AutoSettingValues[AutoSettingKey] }
+          : {}),
       }
     }
   }

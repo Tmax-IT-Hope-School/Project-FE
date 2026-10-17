@@ -1,4 +1,4 @@
-import { getTodayKey } from './date'
+import { getTodayKey, moveDateKey } from './date'
 import { loadData, saveData } from './storage'
 import type { CareLevel } from '@/lib/careLevel'
 
@@ -18,7 +18,9 @@ export interface CareLimits {
   allowFocusMode: boolean
   /** 한도를 올렸는데 아직 적용 전이면 바뀔 값. 없으면 null */
   pendingMaxCareLevel: CareLevel | null
-  /** pendingMaxCareLevel 이 적용되는 날짜 ('YYYY-MM-DD'). 없으면 null */
+  /** 수위를 올렸는데 아직 적용 전이면 바뀔 값. 없으면 null */
+  pendingMaxHarshness: number | null
+  /** 예약한 값(pendingMaxCareLevel · pendingMaxHarshness)이 적용되는 날짜 ('YYYY-MM-DD'). 없으면 null */
   pendingEffectiveDate: string | null
 }
 
@@ -33,12 +35,18 @@ const defaultLimits: CareLimits = {
   allowOffHoursCall: false,
   allowFocusMode: false,
   pendingMaxCareLevel: null,
+  pendingMaxHarshness: null,
   pendingEffectiveDate: null,
 }
 
 /** 값이 관리 강도(0 ~ 4 의 정수)가 맞는지 확인합니다. */
 function isCareLevel(value: unknown): value is CareLevel {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 4
+}
+
+/** 값이 독설 수위(1 ~ 5 의 정수)가 맞는지 확인합니다. */
+function isHarshness(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5
 }
 
 /**
@@ -49,59 +57,73 @@ function toCareLimits(saved: unknown): CareLimits {
   if (typeof saved !== 'object' || saved === null) return defaultLimits
   const value = saved as Record<string, unknown>
 
-  const harshness = value.maxHarshness
-  const isValidHarshness =
-    typeof harshness === 'number' && Number.isInteger(harshness) && harshness >= 1 && harshness <= 5
+  const pendingLevel = isCareLevel(value.pendingMaxCareLevel) ? value.pendingMaxCareLevel : null
+  const pendingHarshness = isHarshness(value.pendingMaxHarshness) ? value.pendingMaxHarshness : null
+  const hasPending = pendingLevel !== null || pendingHarshness !== null
 
   return {
     maxCareLevel: isCareLevel(value.maxCareLevel) ? value.maxCareLevel : defaultLimits.maxCareLevel,
-    maxHarshness: isValidHarshness ? harshness : defaultLimits.maxHarshness,
+    maxHarshness: isHarshness(value.maxHarshness) ? value.maxHarshness : defaultLimits.maxHarshness,
     // 허용 여부는 true 라고 분명히 저장된 것만 허용으로 봅니다.
     allowOffHoursCall: value.allowOffHoursCall === true,
     allowFocusMode: value.allowFocusMode === true,
-    pendingMaxCareLevel: isCareLevel(value.pendingMaxCareLevel) ? value.pendingMaxCareLevel : null,
+    pendingMaxCareLevel: pendingLevel,
+    pendingMaxHarshness: pendingHarshness,
+    // 예약한 값이 하나도 없으면 날짜도 의미가 없어서 비웁니다.
     pendingEffectiveDate:
-      typeof value.pendingEffectiveDate === 'string' ? value.pendingEffectiveDate : null,
+      hasPending && typeof value.pendingEffectiveDate === 'string'
+        ? value.pendingEffectiveDate
+        : null,
   }
 }
 
 /**
  * 지금 적용되는 한도를 돌려줍니다.
- * 예약해 둔 한도 상향의 적용 날짜가 지났으면, 지금 적용하고 저장한 뒤 돌려줍니다.
- * (지금은 한도를 올려도 바로 적용돼서 새로 예약되는 일은 없습니다. 예전에 저장된 예약을 위한 코드입니다)
+ * 예약해 둔 한도 · 수위 상향의 적용 날짜가 되었으면, 지금 적용하고 저장한 뒤 돌려줍니다.
  */
 export function getCareLimits(): CareLimits {
   const saved = toCareLimits(loadData<unknown>(STORAGE_KEY, null))
 
   const canApplyPending =
-    saved.pendingMaxCareLevel !== null &&
-    saved.pendingEffectiveDate !== null &&
-    saved.pendingEffectiveDate <= getTodayKey()
+    saved.pendingEffectiveDate !== null && saved.pendingEffectiveDate <= getTodayKey()
 
   if (!canApplyPending) return saved
 
   const applied: CareLimits = {
     ...saved,
-    maxCareLevel: saved.pendingMaxCareLevel as CareLevel,
+    maxCareLevel: saved.pendingMaxCareLevel ?? saved.maxCareLevel,
+    maxHarshness: saved.pendingMaxHarshness ?? saved.maxHarshness,
     pendingMaxCareLevel: null,
+    pendingMaxHarshness: null,
     pendingEffectiveDate: null,
   }
   saveData(STORAGE_KEY, applied)
   return applied
 }
 
+/** 예약 날짜를 정합니다. 예약이 하나라도 남아 있으면 내일, 없으면 null 입니다. */
+function withPendingDate(limits: CareLimits): CareLimits {
+  const hasPending = limits.pendingMaxCareLevel !== null || limits.pendingMaxHarshness !== null
+  return { ...limits, pendingEffectiveDate: hasPending ? moveDateKey(getTodayKey(), 1) : null }
+}
+
 /**
- * 관리 강도 최대 한도를 바꿉니다. 높이든 낮추든 바로 적용됩니다.
- * 예전에 예약해 둔 한도 상향이 남아 있으면 같이 지웁니다. (새로 고른 값이 우선)
+ * 관리 강도 최대 한도를 바꿉니다. (최종 기획서 「4.8 설정」 — 낮추면 즉시, 높이면 다음 날부터)
+ * - 낮추거나 지금 값을 다시 고르면 바로 적용하고, 예약해 둔 상향은 지웁니다.
+ * - 높이면 지금 값은 그대로 두고 내일 바뀌도록 예약합니다.
  * 4단계로 올릴 때 "정말 올릴까요?" 하고 한 번 더 묻는 건 설정 화면(SettingsPage)이 합니다.
+ *
+ *   지금 2, setMaxCareLevel(1) -> maxCareLevel 1 (바로)
+ *   지금 2, setMaxCareLevel(3) -> maxCareLevel 2, pendingMaxCareLevel 3, 내일 날짜
  */
 export function setMaxCareLevel(nextLevel: CareLevel): CareLimits {
-  const next: CareLimits = {
-    ...getCareLimits(),
-    maxCareLevel: nextLevel,
-    pendingMaxCareLevel: null,
-    pendingEffectiveDate: null,
-  }
+  const current = getCareLimits()
+  const isRaise = nextLevel > current.maxCareLevel
+  const next = withPendingDate({
+    ...current,
+    maxCareLevel: isRaise ? current.maxCareLevel : nextLevel,
+    pendingMaxCareLevel: isRaise ? nextLevel : null,
+  })
   saveData(STORAGE_KEY, next)
   return next
 }
@@ -113,15 +135,27 @@ export function setInitialCareLimits(maxCareLevel: CareLevel, maxHarshness: numb
     maxCareLevel,
     maxHarshness,
     pendingMaxCareLevel: null,
+    pendingMaxHarshness: null,
     pendingEffectiveDate: null,
   }
   saveData(STORAGE_KEY, next)
   return next
 }
 
-/** 독설 허용 수위(1~5)를 바꿉니다. 바로 적용됩니다. */
+/**
+ * 독설 허용 수위(1~5)를 바꿉니다. 한도와 같은 규칙입니다 — 낮추면 즉시, 높이면 다음 날부터.
+ *
+ *   지금 3, setMaxHarshness(2) -> maxHarshness 2 (바로)
+ *   지금 3, setMaxHarshness(5) -> maxHarshness 3, pendingMaxHarshness 5, 내일 날짜
+ */
 export function setMaxHarshness(value: number): CareLimits {
-  const next: CareLimits = { ...getCareLimits(), maxHarshness: value }
+  const current = getCareLimits()
+  const isRaise = value > current.maxHarshness
+  const next = withPendingDate({
+    ...current,
+    maxHarshness: isRaise ? current.maxHarshness : value,
+    pendingMaxHarshness: isRaise ? value : null,
+  })
   saveData(STORAGE_KEY, next)
   return next
 }

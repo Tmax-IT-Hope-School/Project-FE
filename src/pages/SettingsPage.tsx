@@ -60,6 +60,22 @@ import {
 } from '@/lib/webPush'
 import { busyTimesQuery, type CalendarStatus } from '@/lib/googleCalendar'
 import { loadSignupProfile } from '@/lib/signup'
+import {
+  AUTO_SETTING_ROWS,
+  SOURCE_LABELS,
+  getOptionLabel,
+  type AutoSettingRow,
+} from '@/lib/autoSettingOptions'
+import {
+  canRevert,
+  loadAutoSettings,
+  revertSetting,
+  saveAutoSettings,
+  setByUser,
+  type AutoSettingKey,
+  type AutoSettingValues,
+  type StoredSetting,
+} from '@/lib/settingsMapping'
 import { loadData, removeData, saveData } from '@/lib/storage'
 import { testUser } from '@/lib/testLogin'
 import { loadVoicePledge, removeVoicePledge } from '@/lib/voicePledge'
@@ -432,29 +448,46 @@ export function SettingsPage() {
             </div>
           </Card>
 
+          {/* 한도 · 수위는 AI 가 바꾸지 않고 나만 바꿉니다. 낮추면 즉시, 높이면 다음 날부터예요. (「4.8 설정」, #390) */}
           <Card title="관리 강도 최대 한도">
             <p className="text-sm text-slate-500">
-              고르면 바로 적용돼요. 언제든 다시 바꿀 수 있어요.
+              낮추면 바로, 높이면 내일부터 적용돼요. AI 는 이 한도를 바꾸지 않아요.
             </p>
 
+            {/* 올려 둔 값이 있으면 그 값을 골라 둔 것으로 보여 줍니다. 지금 값을 다시 고르면 예약이 취소돼요. */}
             <CareLevelPicker
-              value={limits.maxCareLevel}
+              value={limits.pendingMaxCareLevel ?? limits.maxCareLevel}
               onChange={handleChangeCareLevel}
               className="mt-4"
             />
+            {limits.pendingMaxCareLevel !== null && (
+              <PendingNotice
+                now={`${limits.maxCareLevel} ${careLevelInfos[limits.maxCareLevel].name}`}
+                next={`${limits.pendingMaxCareLevel} ${careLevelInfos[limits.pendingMaxCareLevel].name}`}
+              />
+            )}
           </Card>
 
           <Card title="독설 허용 수위">
             <p className="text-sm text-slate-500">
-              지적은 행동에만 해요. 외모·성적·능력 비하와 남과 비교는 절대 안 해요.
+              지적은 행동에만 해요. 외모·성적·능력 비하와 남과 비교는 절대 안 해요. 낮추면 바로,
+              높이면 내일부터 적용돼요.
             </p>
 
             <HarshnessPicker
-              value={limits.maxHarshness}
+              value={limits.pendingMaxHarshness ?? limits.maxHarshness}
               onChange={(value) => setLimits(setMaxHarshness(value))}
               className="mt-4"
             />
+            {limits.pendingMaxHarshness !== null && (
+              <PendingNotice
+                now={`${limits.maxHarshness} / 5`}
+                next={`${limits.pendingMaxHarshness} / 5`}
+              />
+            )}
           </Card>
+
+          <AutoSettingsSection />
 
           <Card title="잠금과 독촉">
             <div className="flex flex-col divide-y divide-slate-100">
@@ -717,7 +750,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* 관리 강도 한도를 센 단계로 올리기 전에 한 번 더 물어봅니다. 올리면 바로 적용되기 때문입니다. */}
+      {/* 관리 강도 한도를 센 단계로 올리기 전에 한 번 더 물어봅니다. (올린 값은 내일부터 적용됩니다) */}
       <Modal
         isOpen={confirmCareLevel !== null}
         onClose={() => setConfirmCareLevel(null)}
@@ -733,7 +766,8 @@ export function SettingsPage() {
               {careLevelInfos[confirmCareLevel].description}
             </p>
             <p className="mt-2 text-sm text-slate-600">
-              올리면 바로 적용돼요. 힘들면 언제든 다시 낮출 수 있어요.
+              올린 한도는 내일부터 적용돼요. 힘들면 언제든 다시 낮출 수 있고, 낮추는 건 바로
+              적용돼요.
             </p>
 
             <div className="mt-5 flex gap-3">
@@ -811,6 +845,131 @@ export function SettingsPage() {
 }
 
 // 푸시 상태마다 보여 줄 안내 문장
+interface PendingNoticeProps {
+  /** 지금 적용 중인 값 */
+  now: string
+  /** 내일부터 적용될 값 */
+  next: string
+}
+
+/** 한도 · 수위를 올렸을 때 "내일부터 적용" 안내 (#390) */
+function PendingNotice({ now, next }: PendingNoticeProps) {
+  return (
+    <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      <strong>내일부터 적용</strong> · 오늘은 {now}, 내일부터 {next}예요. 지금 값을 다시 고르면
+      취소돼요.
+    </p>
+  )
+}
+
+/**
+ * AI 가 성향으로 맞춘 설정들 (#390, 최종 기획서 「4.8 설정」)
+ * - 줄마다 근거 배지(검사 기준 / 최근 데이터 기준 / 내가 정함 / 기본값)와 이유 한 줄
+ * - 내가 바꾼 설정은 🔒 잠금. AI 는 다시 바꾸지 않습니다.
+ * - AI 가 바꾼 설정에는 [되돌리기] — 바꾸기 전 값으로 돌아가고 잠깁니다.
+ */
+function AutoSettingsSection() {
+  const [settings, setSettings] = useState(loadAutoSettings)
+
+  function handlePick<K extends AutoSettingKey>(key: K, value: AutoSettingValues[K]) {
+    if (settings[key].value === value) return
+    const next = setByUser(settings, key, value)
+    setSettings(next)
+    saveAutoSettings(next)
+  }
+
+  function handleRevert(key: AutoSettingKey) {
+    const next = revertSetting(settings, key)
+    setSettings(next)
+    saveAutoSettings(next)
+  }
+
+  return (
+    <Card title="AI 가 맞춘 설정">
+      <p className="text-sm text-slate-500">
+        처음 2주는 검사로, 그 뒤에는 최근 기록으로 AI 가 맞춰요. 내가 바꾼 설정은 🔒 잠겨서 AI 가
+        다시 바꾸지 않아요.
+      </p>
+      <ul className="mt-2 flex flex-col divide-y divide-slate-100">
+        {AUTO_SETTING_ROWS.map((settingRow) => (
+          <AutoSettingItem
+            key={settingRow.key}
+            settingRow={settingRow}
+            setting={settings[settingRow.key] as StoredSetting}
+            onPick={(value) => handlePick(settingRow.key, value)}
+            onRevert={() => handleRevert(settingRow.key)}
+          />
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
+interface AutoSettingItemProps {
+  settingRow: AutoSettingRow
+  setting: StoredSetting
+  onPick: (value: AutoSettingValues[AutoSettingKey]) => void
+  onRevert: () => void
+}
+
+/** "AI 가 맞춘 설정" 의 한 줄 */
+function AutoSettingItem({ settingRow, setting, onPick, onRevert }: AutoSettingItemProps) {
+  const isAiChanged = canRevert(setting)
+  return (
+    <li className="flex flex-col gap-2 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-slate-900">{settingRow.title}</span>
+        {/* 근거 배지. 색만으로 구분하지 않게 글자로 씁니다. */}
+        <span
+          className={cn(
+            'rounded px-1.5 py-0.5 text-xs font-medium',
+            setting.source === 'user' && 'bg-slate-800 text-white',
+            (setting.source === 'test' || setting.source === 'data') && 'bg-brand-light text-brand',
+            setting.source === 'default' && 'bg-slate-100 text-slate-600',
+          )}
+        >
+          {setting.locked && <span aria-hidden>🔒 </span>}
+          {SOURCE_LABELS[setting.source]}
+          {setting.locked && <span className="sr-only"> · 잠김</span>}
+        </span>
+      </div>
+      <p className="text-sm break-keep text-slate-500">{setting.reason}</p>
+      {/* 고르기. 좁은 화면에서는 칸이 같은 폭으로 나뉩니다. */}
+      <div
+        role="group"
+        aria-label={settingRow.title}
+        className={cn(
+          'grid gap-1 rounded-lg bg-slate-100 p-1',
+          settingRow.options.length === 3 ? 'grid-cols-3' : 'grid-cols-2',
+        )}
+      >
+        {settingRow.options.map((option) => {
+          const isSelected = option.value === setting.value
+          return (
+            <button
+              key={String(option.value)}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onPick(option.value)}
+              className={cn(
+                'h-10 cursor-pointer rounded-md px-2 text-sm font-medium break-keep transition-colors',
+                isSelected ? 'text-brand bg-white shadow-sm' : 'text-slate-600 hover:bg-slate-200',
+              )}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+      {isAiChanged && (
+        <Button variant="ghost" className="self-start" onClick={onRevert}>
+          되돌리기 · 바꾸기 전: {getOptionLabel(settingRow, setting.before)}
+        </Button>
+      )}
+    </li>
+  )
+}
+
 const webPushMessages: Record<WebPushStatus, string> = {
   unsupported: '이 브라우저에서는 앱을 닫았을 때 오는 알림을 쓸 수 없어요.',
   'needs-install':
