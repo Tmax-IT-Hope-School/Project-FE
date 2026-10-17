@@ -8,7 +8,8 @@ import { isGoogleConfigured } from '@/lib/googleClient'
 import { savePendingGoogleSignup } from '@/lib/googleSignup'
 import { hasSignupInfo, markSignupDone } from '@/lib/signup'
 import { TEST_TOKEN, isTestLoginEnabled, testUser } from '@/lib/testLogin'
-import { useState, type ReactNode } from 'react'
+import { cn } from '@/lib/cn'
+import { useRef, useState, type ReactNode } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 // 테스트 로그인을 보여줄지. `.env` 값은 앱이 켜진 뒤에 바뀌지 않아서, 화면 밖에서 한 번만 정합니다.
@@ -97,6 +98,8 @@ export function LoginPage() {
   // 구글로 시작하는 중인지(서버 확인을 기다림), 실패했을 때 보여줄 안내
   const [isGoogleWorking, setIsGoogleWorking] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
+  // 서버 확인을 기다리는 중인지를 ref 로도 들고 있습니다. 구글 창에서 계정을 연달아 고르면 state 는 아직 바뀌기 전일 수 있어서, 두 번째 신분증은 이 값으로 걸러냅니다.
+  const isGoogleWorkingRef = useRef(false)
 
   function handleTestLogin() {
     // 테스트 로그인은 앱을 바로 둘러보려는 것이라 가입 화면을 건너뜁니다. "가입 마침" 표시를 해 두면 홈으로 갑니다.
@@ -108,6 +111,9 @@ export function LoginPage() {
 
   /** 구글이 신분증을 줬을 때. 서버가 확인해서 "로그인" 또는 "가입 필요" 를 알려 줍니다. (lib/authApi.ts) */
   async function handleGoogleCredential(credential: string) {
+    // 이미 확인하는 중이면 무시합니다. (두 번 보내면 서버 요청이 두 번 나가고 화면이 두 번 이동합니다)
+    if (isGoogleWorkingRef.current) return
+    isGoogleWorkingRef.current = true
     setIsGoogleWorking(true)
     setGoogleError(null)
     try {
@@ -126,6 +132,7 @@ export function LoginPage() {
     } catch (error) {
       setGoogleError(getGoogleAuthErrorMessage(error))
     } finally {
+      isGoogleWorkingRef.current = false
       setIsGoogleWorking(false)
     }
   }
@@ -181,10 +188,16 @@ export function LoginPage() {
 
           {/* 구글로 시작하기. 클라이언트 ID 가 없으면(lib/googleClient.ts) 버튼 대신 안내를 보여줍니다. */}
           {isGoogleConfigured ? (
-            <GoogleButton
-              onCredential={(credential) => void handleGoogleCredential(credential)}
-              onFail={() => setGoogleError('구글 창을 마치지 않았어요. 다시 눌러 주세요.')}
-            />
+            // 확인하는 중에는 버튼을 눌러도 아무 일이 없도록 막고 흐리게 보입니다. (구글이 그리는 버튼이라 disabled 를 줄 수 없어서 pointer-events 로 막습니다)
+            <div
+              aria-busy={isGoogleWorking}
+              className={cn(isGoogleWorking && 'pointer-events-none opacity-60')}
+            >
+              <GoogleButton
+                onCredential={(credential) => void handleGoogleCredential(credential)}
+                onFail={() => setGoogleError('구글 창을 마치지 않았어요. 다시 눌러 주세요.')}
+              />
+            </div>
           ) : (
             <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
               구글로 시작하기는 아직 준비 중이에요.
