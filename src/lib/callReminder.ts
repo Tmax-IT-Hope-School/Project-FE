@@ -8,6 +8,7 @@
  *    앱이 닫혀 있을 때 알림을 보내려면 서버가 보내는 웹 푸시와 서비스 워커(#105)가 필요합니다.
  */
 import { showSystemNotification } from '@/lib/notifications'
+import { isWithinQuietHours, type QuietHours } from '@/lib/safetyBrake'
 
 // 저장소에 넣는 이름들입니다. (실제 키는 storage.ts 가 앞에 'study-' 를 붙입니다)
 /** 전화 받을 시간. 'HH:MM' 글자 (예: '22:00'). 아직 안 정했으면 저장돼 있지 않습니다. */
@@ -113,4 +114,22 @@ export function showCallNotification(): void {
     tag: 'ai-call',
     url: '/call',
   })
+}
+
+/**
+ * 정해 둔 전화 시간이 연락 금지 시간 안인지 확인합니다. 안이면 전화가 매일 조용히 건너뛰어집니다. (hooks/useCallReminder.ts)
+ * 설정 화면이 "이 시간에는 전화가 안 울려요" 하고 미리 알려 주려고 씁니다.
+ *
+ *   연락 금지 23:00 ~ 07:00 일 때
+ *   isCallTimeInQuietHours('23:30', quietHours)  -> true
+ *   isCallTimeInQuietHours('06:59', quietHours)  -> true
+ *   isCallTimeInQuietHours('07:00', quietHours)  -> false  (끝나는 시각부터는 울립니다)
+ *   isCallTimeInQuietHours('', quietHours)       -> false  (아직 안 정함)
+ */
+export function isCallTimeInQuietHours(savedTime: unknown, quietHours: QuietHours): boolean {
+  const minutes = parseCallTime(savedTime)
+  if (minutes === null) return false
+  // 날짜는 상관없고 시각만 보므로, 아무 날(2000-01-01)의 그 시각으로 만들어 확인합니다.
+  const time = new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60)
+  return isWithinQuietHours(time, quietHours)
 }

@@ -13,7 +13,12 @@ import { VoicePledgePlayButton } from '@/components/ui/VoicePledgePlayButton'
 import { useAuth } from '@/hooks/useAuth'
 import { useCalendarConnect } from '@/hooks/useCalendarConnect'
 import { logoutOnServer } from '@/lib/accountApi'
-import { CALL_TIME_STORAGE_KEY, isIosWithoutInstall, parseCallTime } from '@/lib/callReminder'
+import {
+  CALL_TIME_STORAGE_KEY,
+  isCallTimeInQuietHours,
+  isIosWithoutInstall,
+  parseCallTime,
+} from '@/lib/callReminder'
 import { cn } from '@/lib/cn'
 import { getTodayKey } from '@/lib/date'
 import type { CareLevel } from '@/lib/careLevel'
@@ -41,6 +46,7 @@ import {
   isNotificationSupported,
   requestNotificationPermission,
   showSystemNotification,
+  toQuietHours,
 } from '@/lib/notifications'
 import {
   WebPushError,
@@ -497,6 +503,12 @@ export function SettingsPage() {
                     ? '시간을 고르면 매일 그 시간에 AI 선생님이 전화를 걸어요.'
                     : `매일 ${callTime} 에 전화가 와요.`}{' '}
                   앱이 열려 있을 때만 울려요. 알림은 아래 &quot;알림&quot;에서 켤 수 있어요.
+                </p>
+                {/* 칸은 항상 두고 글자만 바꿉니다. (화면 읽기 프로그램이 바뀐 안내를 읽게 하려는 것입니다) */}
+                <p role="status" className="text-sm break-keep text-red-700">
+                  {isCallTimeInQuietHours(callTime, toQuietHours(messageSettings))
+                    ? `이 시간은 연락 금지 시간(${messageSettings.quietStart} ~ ${messageSettings.quietEnd})이라 전화가 울리지 않아요. 전화 시간이나 연락 금지 시간을 바꿔 주세요.`
+                    : ''}
                 </p>
                 {showIosGuide && (
                   <p className="rounded-lg bg-slate-50 p-3 text-sm break-keep text-slate-600">
