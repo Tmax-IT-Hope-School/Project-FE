@@ -20,6 +20,12 @@ export const EMAIL_MAX_LENGTH = 100
 // 그때 "가입은 이미 마쳤다" 고 적어 두는 표시의 저장 이름입니다. (값은 true)
 const SIGNUP_DONE_KEY = 'signup-done'
 
+/**
+ * 화면에 보여 주는 동의 문구의 버전입니다. 가입할 때 서버에 함께 보내고, 서버가 지금 받는 버전(BE 의 ConsentPolicy.CURRENT_VERSION)과 다르면 409 입니다.
+ * 동의 문구(약관 · 개인정보 안내)를 고치면 BE 와 같이 올려야 합니다. (BE docs/API.md "개인정보 동의")
+ */
+export const CONSENT_VERSION = 'v1'
+
 /** 동의 항목 세 가지. true 면 동의했다는 뜻입니다. */
 export interface SignupConsents {
   /** [필수] 서비스 이용약관 */

@@ -1,6 +1,6 @@
 import { ApiError, api, isConnectionError } from '@/lib/api'
 import type { School } from '@/lib/schoolSearch'
-import type { SignupConsents } from '@/lib/signup'
+import { CONSENT_VERSION, type SignupConsents } from '@/lib/signup'
 import type { AuthUser } from '@/types'
 
 /**
@@ -38,7 +38,7 @@ function isAuthResult(value: unknown): value is AuthResult {
 
 /* ---------- 구글로 시작하기 (#319, BE #19) ----------
  *   시작  POST /auth/google         { credential }                                         -> 200 LOGGED_IN 또는 SIGNUP_REQUIRED
- *   가입  POST /auth/google/signup  { credential, name, nickname, schoolCode, schoolName, consents } -> 201 { token, user }
+ *   가입  POST /auth/google/signup  { credential, name, nickname, schoolCode, schoolName, consents(terms · privacy · diaryAnalysis · over14 · version) } -> 201 { token, user }
  *   실패  400 (구글 확인 실패 · 한 시간이 지남) / 409 (같은 이메일의 이메일 계정 · 이미 가입) / 503 (서버에 구글 로그인이 꺼짐)
  * credential 은 구글 버튼이 준 신분증(ID 토큰)입니다. 진짜인지는 서버가 구글에 확인합니다.
  */
@@ -77,6 +77,8 @@ export interface GoogleSignupInput {
   /** 고른 고등학교. 안 골랐으면 null */
   school: School | null
   consents: SignupConsents
+  /** 만 14세 이상이라고 확인했는지. 가입 화면에서 "네" 를 골랐을 때만 true 이고, true 가 아니면 서버가 가입을 거절합니다 */
+  isOver14: boolean
 }
 
 /** 구글로 가입합니다. 가입과 동시에 로그인돼서 로그인 정보를 돌려줍니다. */
@@ -89,7 +91,8 @@ export async function signupWithGoogle(input: GoogleSignupInput): Promise<AuthRe
       nickname: input.nickname,
       schoolCode: input.school?.code ?? null,
       schoolName: input.school?.name ?? null,
-      consents: input.consents,
+      // 서버는 동의 세 가지에 더해 만 14세 확인(over14)과 동의 문구 버전(version)을 필수로 받습니다. 빠지면 400 입니다.
+      consents: { ...input.consents, over14: input.isOver14, version: CONSENT_VERSION },
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })

@@ -384,6 +384,7 @@ export function SignupPage() {
           nickname: info.nickname,
           school,
           consents,
+          isOver14: isOver14 === true,
         })
         // 다 썼으니 구글 신분증을 지우고, 가입 정보를 저장한 뒤 로그인합니다. (가입 정보가 있어야 가입 화면으로 다시 오지 않습니다)
         clearPendingGoogleSignup()
