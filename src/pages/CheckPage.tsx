@@ -16,6 +16,7 @@ import { MOOD_OPTIONS } from '@/lib/quickCheckIn'
 import {
   PROMISE_EXAMPLES,
   PROMISE_MAX_LENGTH,
+  countKeptPromises,
   getAskedPromise,
   isHalfFilledPromise,
   makePromiseText,
@@ -86,7 +87,7 @@ export function CheckPage() {
   const todayKey = getTodayKey()
   const yesterdayKey = moveDateKey(todayKey, -1)
 
-  const { getCheckIn, saveCheckIn } = useCheckIns()
+  const { getCheckIn, saveCheckIn, checkIns } = useCheckIns()
   const { getPlans } = usePlans()
   // 타이머가 저장해 둔 진짜 공부 기록입니다. 기록이 없으면 빈 목록이라 어제 순공은 0분으로 보입니다.
   const { sessions } = useStudySessions()
@@ -140,6 +141,8 @@ export function CheckPage() {
   // 이미 답한 적이 있으면 그 답으로 시작하고, 아직 안 골랐으면 null 입니다.
   const yesterdayCheckIn = getCheckIn(yesterdayKey)
   const askedPromise = getAskedPromise(yesterdayCheckIn)
+  // 최근 7일 동안 답한 약속 중 지킨 횟수. 답이 쌓였는데 어디에도 안 보이면 답할 이유가 없어서, 이 카드에 보여 줍니다.
+  const keptCount = countKeptPromises(checkIns, todayKey)
   const [promiseKept, setPromiseKept] = useState<boolean | null>(
     yesterdayCheckIn?.promiseKept ?? null,
   )
@@ -387,6 +390,11 @@ export function CheckPage() {
               못 지켰어
             </button>
           </div>
+          {keptCount.answered > 0 && (
+            <p className="mt-3 text-sm break-keep text-slate-500">
+              최근 7일 동안 답한 약속 {keptCount.answered}개 중 {keptCount.kept}개를 지켰어.
+            </p>
+          )}
         </Card>
       )}
 

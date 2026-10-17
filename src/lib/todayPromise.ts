@@ -1,3 +1,5 @@
+import { moveDateKey } from '@/lib/date'
+
 /**
  * 체크인의 "오늘의 약속" (#79)을 다루는 순수 함수와 값들입니다.
  *
@@ -67,4 +69,40 @@ export function getAskedPromise(
 ): PromiseText | null {
   if (checkIn === undefined) return null
   return makePromiseText(checkIn.promiseIf ?? '', checkIn.promiseThen ?? '')
+}
+
+/** 약속을 지켰는지 답한 횟수와, 그중 지킨 횟수 */
+export interface PromiseKeptCount {
+  /** "지켰어 / 못 지켰어" 로 답한 약속 수 */
+  answered: number
+  /** 그중 "지켰어" 라고 답한 수 */
+  kept: number
+}
+
+/**
+ * 최근 며칠 동안 "지켰어 / 못 지켰어" 로 답한 약속이 몇 개이고 그중 몇 개를 지켰는지 셉니다.
+ * 오늘은 빼고, 오늘 앞의 days 일을 봅니다. (약속은 다음 날 체크인에서 답하므로 오늘 날짜의 약속은 아직 답이 없습니다)
+ * 약속을 정하지 않았거나 답하지 않은 체크인은 세지 않습니다. ("못 지킴" 이 아니라 "모름")
+ * 날짜는 'YYYY-MM-DD' 글자라서 크기 비교로 앞뒤를 알 수 있습니다.
+ *
+ *   오늘 '2026-10-17', days 7 → 10-10 ~ 10-16 의 체크인만 봅니다.
+ *   [10-15 약속 + 지켰어, 10-16 약속 + 못 지켰어, 10-14 약속만(답 없음)] -> { answered: 2, kept: 1 }
+ *   [10-09 약속 + 지켰어] -> { answered: 0, kept: 0 }   (7일보다 오래됨)
+ */
+export function countKeptPromises(
+  checkIns: { date: string; promiseIf?: string; promiseThen?: string; promiseKept?: boolean }[],
+  todayKey: string,
+  days = 7,
+): PromiseKeptCount {
+  const startKey = moveDateKey(todayKey, -days)
+  let answered = 0
+  let kept = 0
+  for (const checkIn of checkIns) {
+    if (checkIn.date < startKey || checkIn.date >= todayKey) continue
+    if (getAskedPromise(checkIn) === null) continue
+    if (typeof checkIn.promiseKept !== 'boolean') continue
+    answered += 1
+    if (checkIn.promiseKept) kept += 1
+  }
+  return { answered, kept }
 }

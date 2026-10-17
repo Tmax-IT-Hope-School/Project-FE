@@ -12,7 +12,7 @@ const STORAGE_KEY = 'checkins'
  * 매일 체크인을 날짜별로 하나씩 들고 있고, 바뀔 때마다 localStorage 에 저장합니다.
  * 같은 날 다시 체크인하면 그 날의 기록을 덮어씁니다.
  *
- *   const { getCheckIn, saveCheckIn } = useCheckIns()
+ *   const { getCheckIn, saveCheckIn, checkIns } = useCheckIns()
  *   const todayCheckIn = getCheckIn('2026-09-28')
  */
 export function useCheckIns() {
@@ -36,5 +36,8 @@ export function useCheckIns() {
     setCheckInsByDate((prev) => ({ ...prev, [checkIn.date]: checkIn }))
   }
 
-  return { getCheckIn, saveCheckIn }
+  /** 저장된 체크인 전부 (날짜 순서는 보장하지 않습니다) */
+  const checkIns = Object.values(checkInsByDate)
+
+  return { getCheckIn, saveCheckIn, checkIns }
 }
