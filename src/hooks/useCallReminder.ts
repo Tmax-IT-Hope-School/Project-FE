@@ -56,8 +56,9 @@ export function useCallReminder() {
       const lastRingAt = loadData<unknown>(LAST_RING_STORAGE_KEY, null)
       if (!shouldRingNow(new Date(), savedTime, lastRingAt)) return
 
-      // 연락 금지 시간이거나 위기 표현이 감지된 상태면 전화를 걸지 않습니다. (#60, #95)
-      // 설정 화면에 "이 시간에는 메시지도 전화도 안 와요" 라고 약속했기 때문입니다.
+      // 연락 금지 시간이거나 위기 표현 · 오랜 기분 저하가 감지된 상태면 전화를 걸지 않습니다. (#60, #95)
+      // 설정 화면에 "이 시간에는 메시지도 전화도 안 와요", 도움 화면(/support)에 "독촉이랑 채찍은 모두 멈췄어" 라고 약속했기 때문입니다.
+      // (학생이 상담 탭에서 직접 거는 통화는 막지 않습니다)
       // AI 메시지 알림(useAiMessageNotifications)과 같은 방법으로 판정합니다.
       const { texts, moods } = loadSavedWritings()
       const brake = getSafetyBrakeResult({
@@ -67,7 +68,7 @@ export function useCallReminder() {
         exams: loadExamDates(),
         quietHours: toQuietHours(getMessageSettings()),
       })
-      if (brake.quiet || brake.stopWhip) return
+      if (brake.quiet || brake.stopWhip || brake.recoveryMode) return
 
       // 먼저 "울렸다" 고 기록해서, 아래에서 에러가 나도 같은 전화가 계속 반복되지 않게 합니다.
       saveData(LAST_RING_STORAGE_KEY, Date.now())
