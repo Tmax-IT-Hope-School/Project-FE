@@ -16,6 +16,8 @@ interface UseGoalAdjustOptions {
   currentMinutes: number
   /** 최근 실제로 공부한 하루 평균 (분). 모르면 null */
   recentAverageMinutes: number | null
+  /** 목표를 올릴 때 넘을 수 없는 합계 (분). 안 정하면 제한 없음 */
+  maxMinutes?: number
   /** 수락했을 때 새 목표(분)를 받아서 실제로 바꾸는 함수 */
   onAccept: (newMinutes: number) => void
 }
@@ -34,6 +36,7 @@ export function useGoalAdjust({
   action,
   currentMinutes,
   recentAverageMinutes,
+  maxMinutes,
   onAccept,
 }: UseGoalAdjustOptions) {
   // 거절한 날짜. 거절한 적 없으면 null
@@ -52,7 +55,7 @@ export function useGoalAdjust({
   const proposal: GoalAdjustProposal | null =
     action === null || isAnswered || isAcceptedToday || isDeclineSnoozed(declinedDate)
       ? null
-      : proposeGoalAdjust(action, currentMinutes, recentAverageMinutes)
+      : proposeGoalAdjust(action, currentMinutes, recentAverageMinutes, maxMinutes)
 
   /** 수락: 새 목표를 적용하고 닫습니다. */
   function accept() {

@@ -26,6 +26,7 @@ import { SUBJECT_COLORS, SUBJECT_COLOR_LABELS, loadSubjects } from '@/lib/subjec
 import { SUBJECT_NAME_MAX_LENGTH } from '@/lib/subjectsApi'
 import { getPlanProgress, getPlayProgress } from '@/lib/planProgress'
 import { PLAN_RESULT_LABELS, getPlanResult, type PlanResult } from '@/lib/planResult'
+import { PLAN_MAX_MINUTES } from '@/lib/plansApi'
 import { copyPlans, getFrequentPlans, type FrequentPlan } from '@/lib/planShortcuts'
 import {
   WEEKDAY_ORDER,
@@ -40,7 +41,7 @@ import { checkPlanSlot, NO_SLOT_PROBLEM, type PlanSlotCheck } from '@/lib/planSl
 import { formatMinutes, getNowLine, getTimeline, mergeBusyTimes } from '@/lib/timeline'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { PlanKind, Routine, StudyPlan, StudySession, Subject, SubjectColor } from '@/types'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 /* 과목 색 → 태그 색. (#11 SubjectBadge 가 생기면 그걸로 바꾸면 됩니다) */
@@ -60,6 +61,15 @@ const subjectColorStyles: Record<SubjectColor, string> = {
 }
 
 /* 계획 결과 → 표시 색. 초록 = 했음, 노랑·주황 = 아쉬움, 회색 = 못 했어요. (빨강으로 혼내지 않습니다) 색만으로 구분하지 않도록 글자도 같이 보여줍니다. (#313) */
+/* 플래너 보기 블록의 좁은 화면(모바일)에서 글자 칩 대신 보이는 색 점. 위 planResultStyles 와 같은 색 계열입니다. */
+const resultDotStyles: Record<PlanResult, string> = {
+  onTime: 'bg-green-500',
+  done: 'bg-green-500',
+  late: 'bg-amber-500',
+  partial: 'bg-orange-500',
+  missed: 'bg-slate-400',
+}
+
 const planResultStyles: Record<PlanResult, string> = {
   onTime: 'bg-green-50 text-green-700',
   done: 'bg-green-50 text-green-700',
@@ -315,6 +325,7 @@ function PlanAddForm({ subjects, frequentPlans, defaultWeekday, onAdd }: PlanAdd
                   </span>
                   {subject && (
                     <span
+                      title={subject.name}
                       className={cn(
                         'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
                         subjectColorStyles[subject.color],
@@ -371,7 +382,9 @@ function PlanAddForm({ subjects, frequentPlans, defaultWeekday, onAdd }: PlanAdd
                   onClick={() => setSubjectId(subject.id)}
                   className="max-w-full min-w-0"
                 >
-                  <span className="min-w-0 truncate">{subject.name}</span>
+                  <span title={subject.name} className="min-w-0 truncate">
+                    {subject.name}
+                  </span>
                 </Button>
               ))}
             </div>
@@ -557,6 +570,7 @@ function RoutineList({ routines, subjects, notice, onDelete }: RoutineListProps)
                     {routine.kind === 'play' && <PlayBadge className="shrink-0" />}
                     {subject && (
                       <span
+                        title={subject.name}
                         className={cn(
                           'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
                           subjectColorStyles[subject.color],
@@ -640,7 +654,9 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
                   subjectColorStyles[subject.color],
                 )}
               >
-                <span className="min-w-0 truncate">{subject.name}</span>
+                <span title={subject.name} className="min-w-0 truncate">
+                  {subject.name}
+                </span>
                 <button
                   type="button"
                   onClick={() => onDelete(subject)}
@@ -757,10 +773,18 @@ function PlanRow({
   const [draftTime, setDraftTime] = useState<string | null>(null)
 
   /** 시작 시각을 바꾸고, 겹쳤으면 안내를 보여 줍니다. */
-  async function handleChangeTime(startTime: string) {
-    const result = await onChangeStartTime(plan.id, startTime)
-    setTimeError(result.conflictMessage ?? '')
-    setTimeNotice(result.googleNotice ?? '')
+  // 앞의 시각 변경이 아직 끝나지 않았으면 그 뒤에 이어서 합니다. (구글 일정을 확인하느라 늦게 끝난 변경이
+  // 나중에 한 "지우기" 를 덮어쓰지 않게, 누른 순서대로 끝나게 합니다)
+  const timeChangeQueue = useRef<Promise<void>>(Promise.resolve())
+
+  function handleChangeTime(startTime: string): Promise<void> {
+    const run = timeChangeQueue.current.then(async () => {
+      const result = await onChangeStartTime(plan.id, startTime)
+      setTimeError(result.conflictMessage ?? '')
+      setTimeNotice(result.googleNotice ?? '')
+    })
+    timeChangeQueue.current = run.catch(() => {})
+    return run
   }
 
   /**
@@ -804,6 +828,7 @@ function PlanRow({
         )}
         {subject && (
           <span
+            title={subject.name}
             className={cn(
               'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
               subjectColorStyles[subject.color],
@@ -929,6 +954,8 @@ function PlanRow({
             <Button
               variant="ghost"
               disabled={!plan.startTime}
+              // 누르는 순간 시각 칸이 먼저 blur 되어 고치던 값이 확정되는 것을 막습니다. (이 버튼은 포커스만 옮기지 않고 바로 지웁니다)
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 setDraftTime(null)
                 void handleChangeTime('')
@@ -1146,17 +1173,35 @@ function PlanTimeline({
                         </span>
                       )}
                       {result && (
-                        <span
-                          className={cn(
-                            'rounded px-1.5 py-0.5 text-xs font-semibold',
-                            planResultStyles[result],
-                          )}
-                        >
-                          {PLAN_RESULT_LABELS[result]}
-                        </span>
+                        <>
+                          {/* 모바일(375px)에서는 글자 칩이 과목·내용 칸을 다 먹어서, 색 점만 보여 주고 글자는 화면낭독기용으로만 둡니다. */}
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'h-2 w-2 rounded-full sm:hidden',
+                              resultDotStyles[result],
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              'rounded px-1.5 py-0.5 text-xs font-semibold max-sm:sr-only',
+                              planResultStyles[result],
+                            )}
+                          >
+                            {PLAN_RESULT_LABELS[result]}
+                          </span>
+                        </>
                       )}
                       {timeLabel}
-                      {plan.done && ' · 끝냄'}
+                      {/* 모바일에서는 " · 끝냄" 글자 대신 ✓ 만 보여서 과목·내용 칸이 남도록 합니다. (글자는 화면낭독기용으로 남깁니다) */}
+                      {plan.done && (
+                        <>
+                          <span className="max-sm:sr-only"> · 끝냄</span>
+                          <span aria-hidden="true" className="sm:hidden">
+                            ✓
+                          </span>
+                        </>
+                      )}
                     </span>
                   </span>
                 </>
@@ -1435,6 +1480,8 @@ export function PlannerPage() {
     action: careDecision?.action ?? null,
     currentMinutes: todayGoalMinutes,
     recentAverageMinutes: getRecentAverageMinutes(allPlans, sessions),
+    // 계획 하나는 최대 600분이라서, 공부 계획 개수 × 600분 넘게는 올릴 수 없습니다.
+    maxMinutes: todayPlans.filter((plan) => plan.kind !== 'play').length * PLAN_MAX_MINUTES,
     // 수락하면 오늘 계획들의 목표 시간을 새 목표에 맞춰 같은 비율로 바꿉니다.
     // 구글 캘린더에 넣은 계획은 일정의 끝 시각도 같이 옮깁니다.
     onAccept: (newMinutes) => {

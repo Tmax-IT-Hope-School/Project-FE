@@ -46,16 +46,20 @@ export interface GoalAdjustProposal {
  *  - goal-down 인데 최근 평균을 모르거나 0 이하일 때 (근거 없이 낮추지 않음)
  *  - goal-down 인데 계산한 값이 지금 목표보다 낮지 않을 때 ("낮추자" 며 올리는 일 방지)
  *  - raise 인데 반올림하면 값이 그대로일 때 (너무 작은 목표)
+ *  - raise 인데 더 올릴 수 있는 만큼(maxMinutes)에 이미 닿았을 때 (수락해도 안 바뀌는 제안을 하지 않습니다)
+ *    예) 600분 계획 하나(maxMinutes 600) -> null / 580분 계획 하나(maxMinutes 600) -> 600분까지만 제안
  */
 export function proposeGoalAdjust(
   action: CareAction,
   currentMinutes: number,
   recentAverageMinutes: number | null,
+  maxMinutes: number = Infinity,
 ): GoalAdjustProposal | null {
   if (currentMinutes <= 0) return null
 
   if (action === 'carrot-raise') {
-    const toMinutes = Math.round(currentMinutes * GOAL_RAISE_RATE)
+    // 계획 하나는 600분까지라서(scalePlanMinutes), 올릴 수 있는 만큼(maxMinutes)까지만 제안합니다.
+    const toMinutes = Math.min(Math.round(currentMinutes * GOAL_RAISE_RATE), maxMinutes)
     if (toMinutes <= currentMinutes) return null
     return { kind: 'raise', fromMinutes: currentMinutes, toMinutes }
   }
