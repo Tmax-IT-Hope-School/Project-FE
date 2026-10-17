@@ -16,6 +16,12 @@ export const AUTH_STORAGE_KEY = 'auth'
  */
 export const UNAUTHORIZED_EVENT = 'auth:unauthorized'
 
+/**
+ * 서버가 저장을 "최신 약관에 동의한 뒤에 하세요(403 CONSENT_REQUIRED)" 라고 막았을 때 api.ts 가 창에 알리는 이벤트 이름입니다.
+ * ConsentGate 가 이걸 듣고 다시 동의하는 팝업을 띄웁니다. (#512)
+ */
+export const CONSENT_REQUIRED_EVENT = 'auth:consent-required'
+
 /** 저장해 두는 로그인 정보입니다. 둘 다 null 이면 로그인 전입니다. */
 export interface AuthState {
   user: AuthUser | null

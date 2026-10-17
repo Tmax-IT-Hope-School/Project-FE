@@ -1,3 +1,4 @@
+import { ConsentGate } from '@/components/layout/ConsentGate'
 import { useAuth } from '@/hooks/useAuth'
 import { isPublicPath, type LoginRedirectState } from '@/lib/authRedirect'
 import {
@@ -25,6 +26,7 @@ interface RequireAuthProps {
  *                                 로고·홈을 눌러도 하던 자리로 돌아옵니다. 테스트 로그인도 똑같습니다.
  *                                 하다 만 사람이 다음에 들어오면 "이어하기 / 처음부터 다시" 를 먼저 고르게 합니다.
  *   로그인했고 온보딩도 마쳤다   -> 감싼 화면을 그대로 보여줍니다.
+ *   (로그인한 사람의 화면은 모두 ConsentGate 로 감싸서, 저장이 약관 동의 때문에 막히면 다시 동의하는 팝업을 띄웁니다. #512)
  *
  * "막을 주소" 가 아니라 "열어 줄 주소" 를 적어 두는 방식이라, 새 페이지를 만들어도 따로 할 일이 없습니다.
  * (깜빡하고 안 적어도 막히는 쪽이 안전합니다)
@@ -80,5 +82,5 @@ export function RequireAuth({ children }: RequireAuthProps) {
     return <Navigate to={resumePath} replace />
   }
 
-  return <>{children}</>
+  return <ConsentGate>{children}</ConsentGate>
 }

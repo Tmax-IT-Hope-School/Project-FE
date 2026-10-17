@@ -10,10 +10,16 @@
  *   2. 로그인한 상태면 모든 요청에 토큰을 붙입니다. (Authorization: Bearer 토큰)
  *      테스트 로그인의 토큰은 서버가 모르는 가짜라서 붙이지 않습니다. (lib/testLogin.ts)
  *   3. 서버가 "누구인지 모르겠다(401)" 고 하면 로그인 정보를 지웁니다. 그러면 로그인 화면으로 보내집니다.
+ *   4. 서버가 "최신 약관에 동의해야 저장할 수 있다(403 CONSENT_REQUIRED)" 고 하면 창에 알립니다. 그러면 다시 동의하는 팝업이 뜹니다. (#512)
  *
  * ⚠️ 토큰이나 서버가 준 내용(일기·기분 등)은 console.log 로 찍지 않습니다. 개발자 도구에 남으면 안 되기 때문입니다.
  */
-import { AUTH_STORAGE_KEY, UNAUTHORIZED_EVENT, getAuthToken } from '@/lib/authStorage'
+import {
+  AUTH_STORAGE_KEY,
+  CONSENT_REQUIRED_EVENT,
+  UNAUTHORIZED_EVENT,
+  getAuthToken,
+} from '@/lib/authStorage'
 import { removeData } from '@/lib/storage'
 import { TEST_TOKEN } from '@/lib/testLogin'
 
@@ -156,6 +162,7 @@ function handleUnauthorized(sentToken: string): void {
  *   - 서버가 꺼져 있다 · 연결 실패     -> isConnectionError(error) === true (브라우저의 TypeError 그대로)
  *   - 로그인한 상태에서 401            -> ApiError(401) 를 던지고, 로그인 정보를 지워 로그인 화면으로 보냅니다.
  *     (로그인 전의 401 은 "코드가 틀렸다" 같은 뜻이라 로그인 정보를 건드리지 않고 ApiError 만 던집니다)
+ *   - 저장이 403 CONSENT_REQUIRED     -> ApiError(403) 를 던지고, 다시 동의하는 팝업을 띄웁니다. 동의한 뒤 저장을 다시 누르면 됩니다.
  */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   // 테스트 로그인의 토큰은 가짜라서 서버에 보내지 않습니다. 보내면 서버가 401 로 거절하고,
@@ -176,6 +183,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const detail = parseErrorBody(await readJsonSafely(response))
     // 토큰을 보냈는데 401 이면 로그인이 만료됐거나 틀린 것이라, 로그인 정보를 지웁니다.
     if (response.status === 401 && token !== null) handleUnauthorized(token)
+    // 최신 약관에 동의하지 않아 저장이 막혔으면 다시 동의하는 팝업을 띄우라고 알립니다. (components/layout/ConsentGate.tsx)
+    if (response.status === 403 && detail.code === 'CONSENT_REQUIRED' && token !== null) {
+      window.dispatchEvent(new Event(CONSENT_REQUIRED_EVENT))
+    }
     throw new ApiError(
       detail.message ?? `요청에 실패했습니다 (${response.status})`,
       response.status,
