@@ -1,3 +1,4 @@
+import { DAY_START_HOUR } from '@/lib/date'
 import type { StudyPlan } from '@/types'
 
 /**
@@ -240,6 +241,17 @@ export function getNowLine(
 }
 
 /**
+ * 시각(자정부터 몇 분째)을 "하루의 시작(새벽 4시)부터 몇 분째" 로 바꿉니다. 이 앱의 하루는 새벽 4시에 바뀌기 때문입니다. (lib/date.ts)
+ *
+ *   toDayMinutes(4 * 60)   -> 0      (새벽 4시 = 하루의 맨 처음)
+ *   toDayMinutes(19 * 60)  -> 900    (저녁 7시)
+ *   toDayMinutes(1 * 60)   -> 1260   (새벽 1시 = 그날의 맨 끝쪽)
+ */
+function toDayMinutes(minutesOfClock: number): number {
+  return (minutesOfClock - DAY_START_HOUR * 60 + 24 * 60) % (24 * 60)
+}
+
+/**
  * 계획을 "지금 할 순서" 로 줄 세웁니다. 홈의 "지금 할 일" 이 이 순서의 맨 앞입니다.
  * (끝낸 계획을 빼는 것은 부르는 쪽에서 합니다)
  *
@@ -247,18 +259,26 @@ export function getNowLine(
  * 1. 시작 시각이 이미 된 계획(시작 ≤ 지금)이 가장 먼저. 여럿이면 시작이 빠른 순.
  * 2. 그다음은 시작 시각을 안 정한 계획. 원래 순서 그대로.
  * 3. 마지막은 아직 시작 시각이 안 된 계획. 시작이 빠른 순.
+ * 시각은 새벽 4시를 하루의 시작으로 보고 비교합니다. (새벽 1시 계획은 그날 밤 늦게 할 일이라, 저녁에는 "아직 안 된" 쪽입니다)
  *
  * ■ 예시 (지금 19:16)
  *   [탐구 21:00, 영어(시각 없음), 국어 19:00] -> [국어 19:00, 영어, 탐구 21:00]
  *   지금이 14:00 이면                         -> [영어, 국어 19:00, 탐구 21:00]
+ *   [국어 19:00, 새벽 01:00], 지금 19:16      -> [국어 19:00, 새벽 01:00]  (01:00 은 뒤)
+ *   [국어 22:00, 새벽 01:00], 지금 01:30      -> [국어 22:00, 새벽 01:00]  (둘 다 시각이 됨. 22:00 이 먼저)
  */
 export function sortPlansForNow(plans: StudyPlan[], nowMinutes: number): StudyPlan[] {
   const { blocks, unscheduledPlans } = getTimeline(plans)
-  const startedPlans = blocks
-    .filter((block) => block.startMinutes <= nowMinutes)
+  const nowInDay = toDayMinutes(nowMinutes)
+  // 하루의 시작(04:00) 기준으로 시작이 빠른 순서로 다시 줄 세웁니다. (같으면 원래 순서)
+  const byDayStart = [...blocks].sort(
+    (a, b) => toDayMinutes(a.startMinutes) - toDayMinutes(b.startMinutes),
+  )
+  const startedPlans = byDayStart
+    .filter((block) => toDayMinutes(block.startMinutes) <= nowInDay)
     .map((block) => block.plan)
-  const laterPlans = blocks
-    .filter((block) => block.startMinutes > nowMinutes)
+  const laterPlans = byDayStart
+    .filter((block) => toDayMinutes(block.startMinutes) > nowInDay)
     .map((block) => block.plan)
 
   return [...startedPlans, ...unscheduledPlans, ...laterPlans]
