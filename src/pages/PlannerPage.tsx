@@ -981,6 +981,8 @@ interface PlanTimelineProps {
   sessions: StudySession[]
   /** 오늘이면 "지금" 선을 그리고, 블록을 눌러 타이머를 시작할 수 있습니다 */
   isToday: boolean
+  /** 오늘 날짜(새벽 4시 기준). 그날이 끝났는지 보고 블록에 결과(못 했어요 · 조금 했어요 …)를 붙이는 데 씁니다 */
+  todayKey: string
   /** 같은 날의 구글 캘린더 일정. 회색 블록으로 같이 그립니다 (#323). 연결 안 했으면 빈 배열 */
   busyTimes: BusyTime[]
 }
@@ -990,7 +992,15 @@ interface PlanTimelineProps {
  * 블록 안쪽은 실제로 공부한 만큼 위에서부터 진하게 채워서, 계획과 실제가 한눈에 보입니다.
  * 계산(순서 · 높이 · 빈 시간 · 겹침 · "지금" 선의 자리)은 lib/timeline.ts 가 합니다.
  */
-function PlanTimeline({ title, plans, subjects, sessions, isToday, busyTimes }: PlanTimelineProps) {
+function PlanTimeline({
+  title,
+  plans,
+  subjects,
+  sessions,
+  isToday,
+  todayKey,
+  busyTimes,
+}: PlanTimelineProps) {
   // "지금" 선을 1분마다 다시 그리려고 현재 시각을 들고 있습니다.
   const [now, setNow] = useState(() => new Date())
 
@@ -1104,6 +1114,8 @@ function PlanTimeline({ title, plans, subjects, sessions, isToday, busyTimes }: 
                 plan.done || progress.actualMinutes > 0
                   ? `${progress.actualMinutes} / ${plan.targetMinutes}분`
                   : `${plan.targetMinutes}분`
+              // 계획한 시간에 실제로 했는지 (제때 했어요 · 늦게 시작했어요 · 조금 했어요 …). 목록 줄과 같은 규칙입니다. (lib/planResult.ts)
+              const result = getPlanResult(plan, sessions, todayKey)
               const blockClass = cn(
                 'relative block w-full overflow-hidden rounded-lg border',
                 colors.block,
@@ -1133,6 +1145,16 @@ function PlanTimeline({ title, plans, subjects, sessions, isToday, busyTimes }: 
                           겹침
                         </span>
                       )}
+                      {result && (
+                        <span
+                          className={cn(
+                            'rounded px-1.5 py-0.5 text-xs font-semibold',
+                            planResultStyles[result],
+                          )}
+                        >
+                          {PLAN_RESULT_LABELS[result]}
+                        </span>
+                      )}
                       {timeLabel}
                       {plan.done && ' · 끝냄'}
                     </span>
@@ -1154,7 +1176,17 @@ function PlanTimeline({ title, plans, subjects, sessions, isToday, busyTimes }: 
                       {canStart ? (
                         <Link
                           to={`/timer?plan=${plan.id}`}
-                          aria-label={`${plan.startTime} ${plan.content} 타이머 시작`}
+                          // aria-label 은 블록 안의 글자를 덮어쓰므로, 진행(12 / 50분) · 겹침 · 결과도 같이 적어 줍니다.
+                          aria-label={[
+                            plan.startTime,
+                            plan.content,
+                            timeLabel,
+                            block.isOverlapping ? '다른 계획과 겹침' : '',
+                            result ? PLAN_RESULT_LABELS[result] : '',
+                            '타이머 시작',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
                           className={blockClass}
                           style={{ height: block.heightPx }}
                         >
@@ -1572,6 +1604,7 @@ export function PlannerPage() {
     subjects,
     sessions: allSessions,
     isToday,
+    todayKey,
   }
 
   return (
