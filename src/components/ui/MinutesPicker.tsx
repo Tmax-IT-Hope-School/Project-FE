@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/Input'
 import { cn } from '@/lib/cn'
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 
 interface MinutesPickerProps {
   /** 버튼 위에 보여줄 이름 (예: '목표 시간') */
@@ -66,6 +66,12 @@ export function MinutesPicker({
     if (!isValidText(customText)) setCustomText(String(value))
   }
 
+  // 틀린 글자(범위 밖 · 빈 칸)를 둔 채 Enter 를 누르면 폼이 그대로 저장되는데, 이때 쓰이는 값은 화면에 적힌 숫자가 아니라 마지막으로 고른 값입니다.
+  // 화면 숫자와 저장되는 값이 달라지지 않게, 틀린 글자가 있을 때는 Enter 로 저장되지 않게 막고 안내 문구를 그대로 둡니다.
+  function handleKeyDownCustom(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter' && !isValidText(customText)) event.preventDefault()
+  }
+
   const buttonClass = (isSelected: boolean) =>
     cn(
       // flex-1 + min-w-0: 버튼이 몇 개든 한 줄에서 같은 너비로 나눠 가집니다. (375px 에서도 한 줄)
@@ -114,6 +120,7 @@ export function MinutesPicker({
           value={customText}
           onChange={(event) => handleChangeCustom(event.target.value)}
           onBlur={handleBlurCustom}
+          onKeyDown={handleKeyDownCustom}
           error={isValidText(customText) ? undefined : `${min} ~ ${max} 사이의 숫자로 적어 주세요.`}
         />
       )}

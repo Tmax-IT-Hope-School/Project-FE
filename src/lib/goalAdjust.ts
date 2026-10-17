@@ -8,6 +8,7 @@
  * "목표" 는 오늘 계획들의 목표 시간(분) 합계입니다. (StudyPlan.targetMinutes)
  */
 import type { CareAction } from '@/lib/careDecision'
+import { MAX_TARGET_MINUTES } from '@/lib/countdown'
 import { toDayKey } from '@/lib/date'
 import type { StudyPlan } from '@/types'
 
@@ -91,13 +92,19 @@ export function isDeclineSnoozed(declinedDate: string | null, today: Date = new 
   return passedDays < DECLINE_SNOOZE_DAYS
 }
 
+/** 계획 하나의 목표 시간을 1 ~ 최대(600분) 사이로 맞춥니다. 입력 칸이 받는 범위와 같습니다. */
+function clampPlanMinutes(minutes: number): number {
+  return Math.min(MAX_TARGET_MINUTES, Math.max(1, minutes))
+}
+
 /**
  * 수락했을 때 계획들의 목표 시간을 새 합계에 맞춰 같은 비율로 바꿉니다.
  *
  *   예) 30분·60분(합계 90) 을 135분으로 → 45분·90분
  *
  * - 각 계획은 반올림하므로 합계가 1~2분 어긋날 수 있습니다.
- * - 계획이 하나라도 0분이 되면 안 되므로 최소 1분으로 둡니다.
+ * - 계획이 하나라도 0분이 되면 안 되므로 최소 1분으로 둡니다. 한 계획이 최대(600분)를 넘지 않게도 막습니다.
+ *   예) 600분짜리 계획 하나를 660분으로 올리자는 비율이면 600분에서 멈춥니다.
  * - 원래 합계가 0 이하면 비율을 구할 수 없어서 그대로 돌려줍니다.
  * - 노는 계획(kind 가 'play')은 공부 목표가 아니라서 합계에 넣지 않고, 시간도 바꾸지 않습니다. (#238)
  */
@@ -111,6 +118,6 @@ export function scalePlanMinutes(plans: StudyPlan[], newTotalMinutes: number): S
   return plans.map((plan) =>
     plan.kind === 'play'
       ? plan
-      : { ...plan, targetMinutes: Math.max(1, Math.round(plan.targetMinutes * ratio)) },
+      : { ...plan, targetMinutes: clampPlanMinutes(Math.round(plan.targetMinutes * ratio)) },
   )
 }
