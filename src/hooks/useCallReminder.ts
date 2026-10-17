@@ -1,10 +1,12 @@
 import {
   CALL_TIME_STORAGE_KEY,
   LAST_RING_STORAGE_KEY,
+  isBusyForCall,
   shouldRingNow,
   showCallNotification,
 } from '@/lib/callReminder'
 import { loadExamDates, loadSavedWritings } from '@/lib/diarySafety'
+import { loadFocusMode } from '@/lib/focusMode'
 import { getMessageSettings } from '@/lib/messageSettings'
 import { toQuietHours } from '@/lib/notifications'
 import { getSafetyBrakeResult } from '@/lib/safetyBrake'
@@ -19,6 +21,7 @@ const CHECK_INTERVAL_MS = 10_000
  * 앱이 열려 있는 동안, 정해 둔 "전화 받을 시간" 이 되면 브라우저 알림을 띄우고 전화 수신 화면(/call)으로 보냅니다.
  *
  * - 이미 전화 화면(/call, /call/active)에 있으면 건드리지 않습니다. (통화 중에 또 울리면 안 됩니다)
+ * - 집중 모드 중이거나 글을 쓰는 화면이면 건너뜁니다. (lib/callReminder.ts 의 isBusyForCall)
  * - 하루에 한 번만 울립니다. (언제 울렸는지 저장해 둡니다)
  * - 앱이 닫혀 있을 때는 동작하지 않습니다. (웹 푸시는 서버와 서비스 워커가 필요합니다)
  *
@@ -38,6 +41,8 @@ export function useCallReminder() {
     function check() {
       // 이미 전화 화면이면 다시 띄우지 않습니다.
       if (pathnameRef.current.startsWith('/call')) return
+      // 집중 모드 중이거나 글을 쓰는 화면이면 이번 전화는 건너뜁니다. (화면이 넘어가면 집중이 깨지거나 쓰던 글이 사라집니다)
+      if (isBusyForCall(pathnameRef.current, loadFocusMode() !== null)) return
 
       const savedTime = loadData<unknown>(CALL_TIME_STORAGE_KEY, null)
       const lastRingAt = loadData<unknown>(LAST_RING_STORAGE_KEY, null)
