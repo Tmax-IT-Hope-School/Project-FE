@@ -5,6 +5,7 @@ import { GoalAdjustModal } from '@/components/ui/GoalAdjustModal'
 import { Input } from '@/components/ui/Input'
 import { MinutesPicker } from '@/components/ui/MinutesPicker'
 import { PlayBadge } from '@/components/ui/PlayBadge'
+import { VoicePlanCard } from '@/components/ui/VoicePlanCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useCalendarConnect, type CalendarConnection } from '@/hooks/useCalendarConnect'
@@ -22,6 +23,7 @@ import { scalePlanMinutes } from '@/lib/goalAdjust'
 import { getTodayCareDecision } from '@/lib/careInputs'
 import { getRecentAverageMinutes } from '@/lib/goalAdjustInput'
 import { loadCheckInsByDate } from '@/lib/insightEvidence'
+import { useIsServerData } from '@/hooks/useIsServerData'
 import { useSubjectManager } from '@/hooks/useSubjects'
 import { SUBJECT_COLORS, SUBJECT_COLOR_LABELS } from '@/lib/subjects'
 import { SUBJECT_NAME_MAX_LENGTH } from '@/lib/subjectsApi'
@@ -1498,6 +1500,8 @@ export function PlannerPage() {
 
   // 과목 목록. 진짜 로그인이면 서버에서 받아 서버에 추가·삭제하고, 테스트 로그인이면 이 기기(localStorage)에 저장합니다. (hooks/useSubjects.ts)
   const { subjects, addSubject, removeSubject, renameSubject } = useSubjectManager()
+  // 진짜 로그인일 때만 서버(AI)를 쓸 수 있습니다. 테스트 로그인의 가짜 토큰은 서버가 모릅니다.
+  const isServerData = useIsServerData()
 
   // 계획을 만들고 옮기고 지울 때 구글 캘린더도 같이 바꿉니다. (연결했을 때만, #316)
   const calendar = usePlanCalendarSync({ subjects, setGoogleEventId })
@@ -1688,6 +1692,12 @@ export function PlannerPage() {
     if (!window.confirm(message)) return
     deleteRoutine(target.id)
     setRoutineNotice(null)
+  }
+
+  // 말로 추가에서 확인을 마친 계획들을 저장합니다. 구글 캘린더를 연결했으면 일정으로도 넣습니다. (#316)
+  function handleAddVoicePlans(plans: StudyPlan[]) {
+    addPlans(plans)
+    for (const plan of plans) calendar.onPlanAdded(plan, todayKey)
   }
 
   // 다른 날의 계획을 지금 보고 있는 날짜로 가져옵니다. 완료 표시는 지우고, 원래 날의 계획은 그대로 둡니다.
@@ -1933,6 +1943,16 @@ export function PlannerPage() {
                 </p>
               )}
             </Card>
+
+            {/* 말로 추가(#248): 한 문장을 AI 가 계획 초안 여러 개로 나눠 주고, 학생이 확인해야 저장됩니다. */}
+            <VoicePlanCard
+              date={selectedDate}
+              dateLabel={isToday ? '오늘' : `${month}월 ${day}일`}
+              subjects={subjects}
+              existingPlans={getPlans(selectedDate)}
+              canUseAi={isServerData}
+              onAddPlans={handleAddVoicePlans}
+            />
 
             <PlanAddForm
               subjects={subjects}
