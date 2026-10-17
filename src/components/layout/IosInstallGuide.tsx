@@ -1,9 +1,9 @@
 import { Button } from '@/components/ui/Button'
-import { isIos, isStandalone } from '@/lib/pwa'
+import { IOS_INSTALL_GUIDE_DISMISSED_KEY, isIos, isStandalone } from '@/lib/pwa'
 import { loadData, saveData } from '@/lib/storage'
 import { useState } from 'react'
 
-const DISMISSED_KEY = 'ios-install-guide-dismissed'
+const DISMISSED_KEY = IOS_INSTALL_GUIDE_DISMISSED_KEY
 
 /** 안내를 보여줄지 정합니다. 아이폰이고, 아직 홈 화면 앱으로 연 게 아니고, 닫은 적이 없을 때만 보여줍니다. */
 function shouldShowGuide(): boolean {

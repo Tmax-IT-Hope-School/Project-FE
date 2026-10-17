@@ -3,7 +3,7 @@
  *
  * ■ 켜는 순서
  *  1. 알림 권한을 받는다 (브라우저가 "알림을 허용할까요?" 를 물어봄)
- *  2. 서버에서 공개 키를 받는다                     GET  /push/public-key
+ *  2. 공개 키를 정한다. 환경변수 VITE_VAPID_PUBLIC_KEY 가 있으면 그 값, 없으면 서버에서 받는다   GET  /push/public-key
  *  3. 브라우저에 구독을 만든다 (서비스 워커의 pushManager.subscribe)
  *  4. 구독 정보를 서버에 보낸다                     POST /push/subscriptions
  *  끄면 브라우저의 구독을 지우고 서버에도 알립니다.    DELETE /push/subscriptions
@@ -75,6 +75,10 @@ function toKeyBytes(base64Url: string): Uint8Array<ArrayBuffer> {
 }
 
 async function fetchPublicKey(): Promise<string> {
+  // 환경변수(VITE_VAPID_PUBLIC_KEY)에 공개 키를 넣어 두었으면 그것을 씁니다. 공개 키라 누구에게 보여도 되는 값입니다.
+  // 비어 있으면 서버에 물어봅니다. (서버의 VAPID 키와 같은 값이어야 서버가 보낸 푸시를 받을 수 있습니다)
+  const envKey = import.meta.env.VITE_VAPID_PUBLIC_KEY?.trim()
+  if (envKey) return envKey
   try {
     const result = await api<unknown>('/push/public-key', {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

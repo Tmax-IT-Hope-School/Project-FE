@@ -43,6 +43,7 @@ import {
   type MessageSettings,
 } from '@/lib/messageSettings'
 import { deleteMyData, type DeleteKind } from '@/lib/myData'
+import { showIosInstallGuideAgain } from '@/lib/pwa'
 import {
   getNotificationPermission,
   isNotificationSupported,
@@ -824,6 +825,7 @@ const webPushMessages: Record<WebPushStatus, string> = {
  * 위의 "알림 켜기" 는 앱이 열려 있을 때 뜨는 알림이고, 이것은 앱을 닫아 둬도 서버가 보내는 알림입니다.
  */
 function WebPushSection() {
+  const navigate = useNavigate()
   // 이 기기의 지금 상태. 처음에는 알아보는 중(null)입니다.
   const [status, setStatus] = useState<WebPushStatus | null>(null)
 
@@ -853,6 +855,19 @@ function WebPushSection() {
       <p className="text-sm break-keep text-slate-500">
         {status === null ? '이 기기에서 쓸 수 있는지 알아보는 중이에요…' : webPushMessages[status]}
       </p>
+      {/* 아이폰인데 홈 화면 앱이 아니면, 홈의 설치 안내(#105)로 이어 줍니다. 닫아 둔 안내도 다시 보이게 합니다. */}
+      {status === 'needs-install' && (
+        <Button
+          variant="secondary"
+          className="h-11 w-full sm:w-auto"
+          onClick={() => {
+            showIosInstallGuideAgain()
+            navigate('/')
+          }}
+        >
+          홈 화면에 추가하는 방법 보기
+        </Button>
+      )}
       {status === 'off' && (
         <Button
           className="h-11 w-full sm:w-auto"

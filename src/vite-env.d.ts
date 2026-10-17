@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_CLIENT_ID?: string
   /** 통화 임시 키를 받을 Vercel 함수 주소 (예: /api/voice-key). 비워 두면 BE 에서 받습니다. (lib/realtimeCall.ts) */
   readonly VITE_VOICE_KEY_URL?: string
+  /** 웹 푸시 공개 키(VAPID). 비우면 서버(GET /push/public-key)에서 받습니다. (lib/webPush.ts) */
+  readonly VITE_VAPID_PUBLIC_KEY?: string
 }
 
 interface ImportMeta {

@@ -14,7 +14,7 @@
  * ⚠️ 이 파일을 고치면 아래 CACHE_NAME 의 숫자를 올려 주세요. 그래야 예전 저장본이 지워집니다.
  */
 
-const CACHE_NAME = 'starflow-offline-v4'
+const CACHE_NAME = 'starflow-offline-v5'
 const OFFLINE_URL = '/offline.html'
 
 // 오프라인 화면과 그 화면에 나오는 아이콘을 미리 저장합니다.
@@ -78,7 +78,7 @@ function toSafePath(value) {
 }
 
 // 4) 푸시를 받았을 때: 서버가 보낸 내용으로 알림을 띄웁니다. (BE 의 WebPushSender.Payload)
-//    서버가 보내는 모양: { "title": "오늘의 작전", "body": "…", "url": "/timer" }
+//    서버가 보내는 모양: { "title": "오늘의 작전", "body": "…", "url": "/timer" }  (url 이 없으면 메시지함 /notifications)
 //    브라우저와 약속(userVisibleOnly)했기 때문에, 받은 푸시는 내용이 이상해도 반드시 알림을 띄웁니다.
 self.addEventListener('push', (event) => {
   let content = {}
@@ -89,7 +89,8 @@ self.addEventListener('push', (event) => {
   }
   const title = typeof content.title === 'string' ? content.title : 'STARFLOW'
   const body = typeof content.body === 'string' ? content.body : '새 소식이 있어요.'
-  const url = toSafePath(content.url)
+  // 서버가 주소를 안 보냈으면 메시지함(알림 화면)을 엽니다. 보냈으면 그 주소(우리 앱 안의 주소일 때만)를 엽니다.
+  const url = typeof content.url === 'string' ? toSafePath(content.url) : '/notifications'
 
   event.waitUntil(
     self.registration.showNotification(title, {

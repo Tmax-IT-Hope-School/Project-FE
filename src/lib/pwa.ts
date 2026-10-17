@@ -1,3 +1,5 @@
+import { removeData } from '@/lib/storage'
+
 /**
  * 웹 앱을 휴대폰 홈 화면에 설치(PWA)하는 데 필요한 함수입니다. (#105)
  * React 없이 돌아가는 함수라서 lib/ 에 둡니다.
@@ -38,4 +40,12 @@ export function isStandalone(): boolean {
   // 아이폰 Safari 는 위 방법 대신 navigator.standalone 으로 알려줍니다. (TypeScript 기본 타입에 없어서 직접 적습니다)
   const iosNavigator = navigator as Navigator & { standalone?: boolean }
   return iosNavigator.standalone === true
+}
+
+/** 홈의 아이폰 설치 안내(components/layout/IosInstallGuide.tsx)를 닫았는지 적어 두는 저장소 이름 */
+export const IOS_INSTALL_GUIDE_DISMISSED_KEY = 'ios-install-guide-dismissed'
+
+/** 닫아 둔 아이폰 설치 안내를 다시 보이게 합니다. (설정에서 "설치 방법 보기" 를 누를 때) */
+export function showIosInstallGuideAgain(): void {
+  removeData(IOS_INSTALL_GUIDE_DISMISSED_KEY)
 }
