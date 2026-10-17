@@ -28,12 +28,15 @@ export function SchoolField({ school, onChange }: SchoolFieldProps) {
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null)
   // 검색어가 너무 짧을 때 보여줄 안내. 없으면 null
   const [queryError, setQueryError] = useState<string | null>(null)
+  // "검색" 을 누른 횟수. 같은 글자로 다시 눌러도 값이 바뀌어서, 실패 안내를 지우고 새로 받아오게 합니다.
+  const [searchCount, setSearchCount] = useState(0)
 
   function handleSearch() {
     const error = getSchoolQueryError(query)
     setQueryError(error)
     // 검색어가 규칙에 맞을 때만 확정합니다. 안 맞으면 결과 자리를 비웁니다.
     setSubmittedQuery(error === null ? query : null)
+    setSearchCount((count) => count + 1)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -100,13 +103,13 @@ export function SchoolField({ school, onChange }: SchoolFieldProps) {
 
       {/*
         받아오는 동안에는 스켈레톤, 실패하면 안내와 "다시 시도" 를 AsyncBoundary 가 대신 보여줍니다.
-        resetKeys: 실패한 뒤 다른 검색어로 찾으면 실패 안내를 지우고 새로 받아옵니다.
+        resetKeys: 실패한 뒤 다른 검색어로 찾거나, 같은 검색어로 "검색" 을 다시 눌러도 실패 안내를 지우고 새로 받아옵니다.
       */}
       {submittedQuery !== null && (
         <AsyncBoundary
           pendingFallback={<SchoolResultsSkeleton />}
           errorMessage="학교를 검색하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
-          resetKeys={[submittedQuery]}
+          resetKeys={[submittedQuery, searchCount]}
         >
           <SchoolResults query={submittedQuery} onSelect={onChange} />
         </AsyncBoundary>
