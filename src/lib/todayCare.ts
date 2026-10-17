@@ -23,12 +23,15 @@ const MAX_THEME_LEVEL = 3
 
 /**
  * 오늘의 관리 강도 (0~3). 가장 최근 판정(lib/careStage.ts)의 단계이고, 판정이 없으면 기본 단계(1)입니다.
+ * 안전 브레이크(#95, 위기 표현 · 오랜 기분 저하)가 켜져 있으면 판정과 상관없이 회복(0)입니다.
+ * (통화 수신 · 통화 중 · 결과 화면의 색과 인사말이 서버로 보내는 말투와 같아지게 합니다)
  */
 export function getTodayCareLevel(): CareLevel {
   // 설정에서 정한 최대 한도를 넘지 않게 맞춥니다. 한도가 0(회복)이면 오늘도 0 입니다.
   // ("정한 한도는 절대 넘지 않아요" 라고 설정 화면에서 약속했기 때문입니다)
   // 통화·홈 화면이 열릴 때 부르는 함수라서, 저장된 값이 깨져 있어도 에러를 내지 않고 기본 단계를 돌려줍니다.
   try {
+    if (isSafetyBrakeOnNow()) return 0
     const saved = loadLatestCareStage(getTodayKey())
     const stage = Math.min(saved?.stage ?? DEFAULT_TODAY_CARE_LEVEL, MAX_THEME_LEVEL)
     const maxLevel = getCareLimits().maxCareLevel
@@ -85,7 +88,8 @@ export interface CallTone {
  *
  * ■ 규칙
  *  1. 관리 강도는 getTodayCareLevel() 의 값입니다. 이 값은 설정의 "관리 강도 최대 한도" 를 넘지 않습니다.
- *  2. 안전 브레이크(#95)가 켜져 있으면 단계와 상관없이 회복(0)으로 보냅니다. 힘든 날에는 목소리도 누그러져야 합니다.
+ *  2. 안전 브레이크(#95)가 켜져 있으면 단계와 상관없이 회복(0)입니다. 힘든 날에는 목소리도 누그러져야 합니다.
+ *     (getTodayCareLevel() 이 이미 0 을 돌려줍니다)
  *  3. 독설 허용 수위는 설정에서 정한 값 그대로입니다. "여기까지는 괜찮다" 는 한도이지, 그만큼 세게 하라는 뜻이 아닙니다.
  *
  * ■ 예시
@@ -95,7 +99,7 @@ export interface CallTone {
  */
 export function getCallTone(): CallTone {
   return {
-    careLevel: isSafetyBrakeOnNow() ? 0 : getTodayCareLevel(),
+    careLevel: getTodayCareLevel(),
     maxHarshness: getTodayMaxHarshness(),
   }
 }

@@ -15,6 +15,7 @@ import { careThemes } from '@/lib/careTheme'
 import { cn } from '@/lib/cn'
 import { formatMinutes } from '@/lib/dailyRecords'
 import { getTodayKey } from '@/lib/date'
+import { isSafetyBrakeOnNow } from '@/lib/focusMode'
 import { SUPPORT_PATH, helpLines } from '@/lib/helpLines'
 import { getTodayCareLevel } from '@/lib/todayCare'
 import { useMutation } from '@tanstack/react-query'
@@ -160,14 +161,32 @@ interface ConclusionViewProps {
   isSavedToCheckIn: boolean
 }
 
-/** 오늘의 결론. 위기 표현이 감지됐으면 도움 안내만 보여 줍니다. */
+/**
+ * 오늘의 결론. 위기 표현이 감지됐으면 도움 안내만 보여 줍니다.
+ * 안전 브레이크(#95)가 켜진 쉬는 날에는 생각 습관 교정 · 오늘의 약속을 빼고 요약만 부드럽게 보여 줍니다.
+ */
 function ConclusionView({ conclusion, isSavedToCheckIn }: ConclusionViewProps) {
+  // 처음 그릴 때 한 번만 확인합니다. (통화 화면들과 같은 기준, lib/focusMode.ts)
+  const [isRestDay] = useState(isSafetyBrakeOnNow)
   if (conclusion.showHelp) return <HelpCard />
 
   return (
     <div className="flex flex-col gap-4">
-      <SummaryCard conclusion={conclusion} isSavedToCheckIn={isSavedToCheckIn} />
-      <HabitCard habit={conclusion.bias} />
+      <SummaryCard
+        conclusion={conclusion}
+        isSavedToCheckIn={isSavedToCheckIn}
+        isRestDay={isRestDay}
+      />
+      {isRestDay ? (
+        <Card>
+          <p className="text-sm break-keep text-slate-700">
+            오늘은 쉬어 가는 날이라 생각 습관이나 약속 얘기는 하지 않을게요. 푹 쉬고, 이야기하고
+            싶을 때 언제든 다시 걸어 줘요.
+          </p>
+        </Card>
+      ) : (
+        <HabitCard habit={conclusion.bias} />
+      )}
     </div>
   )
 }
@@ -177,7 +196,12 @@ function ConclusionView({ conclusion, isSavedToCheckIn }: ConclusionViewProps) {
  * 어제 요약은 이 브라우저의 공부 기록으로 계산하고, 미달 원인·오늘 예상은 오늘 체크인에서 꺼냅니다.
  * 약속은 통화에서 정한 것을 먼저 보여 주고, 없으면 체크인에 적어 둔 약속을 보여 줍니다.
  */
-function SummaryCard({ conclusion, isSavedToCheckIn }: ConclusionViewProps) {
+interface SummaryCardProps extends ConclusionViewProps {
+  /** 안전 브레이크가 켜진 쉬는 날이면 true — 오늘의 약속을 보여 주지 않습니다 */
+  isRestDay: boolean
+}
+
+function SummaryCard({ conclusion, isSavedToCheckIn, isRestDay }: SummaryCardProps) {
   // 처음 그릴 때 한 번만 저장소에서 읽습니다. (체크인 저장이 끝난 뒤에 이 화면이 그려집니다)
   const [card] = useState(() => loadTodayCallCard(getTodayKey()))
   // 오늘의 관리 강도에 맞는 이름과 색입니다. (통화 수신 화면과 같은 값, lib/todayCare.ts)
@@ -214,7 +238,7 @@ function SummaryCard({ conclusion, isSavedToCheckIn }: ConclusionViewProps) {
         {card.expectedMinutes !== null && card.expectedMinutes > 0 && (
           <SummaryRow label="오늘 예상" value={formatMinutes(card.expectedMinutes)} />
         )}
-        {promise !== null && <SummaryRow label="오늘의 약속" value={promise} />}
+        {promise !== null && !isRestDay && <SummaryRow label="오늘의 약속" value={promise} />}
         {conclusion.summary !== null && (
           <SummaryRow label="AI 한마디" value={`"${conclusion.summary}"`} />
         )}
