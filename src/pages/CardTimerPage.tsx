@@ -64,6 +64,7 @@ import { buildLateEntrySession, checkLateEntry, makeLateEntryReport } from '@/li
 import { loadData } from '@/lib/storage'
 import { requestFirstStep, requestQuickCard, type QuickCardDraft } from '@/lib/aiCardApi'
 import { useIsServerData } from '@/hooks/useIsServerData'
+import { labelSessionTexts } from '@/lib/textLabels'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { MAX_SHRINK, getPrepStep, isCountdownOn } from '@/lib/cardAlerts'
 import { loadLocalCheckIn } from '@/lib/quickCheckIn'
@@ -133,6 +134,19 @@ export function CardTimerPage() {
   const { active, now, allSessions } = session
   // 방금 끝낸 기록. 있으면 종료 팝업을 띄웁니다. (#398)
   const [endedRecord, setEndedRecord] = useState<StudySession | null>(null)
+  // 세션이 끝나면 '기타' 일시정지 글 · 딴생각 메모에 AI 이름표를 붙여 둡니다. (#419 표 8 · 9번)
+  // 화면에는 안 보이는 참고 칸이라, 종료 팝업과 따로 뒤에서 조용히 합니다.
+  const { mutate: labelTexts } = useMutation({
+    mutationFn: labelSessionTexts,
+    onSuccess: (changes, record) => {
+      if (changes) session.updateSession(record.id, changes)
+    },
+  })
+
+  function handleFinished(record: StudySession) {
+    setEndedRecord(record)
+    labelTexts(record)
+  }
   const [cardParam, setCardParam] = useQueryParam('card', '', { replace: true })
   // 카드를 시작하기 전에 거치는 화면 — 4단계면 다짐 듣기(#408) → 카운트다운이 켜져 있으면 5초 카운트다운(#399) → 세션
   const [startFlow, setStartFlow] = useState<{
@@ -377,7 +391,7 @@ export function CardTimerPage() {
         card={activeCard}
         now={now}
         experimentRule={experimentRuleOf(active.cardId)}
-        onFinished={setEndedRecord}
+        onFinished={handleFinished}
       />
     )
   }

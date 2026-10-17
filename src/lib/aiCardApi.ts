@@ -210,3 +210,44 @@ export async function requestQuickCard(text: string): Promise<QuickCardDraft | n
     return null
   }
 }
+
+/** 글 종류마다 받을 수 있는 이름표 (BE `POST /ai/classify-text`) */
+const TEXT_LABELS = {
+  reason: ['inner', 'outer'],
+  memo: ['contact', 'otherTask', 'worry', 'life'],
+} as const
+
+/**
+ * 학생이 쓴 짧은 글 하나에 이름표를 받습니다. (#419 표 8 · 9번) 못 받으면 null.
+ * - reason: 일시정지 '기타' 글 → 'inner'(내 행동) / 'outer'(바깥 일)
+ * - memo: 딴생각 메모 → 'contact' / 'otherTask' / 'worry' / 'life'
+ * 참고 칸이라 판정 · 집계에 쓰지 않습니다.
+ *
+ *   await requestTextLabel('reason', '동생이 방에 들어와서 떠들었다') -> 'outer'
+ *   await requestTextLabel('memo', '엄마한테 학원비 문자 보내기')     -> 'contact'
+ */
+export async function requestTextLabel(
+  kind: 'reason' | 'memo',
+  text: string,
+): Promise<string | null> {
+  if (!isServerDataMode()) return null
+  const trimmed = text.trim().slice(0, 100)
+  if (trimmed === '') return null
+  try {
+    const result = await api<unknown>('/ai/classify-text', {
+      method: 'POST',
+      body: JSON.stringify({ kind, text: trimmed }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+    const record = (typeof result === 'object' && result !== null ? result : {}) as Record<
+      string,
+      unknown
+    >
+    if (handleShowHelp(record)) return null
+    const allowed: readonly string[] = TEXT_LABELS[kind]
+    return typeof record.label === 'string' && allowed.includes(record.label) ? record.label : null
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) throw error
+    return null
+  }
+}

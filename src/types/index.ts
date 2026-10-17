@@ -131,6 +131,8 @@ export interface SessionPause {
   tag: PauseTag
   /** '기타' 를 골랐을 때 쓴 글 (빈칸 허용) */
   note?: string
+  /** '기타' 글을 AI 가 나눈 이름표 (#419 표 8번). 참고 칸이라 판정 · 집계에 쓰지 않습니다 */
+  aiSource?: 'inner' | 'outer'
 }
 
 /** 체크리스트를 다 못 했을 때 고르는 이유. 이름표는 lib/sessionTags.ts */
@@ -168,7 +170,12 @@ export interface SessionMemo {
   at: number
   /** 한 줄 */
   text: string
+  /** AI 가 나눈 이름표 (#419 표 9번, 다음 버전 리포트 재료). 참고 칸이라 판정 · 집계에 쓰지 않습니다 */
+  aiCategory?: MemoCategory
 }
+
+/** 딴생각 메모 이름표: #연락 · #다른과제 · #걱정 · #생활 */
+export type MemoCategory = 'contact' | 'otherTask' | 'worry' | 'life'
 
 /** 요일마다 반복되는 계획의 틀. 그 요일의 계획에 자동으로 들어옵니다 */
 export interface Routine {
