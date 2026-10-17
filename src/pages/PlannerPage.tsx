@@ -1588,12 +1588,25 @@ export function PlannerPage() {
     }
 
     const relatedCount = allPlans.filter((plan) => plan.subjectId === target.id).length
+    // 그 과목으로 만든 루틴. 남겨 두면 요일마다 "삭제된 과목" 계획이 계속 생겨서, 과목과 같이 지웁니다.
+    const relatedRoutines = routines.filter((routine) => routine.subjectId === target.id)
+
+    const notes: string[] = []
+    if (relatedCount > 0) {
+      notes.push(`등록된 계획이 ${relatedCount}개 있어요. 계획은 남고 "삭제된 과목" 으로 표시돼요.`)
+    }
+    if (relatedRoutines.length > 0) {
+      notes.push(
+        `매주 반복하는 루틴도 ${relatedRoutines.length}개 있어요. 루틴은 같이 지워져요. (이미 들어간 계획은 그대로예요)`,
+      )
+    }
     const message =
-      relatedCount > 0
-        ? `"${target.name}" 과목으로 등록된 계획이 ${relatedCount}개 있어요. 계획은 남고 "삭제된 과목" 으로 표시돼요. 그래도 삭제할까요?`
+      notes.length > 0
+        ? `"${target.name}" 과목에 ${notes.join(' ')} 그래도 삭제할까요?`
         : `"${target.name}" 과목을 삭제할까요?`
 
     if (!window.confirm(message)) return
+    for (const routine of relatedRoutines) deleteRoutine(routine.id)
     setSubjects((prev) => prev.filter((subject) => subject.id !== target.id))
   }
 
