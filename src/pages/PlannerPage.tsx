@@ -59,13 +59,13 @@ const subjectColorStyles: Record<SubjectColor, string> = {
   slate: 'bg-slate-100 text-slate-600',
 }
 
-/* 계획 결과 → 표시 색. 초록 = 했음, 노랑·주황 = 아쉬움, 빨강 = 안 함. 색만으로 구분하지 않도록 글자도 같이 보여줍니다. (#313) */
+/* 계획 결과 → 표시 색. 초록 = 했음, 노랑·주황 = 아쉬움, 회색 = 못 했어요. (빨강으로 혼내지 않습니다) 색만으로 구분하지 않도록 글자도 같이 보여줍니다. (#313) */
 const planResultStyles: Record<PlanResult, string> = {
   onTime: 'bg-green-50 text-green-700',
   done: 'bg-green-50 text-green-700',
   late: 'bg-amber-50 text-amber-700',
   partial: 'bg-orange-50 text-orange-700',
-  missed: 'bg-red-50 text-red-700',
+  missed: 'bg-slate-100 text-slate-600',
 }
 
 /* 색 고르기 버튼에 칠할 색. 보여주는 순서는 lib/subjects.ts 의 SUBJECT_COLORS 를 따릅니다. */
