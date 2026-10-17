@@ -6,6 +6,7 @@ import {
   loggedOutState,
   type AuthState,
 } from '@/lib/authStorage'
+import { disconnectCalendar } from '@/lib/googleCalendar'
 import { queryClient } from '@/lib/queryClient'
 import { saveData } from '@/lib/storage'
 import { unsubscribeThisDevice } from '@/lib/webPush'
@@ -39,6 +40,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = useCallback(() => {
     // 서버에서 받아 보관해 둔 것(내 정보 등)을 지웁니다. 안 지우면 같은 기기에서 다른 사람이 로그인했을 때 앞사람의 정보가 잠깐 보입니다.
     queryClient.clear()
+    // 구글 캘린더 연결도 끊습니다. (이 기기의 출입증을 지우고 구글 쪽 허락도 취소)
+    // 안 끊으면 같은 기기에서 다음 사람이 로그인했을 때 앞사람의 구글 일정이 보이고, 새 계획이 앞사람의 캘린더에 들어갑니다.
+    disconnectCalendar()
     setAuth(loggedOutState)
   }, [])
 
