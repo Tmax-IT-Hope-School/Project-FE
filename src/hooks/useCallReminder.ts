@@ -11,6 +11,7 @@ import { getMessageSettings } from '@/lib/messageSettings'
 import { toQuietHours } from '@/lib/notifications'
 import { getSafetyBrakeResult } from '@/lib/safetyBrake'
 import { loadData, saveData } from '@/lib/storage'
+import { useAuth } from '@/hooks/useAuth'
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -30,6 +31,7 @@ const CHECK_INTERVAL_MS = 10_000
 export function useCallReminder() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { isLoggedIn } = useAuth()
 
   // 10초마다 도는 확인 함수는 처음 만들어질 때의 값만 기억하므로, 지금 주소는 ref 에 따로 적어 둡니다.
   const pathnameRef = useRef(pathname)
@@ -38,6 +40,9 @@ export function useCallReminder() {
   }, [pathname])
 
   useEffect(() => {
+    // 로그인 전(로그아웃한 뒤 켜 둔 로그인 화면 등)에는 전화를 걸지 않습니다. 로그인하면 갑자기 전화 화면이 뜨기 때문입니다.
+    if (!isLoggedIn) return
+
     function check() {
       // 이미 전화 화면이면 다시 띄우지 않습니다.
       if (pathnameRef.current.startsWith('/call')) return
@@ -71,5 +76,5 @@ export function useCallReminder() {
     check()
     const intervalId = setInterval(check, CHECK_INTERVAL_MS)
     return () => clearInterval(intervalId)
-  }, [navigate])
+  }, [navigate, isLoggedIn])
 }

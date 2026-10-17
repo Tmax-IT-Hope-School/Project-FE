@@ -11,6 +11,7 @@ import {
 } from '@/lib/notifications'
 import { getSafetyBrakeResult } from '@/lib/safetyBrake'
 import { loadData, loadList, saveData } from '@/lib/storage'
+import { useAuth } from '@/hooks/useAuth'
 import { useEffect } from 'react'
 
 // 한 번 알림을 보낸 메시지의 id 를 저장해 두는 키. 새로고침하거나 다른 페이지로 가도
@@ -115,11 +116,16 @@ function notifyUnreadMessages(): void {
  *   예전에는 앱을 열 때만 확인해서, 쓰는 도중에 쌓인 알림은 다음에 앱을 열어야 떴습니다.
  */
 export function useAiMessageNotifications(): void {
+  const { isLoggedIn } = useAuth()
+
   useEffect(() => {
+    // 로그인 전에는 알리지 않습니다. 같이 쓰는 기기에서 로그아웃한 뒤, 이전 사람의 메시지 내용이 브라우저 알림으로 뜨면 안 되기 때문입니다.
+    if (!isLoggedIn) return
+
     notifyUnreadMessages()
 
     // 알림 목록이 바뀌었다는 신호(lib/aiMessages.ts 의 saveAiMessages 가 보냅니다)를 듣습니다.
     window.addEventListener(AI_MESSAGES_CHANGE_EVENT, notifyUnreadMessages)
     return () => window.removeEventListener(AI_MESSAGES_CHANGE_EVENT, notifyUnreadMessages)
-  }, [])
+  }, [isLoggedIn])
 }
