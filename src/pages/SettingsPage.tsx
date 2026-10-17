@@ -209,6 +209,9 @@ export function SettingsPage() {
         : '일부를 지우지 못했어요. 다시 시도해 주세요.',
     })
     setPendingKind(null)
+    // 저장소에서는 지워졌지만 화면이 들고 있는 값은 그대로라서, 새로 읽어 옵니다.
+    // (안 읽으면 새로고침하기 전까지 지운 다짐 녹음이 보이고 재생됩니다)
+    setVoicePledge(loadVoicePledge())
   }
 
   // 온보딩에서 미뤄 둔 질문이 몇 개 남았는지 셉니다. 설문을 한 번도 안 했으면 답이 null 입니다. (#239)
