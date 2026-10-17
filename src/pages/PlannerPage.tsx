@@ -23,6 +23,7 @@ import { getTodayCareDecision } from '@/lib/careInputs'
 import { getRecentAverageMinutes } from '@/lib/goalAdjustInput'
 import { loadCheckInsByDate } from '@/lib/insightEvidence'
 import { SUBJECT_COLORS, SUBJECT_COLOR_LABELS, loadSubjects } from '@/lib/subjects'
+import { SUBJECT_NAME_MAX_LENGTH } from '@/lib/subjectsApi'
 import { getPlanProgress, getPlayProgress } from '@/lib/planProgress'
 import { PLAN_RESULT_LABELS, getPlanResult, type PlanResult } from '@/lib/planResult'
 import { copyPlans, getFrequentPlans, type FrequentPlan } from '@/lib/planShortcuts'
@@ -315,7 +316,7 @@ function PlanAddForm({ subjects, frequentPlans, defaultWeekday, onAdd }: PlanAdd
                   {subject && (
                     <span
                       className={cn(
-                        'shrink-0 rounded px-2 py-0.5 text-xs font-semibold',
+                        'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
                         subjectColorStyles[subject.color],
                       )}
                     >
@@ -368,8 +369,9 @@ function PlanAddForm({ subjects, frequentPlans, defaultWeekday, onAdd }: PlanAdd
                   variant={subject.id === selectedSubjectId ? 'primary' : 'secondary'}
                   aria-pressed={subject.id === selectedSubjectId}
                   onClick={() => setSubjectId(subject.id)}
+                  className="max-w-full min-w-0"
                 >
-                  {subject.name}
+                  <span className="min-w-0 truncate">{subject.name}</span>
                 </Button>
               ))}
             </div>
@@ -556,7 +558,7 @@ function RoutineList({ routines, subjects, notice, onDelete }: RoutineListProps)
                     {subject && (
                       <span
                         className={cn(
-                          'shrink-0 rounded px-2 py-0.5 text-xs font-semibold',
+                          'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
                           subjectColorStyles[subject.color],
                         )}
                       >
@@ -634,11 +636,11 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
               <span
                 key={subject.id}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold',
+                  'inline-flex max-w-full items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold',
                   subjectColorStyles[subject.color],
                 )}
               >
-                {subject.name}
+                <span className="min-w-0 truncate">{subject.name}</span>
                 <button
                   type="button"
                   onClick={() => onDelete(subject)}
@@ -658,6 +660,7 @@ function SubjectManager({ subjects, onAdd, onDelete }: SubjectManagerProps) {
           <Input
             name="subjectName"
             label="새 과목 이름"
+            maxLength={SUBJECT_NAME_MAX_LENGTH}
             placeholder="예: 한국사"
             value={name}
             onChange={(event) => {
@@ -802,7 +805,7 @@ function PlanRow({
         {subject && (
           <span
             className={cn(
-              'shrink-0 rounded px-2 py-0.5 text-xs font-semibold',
+              'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
               subjectColorStyles[subject.color],
             )}
           >
@@ -830,7 +833,7 @@ function PlanRow({
         {result && (
           <span
             className={cn(
-              'shrink-0 rounded px-2 py-0.5 text-xs font-semibold',
+              'max-w-40 min-w-0 shrink-0 truncate rounded px-2 py-0.5 text-xs font-semibold',
               planResultStyles[result],
             )}
           >
