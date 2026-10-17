@@ -99,7 +99,8 @@ export function CheckPage() {
   )
 
   const existingCheckIn = getCheckIn(todayKey)
-  const isCheckedInToday = existingCheckIn !== undefined
+  // 1탭 체크인(기분 하나)만 한 날은 자세한 체크인을 아직 안 한 것이라, 완료 표시와 "다시 저장" 을 붙이지 않습니다.
+  const isCheckedInToday = existingCheckIn !== undefined && existingCheckIn.isQuick !== true
 
   // 이미 체크인한 날이면 그 값을 보여 줘서 고칠 수 있게 하고, 처음이면 가운데 기본값으로 시작합니다.
   const [condition, setCondition] = useState(existingCheckIn?.condition ?? DEFAULT_CONDITION)

@@ -60,10 +60,10 @@ export function getPlannedMinutes(plans: StudyPlan[], fallbackMinutes: number): 
  * 컨디션은 따로 묻지 않아서 기분과 같은 값으로 채웁니다. (관리 강도·안전 브레이크 계산이 그대로 돌아가게)
  *
  *   makeQuickCheckIn('2026-10-10', 4, 90)
- *   -> { date: '2026-10-10', condition: 4, mood: 4, expectedMinutes: 90 }
+ *   -> { date: '2026-10-10', condition: 4, mood: 4, expectedMinutes: 90, isQuick: true }
  */
 export function makeQuickCheckIn(dateKey: string, mood: number, expectedMinutes: number): CheckIn {
-  return { date: dateKey, condition: mood, mood, expectedMinutes }
+  return { date: dateKey, condition: mood, mood, expectedMinutes, isQuick: true }
 }
 
 /**
