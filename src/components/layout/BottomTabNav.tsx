@@ -1,7 +1,7 @@
 import { isNavItemSelected, navItems } from '@/components/layout/navItems'
 import { cn } from '@/lib/cn'
 import { scrollToTop } from '@/lib/scroll'
-import { CHAT_PATH, HOME_PATH, RECORDS_PATH } from '@/lib/tabMenu'
+import { CHAT_PATH, HOME_PATH, RECORDS_PATH, STATS_PATH } from '@/lib/tabMenu'
 import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
@@ -23,7 +23,7 @@ function TabIcon({ children }: { children: ReactNode }) {
   )
 }
 
-/** 탭 주소 → 아이콘. 홈(집) · 채팅(말풍선) · 타이머(시계) · 기록(막대그래프) */
+/** 탭 주소 → 아이콘. 홈(집) · 채팅(말풍선) · 타이머(시계) · 기록(막대그래프) · 통계(꺾은선) */
 const TAB_ICONS: Record<string, ReactNode> = {
   [HOME_PATH]: (
     <TabIcon>
@@ -46,10 +46,16 @@ const TAB_ICONS: Record<string, ReactNode> = {
       <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     </TabIcon>
   ),
+  // 통계: 꺾은선 그래프
+  [STATS_PATH]: (
+    <TabIcon>
+      <path d="M3 3v18h18M7 15l4-4 3 3 6-6" />
+    </TabIcon>
+  ),
 }
 
 /**
- * 모바일 화면 아래에 고정되는 탭 메뉴입니다. (홈 · 채팅 · 타이머 · 기록)
+ * 모바일 화면 아래에 고정되는 탭 메뉴입니다. (홈 · 채팅 · 타이머 · 기록 · 통계)
  * 아이콘 + 작은 글자이고, 지금 있는 탭은 brand 색 + 굵은 글자로 보여 줍니다. (2026-10-18 모바일 UI, 2026-10-22 색)
  * 비치는 효과(blur) 없이 흰 바탕 + 위 1px 선으로 구분합니다.
  * PC(sm 이상)에서는 숨기고, 대신 헤더 메뉴를 보여줍니다.
@@ -63,8 +69,8 @@ export function BottomTabNav() {
       // pb: 아이폰 아래 홈 막대만큼 띄웁니다. (안전 영역이 없는 화면에서는 0)
       className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden"
     >
-      {/* 탭 4개를 같은 너비로 나눕니다. */}
-      <ul className="grid grid-cols-4">
+      {/* 탭 5개를 같은 너비로 나눕니다. */}
+      <ul className="grid grid-cols-5">
         {navItems.map((item) => (
           <li key={item.to}>
             <NavLink

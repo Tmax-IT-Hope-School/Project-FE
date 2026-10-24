@@ -1,4 +1,11 @@
-import { CHAT_PATH, HOME_PATH, isHomePath, isRecordsPath, RECORDS_PATH } from '@/lib/tabMenu'
+import {
+  CHAT_PATH,
+  HOME_PATH,
+  isHomePath,
+  isRecordsPath,
+  RECORDS_PATH,
+  STATS_PATH,
+} from '@/lib/tabMenu'
 
 /**
  * 앱의 주요 메뉴 목록입니다. (2026-10-18 4탭: 홈 · 채팅 · 타이머 · 기록. 같은 날 홈을 첫 탭으로 올림)
@@ -13,6 +20,8 @@ export const navItems = [
   { to: CHAT_PATH, label: '채팅' },
   { to: '/timer', label: '타이머' },
   { to: RECORDS_PATH, label: '기록' },
+  // 2026-10-24 통계 탭 추가 (pages/StatsPage.tsx)
+  { to: STATS_PATH, label: '통계' },
 ]
 
 /**

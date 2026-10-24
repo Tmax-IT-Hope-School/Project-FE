@@ -23,6 +23,9 @@ export const CHAT_PATH = '/chat'
 /** 기록 탭의 주소 */
 export const RECORDS_PATH = '/records'
 
+/** 통계 탭의 주소. 과목 · 단원별 점수와 공부 시간을 그래프로 봅니다. (2026-10-24) */
+export const STATS_PATH = '/stats'
+
 /** 기록 탭 아래에 묶인 화면. 위에 "‹ 기록" 돌아가기 링크가 나옵니다. (시험은 2026-10-18 에 지워서 지금은 없습니다) */
 const recordsChildPaths: string[] = []
 
