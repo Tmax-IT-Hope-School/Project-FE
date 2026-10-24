@@ -29,6 +29,9 @@ const AccountPage = lazy(() =>
 const RecordsPage = lazy(() =>
   import('@/pages/RecordsPage').then((m) => ({ default: m.RecordsPage })),
 )
+const QuizReportPage = lazy(() =>
+  import('@/pages/QuizReportPage').then((m) => ({ default: m.QuizReportPage })),
+)
 const CallActivePage = lazy(() =>
   import('@/pages/CallActivePage').then((m) => ({ default: m.CallActivePage })),
 )
@@ -147,6 +150,8 @@ export const router = createBrowserRouter([
       { path: 'counsel/chat', element: <OldCoachRedirect /> },
       // 기록 탭(예전 '분석'). 하위 탭 [리포트] 는 2026-10-23 에 빼서 [기록] 화면 하나입니다.
       { path: 'records', element: <RecordsPage /> },
+      // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 기록 화면 위의 입구에서 들어옵니다.
+      { path: 'records/quiz', element: <QuizReportPage /> },
       // 사진 채점 (2026-10-24). PC 기록 탭의 QR 을 폰으로 찍으면 열립니다. 사진은 저장하지 않고 채점 뒤 버립니다.
       { path: 'records/answer-check', element: <AnswerCheckPage /> },
       // v2 체크인(/check)은 #417 에서 지웠습니다. 옛 링크 · 즐겨찾기로 오면 홈으로 보냅니다. (그날 컨디션은 코치가 채팅에서 묻습니다)

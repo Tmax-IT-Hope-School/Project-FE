@@ -23,8 +23,11 @@ export const CHAT_PATH = '/chat'
 /** 기록 탭의 주소 */
 export const RECORDS_PATH = '/records'
 
-/** 기록 탭 아래에 묶인 화면. 위에 "‹ 기록" 돌아가기 링크가 나옵니다. (시험은 2026-10-18 에 지워서 지금은 없습니다) */
-const recordsChildPaths: string[] = []
+/** 문제 풀이 주간 리포트 주소 (2026-10-24, pages/QuizReportPage.tsx) */
+export const QUIZ_REPORT_PATH = '/records/quiz'
+
+/** 기록 탭 아래에 묶인 화면. 위에 "‹ 기록" 돌아가기 링크가 나옵니다. (시험은 2026-10-18 에 지웠습니다) */
+const recordsChildPaths: string[] = [QUIZ_REPORT_PATH]
 
 /** 홈 탭 아래에 묶인 화면. 카드 탭이 아래 탭에서 빠져서 카드 · 목표 화면은 홈 탭에서 들어갑니다. */
 const homeCardPaths = ['/cards', '/goals']
@@ -68,9 +71,10 @@ export function isHomePath(pathname: string): boolean {
 
 /**
  * 화면 위에 보여 줄 돌아가기 링크. 탭 아래에 묶인 화면에서만 있고, 나머지는 null 입니다.
- * (묶인 화면이던 시험 · 일기를 지워서 지금은 늘 null 입니다. 카드 · 목표 화면은 자기 화면에 돌아가기 링크가 있습니다)
+ * (카드 · 목표 화면은 자기 화면에 돌아가기 링크가 있습니다)
  *
- *   getBackToTabLink('/timer')   -> null
+ *   getBackToTabLink('/records/quiz') -> { to: '/records', label: '기록' }
+ *   getBackToTabLink('/timer')        -> null
  */
 export function getBackToTabLink(pathname: string): { to: string; label: string } | null {
   if (recordsChildPaths.some((path) => isUnder(pathname, path))) {

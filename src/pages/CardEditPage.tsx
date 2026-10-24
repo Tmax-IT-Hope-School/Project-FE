@@ -6,6 +6,7 @@ import { ChipButton } from '@/components/ui/ChipButton'
 import { StickyActionBar } from '@/components/ui/StickyActionBar'
 import { Input } from '@/components/ui/Input'
 import { MinutesPicker } from '@/components/ui/MinutesPicker'
+import { Modal } from '@/components/ui/Modal'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useCards } from '@/hooks/useCards'
@@ -802,8 +803,10 @@ export function CardEditPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
   const todayKey = getTodayKey()
-  const { cards, addCard, updateCard } = useCards()
+  const { cards, addCard, updateCard, deleteCard } = useCards()
   const { sessions } = useStudySessions()
+  // "이 카드를 지울까요?" 확인창이 열려 있는지
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   // 주소의 ?date= 는 누구나 고칠 수 있어서, 진짜 날짜가 아니면 오늘로 봅니다.
   const [dateParam] = useQueryParam('date', todayKey)
   const startDate = isDateKey(dateParam) ? dateParam : todayKey
@@ -841,6 +844,18 @@ export function CardEditPage() {
       addCard(card)
     }
     navigate(`/cards?date=${card.date}`)
+  }
+
+  /**
+   * 확인창에서 [지우기] 를 누르면 카드를 지우고 카드 화면으로 돌아갑니다.
+   * useCards 의 deleteCard 가 저장하면서 서버에도 "지웠다" 를 보냅니다. (hooks/useCardSync.ts)
+   * 이 카드로 잰 공부 기록은 지우지 않고 남깁니다.
+   */
+  function handleDelete() {
+    if (!editingCard) return
+    deleteCard(editingCard.id)
+    setIsDeleteOpen(false)
+    navigate(`/cards?date=${editingCard.date}`)
   }
 
   if (cardId && !editingCard) {
@@ -893,6 +908,49 @@ export function CardEditPage() {
         fixedBlocks={NO_FIXED_BLOCKS}
         onSave={handleSave}
       />
+
+      {/* 고칠 때만 보입니다. 되돌릴 수 없는 일이라 [저장] 과 멀리, 빨간 글자 + 선으로 둡니다. 누르면 확인창이 한 번 더 뜹니다. (설정의 "모든 기록 지우기" 와 같은 모양) */}
+      {editingCard && (
+        <Button
+          variant="outline"
+          size="md"
+          className="w-full border-red-200 text-red-700 hover:bg-red-50 sm:w-auto sm:self-start"
+          onClick={() => setIsDeleteOpen(true)}
+        >
+          카드 지우기
+        </Button>
+      )}
+
+      <Modal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} title="카드를 지울까요?">
+        {editingCard && (
+          <>
+            <p className="font-medium break-keep text-slate-900">
+              &apos;{editingCard.title}&apos; 카드를 지워요.
+            </p>
+            <p className="mt-2 text-sm break-keep text-slate-600">
+              {/* 반복 카드는 카드 하나가 여러 날에 보이는 것이라, 지우면 모든 날에서 사라집니다. */}
+              {(editingCard.repeatDays?.length ?? 0) > 0 &&
+                '반복 카드라서 모든 요일에서 사라져요. '}
+              이 카드로 잰 공부 기록은 남아요.
+            </p>
+            <p className="mt-2 text-sm font-medium text-red-600">지운 뒤에는 되돌릴 수 없어요.</p>
+
+            <div className="mt-5 flex gap-3">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="flex-1"
+                onClick={() => setIsDeleteOpen(false)}
+              >
+                취소
+              </Button>
+              <Button variant="danger" size="lg" className="flex-1" onClick={handleDelete}>
+                지우기
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

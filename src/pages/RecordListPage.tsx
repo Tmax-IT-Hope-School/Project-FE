@@ -1,5 +1,6 @@
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AiAnalysisCard, AnalysisInsight } from '@/components/ui/AiAnalysisCard'
 import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
 import { Button } from '@/components/ui/Button'
@@ -54,6 +55,7 @@ import { EMOTION_OPTIONS, isEmotionTag } from '@/lib/quickCheckIn'
 import { loadRoutines } from '@/lib/routines'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
+import { QUIZ_REPORT_PATH } from '@/lib/tabMenu'
 import { dayReviewLines } from '@/lib/talkLines'
 import { formatHoursMinutes, getWeeklyStudy } from '@/lib/weeklyStudy'
 import type { CareLevel, CheckIn, EmotionTag, StudyPlan, StudySession, Subject } from '@/types'
@@ -173,6 +175,24 @@ export function RecordListPage() {
 
       {/* 오늘 푼 문제 사진 채점: [사진 올리기] → (PC) QR 창 → 폰으로 찍어 올리면 아래에 결과 카드 (2026-10-24) */}
       <AnswerCheckCard />
+
+      {/* 문제 풀이 주간 리포트(과목별 점수 그래프 · 주간 정리표)로 가는 입구 (2026-10-24, pages/QuizReportPage.tsx) */}
+      <Link
+        to={QUIZ_REPORT_PATH}
+        className="flex items-center justify-between gap-3 rounded-2xl bg-white p-5 hover:bg-slate-50 active:scale-[0.99] sm:p-6"
+      >
+        <span className="min-w-0">
+          <span className="block text-[17px] font-bold tracking-tight text-slate-900">
+            문제 풀이 리포트
+          </span>
+          <span className="mt-0.5 block text-sm text-slate-500">
+            과목별 점수 변화 · 취약 단원 · 주간 정리표
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-xl text-slate-400">
+          ›
+        </span>
+      </Link>
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → 내 숲 → AI 분석 (가장 자주 보는 것을 위로) */}
       {/* 최근 4주 실행률 · 최근 7일 막대그래프 · 7일 집중도. 모바일은 한 줄에 하나, PC 는 두 칸으로 카드를 놓습니다. */}
