@@ -84,6 +84,7 @@ const OnboardingResumePage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 )
+const StatsPage = lazy(() => import('@/pages/StatsPage').then((m) => ({ default: m.StatsPage })))
 const SignupPage = lazy(() => import('@/pages/SignupPage').then((m) => ({ default: m.SignupPage })))
 const ConsentPage = lazy(() =>
   import('@/pages/ConsentPage').then((m) => ({ default: m.ConsentPage })),
@@ -144,6 +145,8 @@ export const router = createBrowserRouter([
       { path: 'counsel/chat', element: <OldCoachRedirect /> },
       // 기록 탭(예전 '분석'). 하위 탭 [리포트] 는 2026-10-23 에 빼서 [기록] 화면 하나입니다.
       { path: 'records', element: <RecordsPage /> },
+      // 통계 탭 (2026-10-24). 지금은 시연용 예시 데이터로 그립니다. (lib/statsDemo.ts)
+      { path: 'stats', element: <StatsPage /> },
       // v2 체크인(/check)은 #417 에서 지웠습니다. 옛 링크 · 즐겨찾기로 오면 홈으로 보냅니다. (그날 컨디션은 코치가 채팅에서 묻습니다)
       { path: 'check', element: <Navigate to="/" replace /> },
       // 일기 · 성찰일기는 최종 기획서 MVP 밖이라 #417 에서 지웠습니다. 옛 링크는 홈으로 보냅니다.
