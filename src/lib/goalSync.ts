@@ -28,6 +28,20 @@ function savePendingGoals(ids: string[]): void {
   saveData(GOAL_SYNC_KEY, [...new Set(ids)])
 }
 
+// 서버가 받지 않은(400 · 409) 목표를 적어 두는 이름입니다. (실제 키는 'study-goal-sync-rejected')
+// 409 는 "진행 중인 목표는 3개까지예요" 입니다. 적어 두지 않으면 앱을 열 때마다 다시 보내서 매번 409 가 납니다.
+export const GOAL_SYNC_REJECTED_KEY = 'goal-sync-rejected'
+
+/** 서버가 받지 않은 목표들 (이 기기의 목표 id). 사람이 그 목표를 고치기 전에는 다시 보내지 않습니다. */
+export function loadRejectedGoals(): string[] {
+  const saved = loadData<unknown>(GOAL_SYNC_REJECTED_KEY, [])
+  return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []
+}
+
+function saveRejectedGoals(ids: string[]): void {
+  saveData(GOAL_SYNC_REJECTED_KEY, [...new Set(ids)])
+}
+
 /** 서버 번호를 뺀 목표 내용이 같은지 (서버 번호만 붙은 것은 "바뀐 것" 이 아닙니다) */
 function isSameContent(a: Goal, b: Goal): boolean {
   return (
@@ -59,14 +73,18 @@ export function diffGoalChanges(prev: Goal[], next: Goal[]): string[] {
  *      - 아니면 서버의 내용으로 맞춥니다. (다른 기기에서 고친 것. 진척 · 마지막 점검은 이 기기의 것)
  *      - 서버에 없으면 그대로 두고 서버 번호를 떼서 다시 올립니다. (서버에는 지우는 주소가 없어서, 지워진 게 아니라 서버가 모르는 것입니다)
  *   2. 서버 번호가 없는 목표는 아직 서버에 없는 목표라 그대로 두고 올릴 목록에 더합니다.
+ *      단, 진행 중이 아닌 목표(끝냄 · 그만둠)와 서버가 이미 거절한 목표(rejected)는 더하지 않습니다.
+ *      서버는 새 목표를 늘 "진행 중" 으로 만들어서, 끝낸 목표를 올리면 서버에서 칸(3개)을 차지하기 때문입니다.
  *   3. 이 기기에 없는 서버 목표는 다른 기기에서 만든 것이라 더합니다.
  *
  *   이 기기 [A(4), B], 서버 [4(제목 바뀜), 5]  -> goals [A(서버 제목), B, goal-s5], toUpload ['B']
+ *   이 기기 [B(거절됨), C(그만둠)], 서버 []    -> toUpload []
  */
 export function mergeServerGoals(
   local: Goal[],
   server: ServerGoal[],
   pending: string[],
+  rejected: string[] = [],
 ): { goals: Goal[]; toUpload: string[] } {
   const goals: Goal[] = []
   const toUpload: string[] = []
@@ -74,7 +92,7 @@ export function mergeServerGoals(
     const serverGoal = goal.serverId ? server.find((item) => item.id === goal.serverId) : undefined
     if (!goal.serverId || !serverGoal) {
       goals.push({ ...goal, serverId: undefined })
-      toUpload.push(goal.id)
+      if (goal.status === 'active' && !rejected.includes(goal.id)) toUpload.push(goal.id)
     } else if (pending.includes(goal.id)) {
       goals.push(goal)
     } else {
@@ -90,14 +108,17 @@ export function mergeServerGoals(
 
 /** 이 기기에서 목표를 바꿨을 때 보낼 목록에 적습니다. (hooks/useGoalSync.ts 가 목표 저장 이벤트를 받을 때 부릅니다) */
 export function markGoalChanges(prev: Goal[], next: Goal[]): void {
-  savePendingGoals([...loadPendingGoals(), ...diffGoalChanges(prev, next)])
+  const changed = diffGoalChanges(prev, next)
+  savePendingGoals([...loadPendingGoals(), ...changed])
+  // 사람이 고친 목표는 한 번 더 보내 봅니다. (그사이 다른 목표를 끝내서 자리가 났을 수 있음)
+  saveRejectedGoals(loadRejectedGoals().filter((id) => !changed.includes(id)))
 }
 
 /** 서버에서 받은 목표를 이 기기에 반영하고, 아직 서버에 없는 목표를 보낼 목록에 더합니다. */
 export function applyServerGoals(server: ServerGoal[]): void {
   const local = loadGoals()
   const pending = loadPendingGoals()
-  const { goals, toUpload } = mergeServerGoals(local, server, pending)
+  const { goals, toUpload } = mergeServerGoals(local, server, pending, loadRejectedGoals())
   // JSON 으로 비교할 때 서버 번호를 뗀 칸(undefined)은 빠져서, 바뀐 것이 없으면 저장하지 않습니다.
   if (JSON.stringify(goals) !== JSON.stringify(local)) saveGoals(goals, 'server')
   savePendingGoals([...pending, ...toUpload])
@@ -117,6 +138,7 @@ function linkServerId(sent: Goal, serverId: string): void {
   if (!current || isSameContent(current, sent)) {
     savePendingGoals(loadPendingGoals().filter((id) => id !== sent.id))
   }
+  saveRejectedGoals(loadRejectedGoals().filter((id) => id !== sent.id))
   // 처음 서버 번호가 붙었으면, 이 목표에 연결한 카드를 다시 보내 서버 카드에도 목표 번호를 붙입니다.
   if (isNewLink) markCardsOfGoal(sent.id)
 }
@@ -156,6 +178,10 @@ export async function pushPendingGoals(): Promise<void> {
             if (!(error instanceof ApiError && error.status === 404)) throw error
             saved = await createServerGoal(goal)
           }
+        } else if (goal.status !== 'active') {
+          // 서버에 없는 끝낸 · 그만둔 목표는 올리지 않습니다. (만들면 서버에서 "진행 중" 이 되어 칸을 차지함)
+          savePendingGoals(loadPendingGoals().filter((id) => id !== goalId))
+          continue
         } else {
           saved = await createServerGoal(goal)
         }
@@ -163,6 +189,8 @@ export async function pushPendingGoals(): Promise<void> {
       } catch (error) {
         if (!isRejected(error)) return
         savePendingGoals(loadPendingGoals().filter((id) => id !== goalId))
+        // 다음에 앱을 열 때 다시 보내지 않게 적어 둡니다. (사람이 고치면 지워져서 다시 시도)
+        saveRejectedGoals([...loadRejectedGoals(), goalId])
       }
     }
   } finally {

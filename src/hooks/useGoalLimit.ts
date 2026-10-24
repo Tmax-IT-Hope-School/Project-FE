@@ -25,7 +25,17 @@ export function useGoalLimit(goals: Goal[]) {
     : 0
   const activeCount = Math.max(localActive, serverActive)
 
+  // 이 기기에만 있는 진행 중 목표 (서버가 "3개까지" 로 거절했거나 아직 못 올린 것). 서버 목록을 받은 뒤에만 셉니다.
+  const localOnlyCount =
+    isServerData && serverGoals
+      ? getActiveGoals(goals).filter(
+          (goal) => !goal.serverId || !serverGoals.some((item) => item.id === goal.serverId),
+        ).length
+      : 0
+
   return {
+    /** 이 기기에만 있고 서버에는 없는 진행 중 목표 수 */
+    localOnlyCount,
     /** 하나 더 만들 수 있으면 true */
     canAdd: activeCount < MAX_ACTIVE_GOALS,
     /** 진행 중 목표 수 (이 기기 · 서버 중 큰 쪽) */

@@ -48,7 +48,7 @@ interface GoalListProps {
 /** 진행 중인 목표 목록과 [목표 만들기] 버튼 (최종 기획서 3장 카드 탭 「목표 목록(최대 3개)」, #391) */
 function GoalList({ goals }: GoalListProps) {
   // 서버에만 있는 진행 중 목표까지 세어서 판단합니다. (이 기기에서 2개여도 서버가 3개면 만들 수 없음)
-  const { canAdd, activeCount, serverOnlyCount } = useGoalLimit(goals)
+  const { canAdd, activeCount, serverOnlyCount, localOnlyCount } = useGoalLimit(goals)
   const isFull = !canAdd
   // 서버나 시연 데이터로 진행 중 목표가 3개보다 많이 들어올 수 있습니다.
   // 그때 '목표 9/3' 은 헷갈려서, 개수만 '목표 9개' 로 보여 주고 아래에 권하는 수를 한 줄로 적습니다. (#672)
@@ -82,6 +82,13 @@ function GoalList({ goals }: GoalListProps) {
             </li>
           ))}
         </ul>
+      )}
+      {localOnlyCount > 0 && (
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs break-keep text-amber-800">
+          이 기기에만 있는 목표가 {localOnlyCount}개 있어요. 서버에는 진행 중인 목표가{' '}
+          {MAX_ACTIVE_GOALS}
+          개까지라 올리지 못했어요. 필요 없는 목표는 눌러서 그만두기로 정리해 주세요.
+        </p>
       )}
       {isFull ? (
         <p className="mt-3 text-xs break-keep text-slate-500">
