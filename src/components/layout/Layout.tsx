@@ -23,7 +23,7 @@ import { useSessionSync } from '@/hooks/useSessionSync'
 import { useTimerLock } from '@/hooks/useTimerLock'
 import { cn } from '@/lib/cn'
 import { needsSubjectsPath } from '@/lib/dataMode'
-import { CHAT_PATH, getBackToTabLink } from '@/lib/tabMenu'
+import { CHAT_PATH, getBackToTabLink, MANUAL_PATH } from '@/lib/tabMenu'
 import { TIMER_PATH } from '@/lib/timerLock'
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -97,7 +97,8 @@ export function Layout() {
       )}
     >
       {/* 대화방은 모바일에서 자기 머리(‹ · 방 이름 · 통화 · 종)만 보여 주고 이 헤더는 숨깁니다. 메신저 앱처럼 화면 전체를 대화에. (2026-10-22) */}
-      <Header hideNav={isTimerLocked} hideOnMobile={isCoach} />
+      {/* 나 사용설명서도 모바일에서는 자기 머리(‹ 나 사용설명서)를 맨 위에 그려서 이 헤더를 숨깁니다. (시안 ⑤, pages/ManualPage.tsx) */}
+      <Header hideNav={isTimerLocked} hideOnMobile={isCoach || pathname === MANUAL_PATH} />
 
       <main
         className={cn(

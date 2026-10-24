@@ -40,15 +40,19 @@ function formatGap(totalMinutes: number): string {
 }
 
 interface GoalListProps {
-  /** 진행 중인 목표 (최대 3개) */
+  /** 진행 중인 목표 (보통 최대 3개. 서버 · 시연 데이터 때문에 더 많을 수도 있음) */
   goals: Goal[]
 }
 
 /** 진행 중인 목표 목록과 [목표 만들기] 버튼 (최종 기획서 3장 카드 탭 「목표 목록(최대 3개)」, #391) */
 function GoalList({ goals }: GoalListProps) {
   const isFull = goals.length >= MAX_ACTIVE_GOALS
+  // 서버나 시연 데이터로 진행 중 목표가 3개보다 많이 들어올 수 있습니다.
+  // 그때 '목표 9/3' 은 헷갈려서, 개수만 '목표 9개' 로 보여 주고 아래에 권하는 수를 한 줄로 적습니다. (#672)
+  const isOverMax = goals.length > MAX_ACTIVE_GOALS
+  const title = isOverMax ? `목표 ${goals.length}개` : `목표 ${goals.length}/${MAX_ACTIVE_GOALS}`
   return (
-    <Card title={`목표 ${goals.length}/${MAX_ACTIVE_GOALS}`}>
+    <Card title={title}>
       {goals.length === 0 ? (
         <p className="text-[15px] break-keep text-slate-500">
           아직 목표가 없어요. 목표를 세우면 카드를 목표별로 묶어서 볼 수 있어요.
@@ -78,7 +82,9 @@ function GoalList({ goals }: GoalListProps) {
       )}
       {isFull ? (
         <p className="mt-3 text-xs break-keep text-slate-500">
-          목표는 동시에 {MAX_ACTIVE_GOALS}개까지예요.
+          {isOverMax
+            ? `목표는 동시에 ${MAX_ACTIVE_GOALS}개까지 권해요.`
+            : `목표는 동시에 ${MAX_ACTIVE_GOALS}개까지예요.`}
         </p>
       ) : (
         <Link

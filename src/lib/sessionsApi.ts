@@ -28,8 +28,10 @@ import { isDateKey, toDayKey } from '@/lib/date'
 import { missReasonOptions } from '@/lib/missReasons'
 import { shouldRetryQuery } from '@/lib/queryRetry'
 import { queryOptions, type QueryClient } from '@tanstack/react-query'
+import { PAUSE_TAGS } from '@/lib/sessionTags'
 import type {
   MissReason,
+  PauseTag,
   PlanKind,
   PlayTag,
   SessionEndReport,
@@ -161,12 +163,61 @@ export function toStudySession(value: unknown): StudySession {
   if (item.planId !== null) session.planId = item.planId
   if (item.targetMinutes !== null) session.targetMinutes = item.targetMinutes
   if (item.stopReason !== null) session.stopReason = item.stopReason as MissReason
+  // 카드 기준 칸(#516). 기록 탭(History)이 서버 기록으로 카드 판정 · 발견을 할 때 씁니다. 모양이 틀리면 칸을 비웁니다.
+  // ⚠️ cardId 는 "서버의 카드 번호" 입니다. 이 기기 카드 id 로 바꾸는 것은 쓰는 쪽(lib/historySessions.ts)이 합니다.
+  if (typeof item.cardId === 'string') session.cardId = item.cardId
+  if (item.mode === 'offline' || item.mode === 'selfReport') session.mode = item.mode
+  if (item.endedEarly === true) session.endedEarly = true
+  const pauses = toPauses(item.pauses)
+  if (pauses.length > 0) session.pauses = pauses
+  const checked = toChecked(item.endReport)
+  if (checked) session.endReport = { checked }
   return session
 }
 
+/** 서버의 일시정지 목록 → SessionPause[]. 모르는 이유 태그는 '기타' 로 봅니다. 없거나 틀리면 빈 목록 */
+function toPauses(value: unknown): SessionPause[] {
+  if (!Array.isArray(value)) return []
+  const pauses: SessionPause[] = []
+  for (const raw of value) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const pause = raw as Record<string, unknown>
+    if (!isNumber(pause.startedAt) || !isNumber(pause.endedAt)) continue
+    const tag = PAUSE_TAGS.some((item) => item.key === pause.tag)
+      ? (pause.tag as PauseTag)
+      : 'other'
+    pauses.push({ startedAt: pause.startedAt, endedAt: pause.endedAt, tag })
+  }
+  return pauses
+}
+
+/** 서버의 종료 팝업 답에서 체크한 항목(항목 id → 시각)만 꺼냅니다. 없으면 undefined */
+function toChecked(value: unknown): Record<string, number> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const checked = (value as Record<string, unknown>).checked
+  if (typeof checked !== 'object' || checked === null) return undefined
+  const result: Record<string, number> = {}
+  for (const [id, at] of Object.entries(checked)) {
+    if (isNumber(at)) result[id] = at
+  }
+  return result
+}
+
+/**
+ * 기간 조회의 목록을 바꿉니다. 목록이 아니면 502 에러입니다.
+ * 모양이 틀린 기록 하나 때문에 목록 전체를 못 쓰게 되지 않도록, 틀린 기록은 건너뜁니다.
+ */
 function toStudySessions(value: unknown): StudySession[] {
   if (!Array.isArray(value)) throw badResponse()
-  return value.map(toStudySession)
+  const sessions: StudySession[] = []
+  for (const item of value) {
+    try {
+      sessions.push(toStudySession(item))
+    } catch {
+      // 건너뜁니다. (예: 서버에 새로 생긴 그만둔 이유 값을 FE 가 아직 모름)
+    }
+  }
+  return sessions
 }
 
 /**

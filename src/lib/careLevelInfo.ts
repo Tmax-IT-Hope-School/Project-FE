@@ -37,7 +37,7 @@ export const careLevelInfos: CareLevelInfo[] = [
   {
     level: 1,
     name: '당근',
-    description: '구체적 칭찬, 나무 성장',
+    description: '구체적 칭찬, 예상 성장 곡선',
     defaultReason: '요즘 잘 해내고 있어서, 잘한 점을 구체적으로 알려주는 중이야.',
     badgeClass: 'bg-amber-700 text-white',
     panelClass: 'border-amber-200 bg-amber-50',
@@ -53,7 +53,7 @@ export const careLevelInfos: CareLevelInfo[] = [
   {
     level: 3,
     name: '심리적 채찍',
-    description: '팩폭 말투, 독촉 메시지, 나무 시듦',
+    description: '팩폭 말투, 독촉 메시지',
     defaultReason: '계획이 자꾸 미뤄져서, 조금 더 따끔하게 말하는 중이야.',
     badgeClass: 'bg-rose-700 text-white',
     panelClass: 'border-rose-200 bg-rose-50',

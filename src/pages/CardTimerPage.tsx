@@ -1421,7 +1421,7 @@ interface EndPopupProps {
  * 종료 팝업 (최종 기획서 「4.4 타이머」 종료, #398) — 이유는 여러 개 고를 수 있고, 나머지는 1탭입니다.
  * 1. 체크리스트 최종 확인 (다 못 했으면 미달 사유, 여러 개 가능) · 즉석 카드면 "무엇을 했나요?" 한 줄
  * 2. 같이 한 것: 음악 / 영상 틀어둠 / 없음
- * 3. 산출물 증빙: 링크나 2~3줄 요약 (선택 — 남기면 나무가 더 자람)
+ * 3. 산출물 증빙: 링크나 2~3줄 요약 (선택 — 관리 4단계에서는 꼭 필요)
  * 4. 잘 된 이유: 체크리스트를 다 했을 때 N번에 1번만
  * 5. 다음 행동
  */
@@ -1694,10 +1694,10 @@ function EndPopup({
 
       {step === 'proof' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm break-keep text-slate-700">
             {proofRequired
               ? '관리 4단계라 증빙이 꼭 필요해요. 링크나 2~3줄 요약을 남겨야 한 것으로 쳐요.'
-              : '한 것을 남겨 볼까요? 링크나 2~3줄 요약이면 돼요. 남기면 나무가 더 자라요.'}
+              : '한 것을 남겨 볼까요? 링크나 2~3줄 요약이면 돼요. 적어 두면 이 공부 기록에 같이 남아요.'}
           </p>
           <textarea
             value={proofText}
@@ -1983,7 +1983,7 @@ interface RecoveryCardProps {
 /**
  * 회복 모드 카드 (최종 기획서 「4.5 상담」 회복 모드, #407)
  * What if 기법 — 최악의 상황을 떠올린 뒤, 그래도 지금 할 수 있는 가장 작은 것 하나를 15분만 해 봅니다.
- * 회복 모드에서는 나무가 시들지 않고 채찍도 쓰지 않습니다. 다음 날 다시 평가합니다.
+ * 회복 모드에서는 채찍(재촉하는 말·알림)을 쓰지 않습니다. 다음 날 다시 평가합니다.
  */
 function RecoveryCard({ reason, onStart }: RecoveryCardProps) {
   const [smallStep, setSmallStep] = useState('')
@@ -2006,7 +2006,7 @@ function RecoveryCard({ reason, onStart }: RecoveryCardProps) {
         {RECOVERY_MINUTES}분만 해 보기
       </Button>
       <p className="mt-2 text-xs text-sky-800">
-        회복 모드에서는 나무가 시들지 않아요. 내일 다시 볼게요.
+        회복 모드에서는 재촉하지 않아요. 내일 다시 볼게요.
       </p>
     </Card>
   )
