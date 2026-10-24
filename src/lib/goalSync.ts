@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api'
 import { markCardsOfGoal } from '@/lib/cardSync'
+import { isDemoId } from '@/lib/demoIds'
 import { loadGoals, saveGoals } from '@/lib/goals'
 import { createServerGoal, fromServerGoal, updateServerGoal, type ServerGoal } from '@/lib/goalsApi'
 import { loadData, saveData } from '@/lib/storage'
@@ -44,6 +45,8 @@ function isSameContent(a: Goal, b: Goal): boolean {
 export function diffGoalChanges(prev: Goal[], next: Goal[]): string[] {
   return next
     .filter((goal) => {
+      // 가상 목표는 서버로 보내지 않습니다. (lib/demoIds.ts)
+      if (isDemoId(goal.id)) return false
       const before = prev.find((item) => item.id === goal.id)
       return !before || !isSameContent(before, goal)
     })
@@ -73,6 +76,11 @@ export function mergeServerGoals(
   for (const goal of local) {
     const serverGoal = goal.serverId ? server.find((item) => item.id === goal.serverId) : undefined
     if (!goal.serverId || !serverGoal) {
+      // 가상 목표는 서버로 보내지 않고 이 기기에만 둡니다. (lib/demoIds.ts)
+      if (isDemoId(goal.id)) {
+        goals.push(goal)
+        continue
+      }
       goals.push({ ...goal, serverId: undefined })
       toUpload.push(goal.id)
     } else if (pending.includes(goal.id)) {

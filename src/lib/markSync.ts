@@ -3,6 +3,7 @@ import { loadSavedCards } from '@/lib/cards'
 import { loadCardMarks, type CardDayMarkRecord } from '@/lib/cardMarks'
 import { loadAllSessions } from '@/lib/dailyRecords'
 import { toDayKey } from '@/lib/date'
+import { isDemoId, isDemoRestDate } from '@/lib/demoIds'
 import { loadRestDays, type RestDay } from '@/lib/restDays'
 import { toEndReportBody } from '@/lib/sessionsApi'
 import { loadData, saveData } from '@/lib/storage'
@@ -128,19 +129,22 @@ export function pickMarksToSend(
     return card ? card.serverId : null
   }
 
+  // 가상 데이터(휴식일 · 가상 카드의 표시 · 가상 사후 입력)는 서버로 보내지 않습니다. (lib/demoIds.ts)
   for (const day of restDays) {
+    if (isDemoRestDate(day.date)) continue
     const key = restKeyOf(day)
     if (!isDone(key)) ready.push({ key, path: `/rest-days/${encodeURIComponent(day.date)}` })
   }
   for (const mark of marks) {
     const key = markKeyOf(mark)
-    if (isDone(key)) continue
+    if (isDone(key) || isDemoId(mark.cardId)) continue
     const serverId = serverIdOf(mark.cardId)
     if (serverId === null) skip.push(key)
     else if (serverId) ready.push(toMarkRequest(mark, serverId))
   }
   for (const session of sessions) {
     if (session.mode !== 'selfReport' || !session.cardId || isDone(session.id)) continue
+    if (isDemoId(session.id)) continue
     const serverId = serverIdOf(session.cardId)
     if (serverId === null) skip.push(session.id)
     else if (serverId) ready.push(toLateEntryRequest(session, serverId))

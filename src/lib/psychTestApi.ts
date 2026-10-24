@@ -14,6 +14,7 @@
  * ■ 테스트 로그인(서버가 모르는 가짜 토큰)일 때는 서버를 부르지 않습니다. (lib/dataMode.ts 의 isServerDataToken)
  */
 import { ApiError, api } from '@/lib/api'
+import { isDemoSetKey } from '@/lib/demoIds'
 import { loadPsychTest, type PsychTestResult } from '@/lib/psychTest'
 import { loadData, saveData } from '@/lib/storage'
 import { queryOptions } from '@tanstack/react-query'
@@ -37,6 +38,8 @@ export function signatureOf(result: Pick<PsychTestResult, 'takenAt' | 'answers'>
 
 /** 이 기기의 결과가 아직 서버에 안 갔는지. 결과가 없으면 false 입니다. */
 export function needsSendingPsychTest(): boolean {
+  // 시연용 가상 데이터로 넣은 결과는 서버로 보내지 않습니다. (lib/demoIds.ts)
+  if (isDemoSetKey('psych-test')) return false
   const result = loadPsychTest()
   return (
     result !== undefined && loadData<unknown>(PSYCH_TEST_SENT_KEY, null) !== signatureOf(result)

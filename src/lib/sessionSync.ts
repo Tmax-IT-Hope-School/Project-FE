@@ -1,6 +1,7 @@
 import { ApiError } from '@/lib/api'
 import { loadSavedCards } from '@/lib/cards'
 import { loadAllSessions } from '@/lib/dailyRecords'
+import { isDemoId } from '@/lib/demoIds'
 import { createSession, type SessionCreateInput } from '@/lib/sessionsApi'
 import { loadData, saveData } from '@/lib/storage'
 import type { Card, StudySession } from '@/types'
@@ -112,6 +113,8 @@ export function pickSessionsToSend(
   const sorted = [...sessions].sort((a, b) => a.startedAt - b.startedAt)
   for (const session of sorted) {
     if (state.sent[session.id] !== undefined || state.skipped.includes(session.id)) continue
+    // 가상 기록은 서버로 보내지 않습니다. (lib/demoIds.ts)
+    if (isDemoId(session.id)) continue
     if (session.mode === 'selfReport') continue
     if (now - session.endedAt < settleMs) continue
     const card = session.cardId ? cards.find((item) => item.id === session.cardId) : undefined

@@ -1,7 +1,9 @@
 import { loadSavedCards, saveCards } from '@/lib/cards'
-import { addDemoData, isDemoSeeded } from '@/lib/demoData'
-import { DEMO_ID_PREFIX, buildDemoPersona } from '@/lib/demoPersona'
+import { addDemoData, isDemoSeeded, removeDemoData } from '@/lib/demoData'
 import { getTodayKey } from '@/lib/date'
+import { DEMO_AUTO_SEEDED_KEY, DEMO_ID_PREFIX } from '@/lib/demoIds'
+import { buildDemoPersona } from '@/lib/demoPersona'
+import { loadData, saveData } from '@/lib/storage'
 import type { Card } from '@/types'
 
 /**
@@ -13,11 +15,13 @@ import type { Card } from '@/types'
  * ■ 어느 계정인지: 환경변수 VITE_DEMO_SEED_USER_ID 에 적습니다. 비워 두면 이 기능은 꺼집니다.
  *   - 서버의 사용자 번호(users.id)를 적으면 그 계정만. 이메일 대신 번호를 쓰는 이유: VITE_ 값은 누구나 볼 수 있는 빌드 파일에 들어가서입니다.
  *   - 'all' 이라고 적으면 로그인한 모든 계정.
- *     ⚠️ 시연 때만 켭니다. 모든 계정의 화면에 가짜 기록이 섞이고, 가짜 카드 · 기록이 각 계정의 서버 데이터로도 올라갑니다.
- *     같은 브라우저에서 다른 계정으로 바꾸면 앞 계정의 가상 카드는 새 계정의 서버에 없어서 빠지므로, 새 계정 것으로 다시 넣습니다.
- * ■ 다른 기기에서 넣은 가상 카드: 서버로 올라가 있다가 이 기기에는 'card-s번호' 같은 다른 id 로 들어옵니다.
+ *     ⚠️ 시연 때만 켭니다. 모든 계정의 화면에 가짜 기록이 보입니다. (서버 데이터에는 섞이지 않습니다)
+ * ■ 지우기: 가상 데이터는 서버로 보내지 않고 이 기기에만 둡니다. (lib/demoIds.ts)
+ *   자동으로 넣은 기기에는 표시(DEMO_AUTO_SEEDED_KEY)를 남기고, 환경변수를 끄거나 대상이 아닌 계정으로 로그인하면
+ *   다음에 앱을 열 때 그 기기의 가상 데이터를 저절로 지웁니다. 설정 '시연용 가상 데이터' 에서 손으로 넣은 것은 건드리지 않습니다.
+ * ■ 예전에 서버로 올라간 가상 카드: 가상 데이터를 서버로 보내지 않기 전에 올라간 카드가 'card-s번호' 로 들어올 수 있습니다.
  *   그대로 두고 새로 넣으면 카드가 두 벌이 되므로, 가상 카드와 제목이 같은 카드를 먼저 지우고 새로 넣습니다.
- *   (지운 것은 서버에도 지웠다고 보내서, 서버의 카드도 한 벌만 남습니다)
+ *   (지운 것은 서버에도 지웠다고 보내서, 서버에서도 빠집니다)
  */
 
 // VITE_DEMO_SEED_USER_ID 에 이 값을 적으면 모든 계정에 넣습니다.
@@ -42,7 +46,7 @@ export function isDemoSeedUser(envValue: string | undefined, userId: string | un
 /**
  * 이 기기에 가상 데이터를 넣어야 하는지 알려줍니다.
  * 넣은 표시가 없거나, 표시는 있는데 가상 카드('demo-' 로 시작)가 하나도 없으면 넣습니다.
- * (다른 기기에서 다시 넣거나 다른 계정으로 바꾸면 이 기기의 가상 카드가 빠집니다. 그때 다시 넣습니다)
+ * (설정에서 가상 카드만 지웠다면 다시 넣습니다)
  *
  *   needsDemoSeed([], false)                    -> true   (처음 로그인한 기기)
  *   needsDemoSeed([{ id: 'demo-card-1' }], true) -> false  (이미 넣음)
@@ -54,7 +58,7 @@ export function needsDemoSeed(cards: Pick<Card, 'id'>[], isSeeded: boolean): boo
 }
 
 /**
- * 다른 기기에서 넣어 서버를 거쳐 들어온 가상 카드를 뺀 카드 목록을 돌려줍니다.
+ * 예전에 서버로 올라갔다가 다시 들어온 가상 카드를 뺀 카드 목록을 돌려줍니다.
  * 이 기기의 가상 카드('demo-' 로 시작)는 addDemoData 가 알아서 빼므로 여기서는 건드리지 않습니다.
  *
  *   withoutOtherDeviceDemoCards([{ id: 'card-s7', title: '아침 영단어 20쪽' }], ['아침 영단어 20쪽']) -> []
@@ -80,5 +84,16 @@ export function seedDemoIfNeeded(): boolean {
   if (cleaned.length !== cards.length) saveCards(cleaned)
 
   addDemoData()
+  saveData(DEMO_AUTO_SEEDED_KEY, true)
+  return true
+}
+
+/**
+ * 이 기기에 자동으로 넣은 가상 데이터가 있으면 지웁니다. 지웠으면 true 를 돌려줍니다. (지운 뒤 새로고침해야 화면에서 빠집니다)
+ * 환경변수를 껐거나, 대상이 아닌 계정으로 로그인했을 때 부릅니다. 손으로 넣은 것(표시 없음)은 그대로 둡니다.
+ */
+export function clearAutoSeededDemo(): boolean {
+  if (loadData<unknown>(DEMO_AUTO_SEEDED_KEY, null) === null) return false
+  removeDemoData()
   return true
 }
