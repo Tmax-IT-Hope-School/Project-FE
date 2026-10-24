@@ -6,6 +6,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { StickyActionBar } from '@/components/ui/StickyActionBar'
 import { useCards } from '@/hooks/useCards'
+import { useGoalLimit } from '@/hooks/useGoalLimit'
 import { useGoals } from '@/hooks/useGoals'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
@@ -29,7 +30,6 @@ import {
   GOAL_TITLE_MAX_LENGTH,
   INNER_OBSTACLE_EXAMPLES,
   MAX_ACTIVE_GOALS,
-  canAddGoal,
   suggestRoutineCards,
   toRoutineCards,
 } from '@/lib/goals'
@@ -59,6 +59,7 @@ export function GoalNewPage() {
   const navigate = useNavigate()
   const todayKey = getTodayKey()
   const { goals, addGoal } = useGoals()
+  const goalLimit = useGoalLimit(goals)
   const { addCard } = useCards()
   const [draft, setDraft] = useState<GoalDraft>(loadGoalDraft)
   // [다음] 을 한 번 눌러 본 뒤부터 틀린 칸을 빨갛게 보여 줍니다.
@@ -165,16 +166,23 @@ export function GoalNewPage() {
     else handleNext()
   }
 
-  // 진행 중 목표가 이미 3개면 만들 수 없다고 알려 줍니다.
-  if (!canAddGoal(goals)) {
+  // 진행 중 목표가 이미 3개면 만들 수 없다고 알려 줍니다. (서버에만 있는 목표까지 셉니다, hooks/useGoalLimit.ts)
+  // 이렇게 미리 막지 않으면 이 기기에는 저장되지만 서버가 "3개까지예요"(409)로 거절해서 이 기기에만 남습니다.
+  if (!goalLimit.canAdd) {
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
         <h1 className="text-[28px] leading-tight font-bold tracking-tight break-keep">
           목표는 동시에 {MAX_ACTIVE_GOALS}개까지예요
         </h1>
         <p className="text-[15px] break-keep text-slate-600">
-          끝내거나 그만둔 목표가 생기면 새로 만들 수 있어요.
+          진행 중인 목표가 이미 {goalLimit.activeCount}개예요. 끝내거나 그만둔 목표가 생기면 새로
+          만들 수 있어요.
         </p>
+        {goalLimit.serverOnlyCount > 0 && (
+          <p className="text-sm break-keep text-slate-500">
+            다른 기기나 예전 기록으로 서버에만 있는 목표가 {goalLimit.serverOnlyCount}개 있어요.
+          </p>
+        )}
         <Link to="/cards" className="text-brand inline-flex h-10 items-center font-medium">
           카드로 돌아가기
         </Link>

@@ -4,7 +4,7 @@ import { getTodayKey } from '@/lib/date'
 import { buildDemoHistory } from '@/lib/demoHistory'
 import { DEMO_ID_PREFIX, buildDemoOnboarding, buildDemoPersona } from '@/lib/demoPersona'
 import { buildDemoQuizResults } from '@/lib/demoQuiz'
-import { loadGoals, saveGoals } from '@/lib/goals'
+import { MAX_ACTIVE_GOALS, getActiveGoals, loadGoals, saveGoals } from '@/lib/goals'
 import { mockAiMessages } from '@/lib/mock'
 import { loadData, removeData, saveData } from '@/lib/storage'
 import type { StudySession } from '@/types'
@@ -95,16 +95,22 @@ export function addDemoData(): void {
   // 같은 제목의 목표가 있으면 새로 넣지 않고 그 목표를 씁니다. (목표가 두 개로 겹치지 않게)
   const savedGoals = loadGoals()
   const goalIdMap: Record<string, string> = {}
-  const newGoals = persona.goals.filter((goal) => {
+  const sameTitleSkipped = persona.goals.filter((goal) => {
     const sameGoal = savedGoals.find((saved) => saved.title === goal.title)
     if (sameGoal) goalIdMap[goal.id] = sameGoal.id
     return !sameGoal
   })
+  // 진행 중 목표는 동시에 3개까지라서, 넣을 자리만큼만 넣습니다. (넘게 넣으면 서버가 409 로 거절하고 이 기기에만 남음)
+  const room = Math.max(0, MAX_ACTIVE_GOALS - getActiveGoals(savedGoals).length)
+  const newGoals = sameTitleSkipped.slice(0, room)
+  const addedIds = new Set([...newGoals.map((goal) => goal.id), ...Object.keys(goalIdMap)])
   saveGoals([...savedGoals, ...newGoals])
-  // 카드는 위에서 고른 목표에 연결합니다.
-  const cards = persona.cards.map((card) =>
-    card.goalId && goalIdMap[card.goalId] ? { ...card, goalId: goalIdMap[card.goalId] } : card,
-  )
+  // 카드는 위에서 고른 목표에 연결합니다. 자리가 없어 못 넣은 목표의 카드는 "목표 없음" 으로 둡니다.
+  const cards = persona.cards.map((card) => {
+    if (!card.goalId) return card
+    if (goalIdMap[card.goalId]) return { ...card, goalId: goalIdMap[card.goalId] }
+    return addedIds.has(card.goalId) ? card : { ...card, goalId: undefined }
+  })
   saveCards([...(loadSavedCards() ?? []), ...cards])
   appendList('sessions', [...history.sessions, ...persona.sessions])
   // 공부 기록마다의 집중도 (통계 탭의 "집중도" · 분석이 읽습니다, lib/focusScore.ts)

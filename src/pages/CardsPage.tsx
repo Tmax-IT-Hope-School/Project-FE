@@ -4,6 +4,7 @@ import { SchoolEventsCard } from '@/components/ui/SchoolEventsCard'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { StickyActionBar } from '@/components/ui/StickyActionBar'
 import { useCards } from '@/hooks/useCards'
+import { useGoalLimit } from '@/hooks/useGoalLimit'
 import { useGoals } from '@/hooks/useGoals'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useStudySessions } from '@/hooks/useStudySessions'
@@ -46,7 +47,9 @@ interface GoalListProps {
 
 /** 진행 중인 목표 목록과 [목표 만들기] 버튼 (최종 기획서 3장 카드 탭 「목표 목록(최대 3개)」, #391) */
 function GoalList({ goals }: GoalListProps) {
-  const isFull = goals.length >= MAX_ACTIVE_GOALS
+  // 서버에만 있는 진행 중 목표까지 세어서 판단합니다. (이 기기에서 2개여도 서버가 3개면 만들 수 없음)
+  const { canAdd, activeCount, serverOnlyCount } = useGoalLimit(goals)
+  const isFull = !canAdd
   // 서버나 시연 데이터로 진행 중 목표가 3개보다 많이 들어올 수 있습니다.
   // 그때 '목표 9/3' 은 헷갈려서, 개수만 '목표 9개' 로 보여 주고 아래에 권하는 수를 한 줄로 적습니다. (#672)
   const isOverMax = goals.length > MAX_ACTIVE_GOALS
@@ -85,6 +88,8 @@ function GoalList({ goals }: GoalListProps) {
           {isOverMax
             ? `목표는 동시에 ${MAX_ACTIVE_GOALS}개까지 권해요.`
             : `목표는 동시에 ${MAX_ACTIVE_GOALS}개까지예요.`}
+          {serverOnlyCount > 0 &&
+            ` 다른 기기나 예전 기록으로 서버에 진행 중인 목표가 ${activeCount}개 있어요. 끝내거나 그만둔 목표가 생기면 새로 만들 수 있어요.`}
         </p>
       ) : (
         <Link
