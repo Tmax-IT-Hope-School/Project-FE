@@ -135,7 +135,10 @@ export function GoalDetailPage() {
             )
           }
           onGiveUp={(reason) =>
-            finishCheck(giveUpGoal(goal, reason, Date.now()), '목표를 그만뒀어요. 숲에는 남아요.')
+            finishCheck(
+              giveUpGoal(goal, reason, Date.now()),
+              '목표를 그만뒀어요. 지금까지의 기록은 남아요.',
+            )
           }
         />
       ) : (

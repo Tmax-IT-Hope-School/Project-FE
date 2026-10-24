@@ -150,7 +150,7 @@ export const router = createBrowserRouter([
       // 상담 탭(/counsel) · 상담 채팅(/counsel/chat)은 2026-10-18 에 AI 코치로 합쳤습니다. 옛 주소는 채팅의 상담 방으로 보냅니다.
       { path: 'counsel', element: <OldCoachRedirect /> },
       { path: 'counsel/chat', element: <OldCoachRedirect /> },
-      // 통계 탭 (2026-10-24). 예전 기록 탭의 실행률 · 그래프 · 숲 · AI 분석 · 사진 채점을 그대로 옮겼습니다.
+      // 통계 탭 (2026-10-24). 예전 기록 탭의 실행률 · 그래프 · AI 분석 · 사진 채점을 옮겼습니다. (내 숲 · 지난 통화 요약은 같은 날 뺐습니다)
       { path: 'stats', element: <StatsPage /> },
       // 사진 채점 (2026-10-24). PC 통계 탭의 QR 을 폰으로 찍으면 열립니다. 사진은 저장하지 않고 채점 뒤 버립니다.
       { path: 'stats/answer-check', element: <AnswerCheckPage /> },

@@ -69,7 +69,7 @@ import { Link } from 'react-router-dom'
  *   기록한 날이 14일이 안 되면 리포트 대신 카운트다운을 보여 줍니다.
  *
  * 숫자 계산은 lib/historyReport.ts 가 합니다. 이 파일은 그리기만 합니다.
- * 예전 기록 탭의 그래프 · 숲 · AI 분석은 통계 탭(pages/StatsPage.tsx)으로 옮겼습니다.
+ * 예전 기록 탭의 그래프 · AI 분석은 통계 탭(pages/StatsPage.tsx)으로 옮겼습니다.
  * 옛 주소 /report 는 여기로, /manual 은 나 사용설명서(/records/manual, pages/ManualPage.tsx)로 옵니다. (router.tsx)
  */
 
@@ -154,7 +154,7 @@ export function RecordsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-      <h1 className="text-[28px] leading-tight font-bold tracking-tight">History</h1>
+      <h1 className="text-[28px] leading-tight font-bold tracking-tight">기록</h1>
 
       <SegmentedToggle
         label="리포트 종류"

@@ -41,12 +41,6 @@ export function loadManualDisputes(): Record<string, number> {
   return disputes
 }
 
-/** "틀렸어요" 를 누르지 않은 항목 수. 통계 탭 나무의 열매 개수에 씁니다. (틀린 항목은 열매에서 뺍니다) */
-export function countTrustedManualItems(): number {
-  const disputes = loadManualDisputes()
-  return loadManualItems().filter((item) => disputes[item.id] === undefined).length
-}
-
 /**
  * "나 사용설명서" 에 쌓이는 확인된 사실들을 들고 있고, 바뀔 때마다 localStorage 에 저장합니다. (#87, #93)
  * 실험에서 효과가 확인된 것과, 주간 리포트에서 [사용설명서에 넣기] 한 것이 여기에 올라옵니다.

@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom'
  * 실험 · 기록으로 확인된 것만 분류별로 쌓아 보여 줍니다. (hooks/useManualItems.ts)
  *   - 주간 리포트의 [사용설명서에 넣기] · 자기 실험의 "효과 있음" 이 여기에 올라옵니다.
  *   - 최근 7일 안에 들어온 항목에는 '새로 넣음' 표시가 붙습니다.
- *   - 항목을 누르면 [틀렸어요] 가 나옵니다. 누른 항목은 흐리게 두고, 통계 탭 나무의 열매에서 뺍니다.
+ *   - 항목을 누르면 [틀렸어요] 가 나옵니다. 누른 항목은 흐리게 둡니다.
  *
  * 기록 탭(History) 아래 화면이라 아래 탭은 '기록' 이 선택된 모양입니다. (lib/tabMenu.ts)
  */
@@ -93,8 +93,7 @@ export function ManualPage() {
 
       {items.length > 0 && (
         <p className="rounded-2xl bg-slate-50 p-4 text-sm break-keep text-slate-600">
-          틀린 항목이 있으면 눌러서 &ldquo;틀렸어요&rdquo;를 알려 주세요. 틀린 항목은 흐리게 두고
-          나무 열매에서 빼요.
+          틀린 항목이 있으면 눌러서 &ldquo;틀렸어요&rdquo;를 알려 주세요. 틀린 항목은 흐리게 둘게요.
         </p>
       )}
     </div>
