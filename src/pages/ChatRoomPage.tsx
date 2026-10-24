@@ -154,6 +154,7 @@ import {
   type QuizQuestion,
   type QuizReply,
 } from '@/lib/studyQuiz'
+import { sendVariantQuizResults } from '@/lib/variantQuizResults'
 import {
   buildNudgeCoachMessage,
   daysAgoText,
@@ -599,6 +600,8 @@ function RoomChat({ room }: RoomChatProps) {
   const todaySubjects = todaySubjectsOf(school)
   // 홈의 [코치와 계획 짜기] 로 들어오면 ?plan=today 로 옵니다. 코치가 바로 오늘 계획을 짜 줍니다.
   const [planParam, setPlanParam] = useQueryParam('plan', '')
+  // 타이머 종료 팝업의 [📝 확인 문제 풀어 볼래?] 로 들어오면 ?quiz=카드번호 로 옵니다. 그 카드로 바로 문제를 냅니다.
+  const [quizParam, setQuizParam] = useQueryParam('quiz', '')
   // 긴 계획 칸 (목표 · 날짜 · 하루 시간 · 사진). null 이면 닫혀 있습니다.
   const [longForm, setLongForm] = useState<LongPlanForm | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
@@ -1037,6 +1040,19 @@ function RoomChat({ room }: RoomChatProps) {
     const chip = planRequestParam === 'today' ? PLAN_CHIP : takePlanHandoff(Date.now())
     if (chip) handleChipRef.current(chip)
   }, [planRequestParam, setPlanParam])
+
+  // ?quiz=카드번호 — 타이머 종료 팝업의 [📝 확인 문제 풀어 볼래?]: 그 카드로 확인 문제를 한 번 냅니다. (매일 코치 방만)
+  // 공부 끝 회고의 [📝 방금 공부한 거 3문제] 칩을 대신 누르는 것과 같습니다. 다른 말을 기다리는 중이면 끝난 뒤에 냅니다.
+  // 없는 카드 번호면 주소만 지우고 아무것도 하지 않습니다.
+  const quizCard =
+    isDailyCoach && quizParam !== '' ? (cards.find((card) => card.id === quizParam) ?? null) : null
+  const autoQuizStarted = useRef(false)
+  useEffect(() => {
+    if (quizParam === '' || autoQuizStarted.current || isBusy) return
+    autoQuizStarted.current = true
+    setQuizParam('')
+    if (quizCard) handleChipRef.current(quizChipForCard(quizCard))
+  }, [quizParam, quizCard, isBusy, setQuizParam])
 
   // 다른 화면의 [이야기하기] 로 들어오면(?talk=) 맡겨 둔 주제로 새 대화를 엽니다. (lib/chatRooms.ts 의 startTalk)
   //   열려 있던 서버 세션은 조용히 정리하고, "새 대화" 구분선 아래에 내 말(예: '💬 방금 공부 후기 나눌래')을 붙인 뒤
@@ -1535,7 +1551,10 @@ function RoomChat({ room }: RoomChatProps) {
     const after = change(before)
     if (before.status !== 'done' && after.status === 'done') {
       const now = Date.now()
-      saveQuizResult(toQuizResult(after, now, toDayKey(now)))
+      const result = toQuizResult(after, now, toDayKey(now))
+      saveQuizResult(result)
+      // 진짜 로그인이면 변형 문제의 원본으로도 보냅니다. 기다리지 않고, 실패해도 이 기기의 결과는 그대로입니다.
+      if (isServerData) void sendVariantQuizResults(result)
     }
     setThread((current) => withQuiz(current, bubbleId, () => after))
   }
