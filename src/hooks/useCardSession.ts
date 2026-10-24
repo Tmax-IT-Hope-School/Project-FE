@@ -64,6 +64,7 @@ export function useCardSession() {
       checked: {},
       memos: [],
       mode,
+      ...(card.subjectId ? { subjectId: card.subjectId } : {}),
     })
   }
 

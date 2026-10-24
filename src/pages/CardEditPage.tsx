@@ -14,6 +14,7 @@ import { useGoals } from '@/hooks/useGoals'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useStudySessions } from '@/hooks/useStudySessions'
+import { useSubjects } from '@/hooks/useSubjects'
 import { failCauseOptionsQuery, requestCardDefaults, requestChecklist } from '@/lib/aiCardApi'
 import {
   ALERT_MINUTES_OPTIONS,
@@ -52,7 +53,7 @@ import {
   type SleepWindow,
 } from '@/lib/scheduleCheck'
 import { loadAutoSettings } from '@/lib/settingsMapping'
-import type { Card as CardData, FixedBlock, Goal } from '@/types'
+import type { Card as CardData, FixedBlock, Goal, Subject } from '@/types'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -68,6 +69,8 @@ interface CardFormProps {
   accuracy: { rate: number; samples: number } | null
   /** "목표 연결" 에서 고를 수 있는 목표 (진행 중인 목표 + 이 카드에 이미 걸린 목표) */
   goalOptions: Goal[]
+  /** "과목" 에서 고를 수 있는 내 과목 (#652) */
+  subjectOptions: Subject[]
   /**
    * 체크리스트 AI 추천(#413)
    * - 'auto': 제목을 적고 나가면 체크리스트가 비어 있을 때 저절로 받아 둡니다 (+ 버튼)
@@ -136,6 +139,7 @@ function CardForm({
   optionalOpenByDefault,
   accuracy,
   goalOptions,
+  subjectOptions,
   aiChecklist,
   sleepWindow,
   allCards,
@@ -606,7 +610,7 @@ function CardForm({
           <span className="min-w-0">
             <span className="block text-[15px] font-semibold text-slate-700">더 정하기 (선택)</span>
             <span className="block truncate text-xs text-slate-500">
-              목표 · 우선순위 · 유형 · 예상 달성 개수 · 알림
+              과목 · 목표 · 우선순위 · 유형 · 예상 달성 개수 · 알림
             </span>
           </span>
           <span aria-hidden className="shrink-0 text-slate-400">
@@ -616,6 +620,29 @@ function CardForm({
 
         {isMoreOpen && (
           <div className="mt-5 flex flex-col gap-5">
+            {/* 과목: 고르면 이 카드로 잰 공부 시간이 기록 탭에서 그 과목으로 묶입니다. 안 골라도 저장돼요 (#652) */}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-700">과목</p>
+              <div className="flex flex-wrap gap-2">
+                <ChipButton
+                  selected={values.subjectId === ''}
+                  onClick={() => change('subjectId', '')}
+                >
+                  과목 없음
+                </ChipButton>
+                {subjectOptions.map((subject) => (
+                  <ChipButton
+                    key={subject.id}
+                    selected={values.subjectId === subject.id}
+                    onClick={() => change('subjectId', subject.id)}
+                    className="max-w-full truncate"
+                  >
+                    {subject.name}
+                  </ChipButton>
+                ))}
+              </div>
+            </div>
+
             {/* 목표 연결: 카테고리 대신 목표로 카드를 묶습니다. 기본은 가장 최근 목표 (「4.3」) */}
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-slate-700">목표</p>
@@ -805,6 +832,8 @@ export function CardEditPage() {
   const todayKey = getTodayKey()
   const { cards, addCard, updateCard, deleteCard } = useCards()
   const { sessions } = useStudySessions()
+  // "과목" 칸에서 고를 내 과목 (진짜 로그인은 서버의 과목, 테스트 로그인은 이 기기의 과목)
+  const subjects = useSubjects()
   // "이 카드를 지울까요?" 확인창이 열려 있는지
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   // 주소의 ?date= 는 누구나 고칠 수 있어서, 진짜 날짜가 아니면 오늘로 봅니다.
@@ -901,6 +930,7 @@ export function CardEditPage() {
         optionalOpenByDefault={settings.optionalFieldsOpen.value}
         accuracy={accuracy}
         goalOptions={goalOptions}
+        subjectOptions={subjects}
         aiChecklist={aiChecklist}
         sleepWindow={sleepWindow}
         allCards={cards}

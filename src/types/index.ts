@@ -252,6 +252,8 @@ export interface Card {
   checklist: ChecklistItem[]
   /** 연결한 목표의 id. 없으면 "목표 없음" */
   goalId?: string
+  /** 카드의 과목 id. 없으면 "과목 없음" (옛 카드에는 없습니다, #652) */
+  subjectId?: string
   /** 우선순위. 기본은 flexible */
   priority: CardPriority
   /** 유형. 기본은 self(자습) */

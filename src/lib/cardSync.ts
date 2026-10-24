@@ -186,6 +186,26 @@ function isRejected(error: unknown): boolean {
   return error instanceof ApiError && error.status === 400
 }
 
+/**
+ * 카드를 만들 때(POST) 404 가 오면 "과목을 찾을 수 없어요" 입니다. (만들기에서 404 가 나는 것은 과목뿐입니다, BE #404)
+ * 다른 기기에서 그 과목을 지웠는데 이 기기의 카드에는 아직 남아 있을 때 생깁니다.
+ */
+function isMissingSubject(error: unknown, card: Card): boolean {
+  return error instanceof ApiError && error.status === 404 && Boolean(card.subjectId)
+}
+
+/**
+ * 지워진 과목을 이 기기의 카드에서도 뺍니다. 서버도 과목을 지우면 그 카드를 "과목 없음" 으로 바꿉니다. (#652)
+ * 카드는 보낼 목록에 그대로 남아서, 다음에 과목 없이 다시 보냅니다.
+ */
+function dropMissingSubject(cardId: string): void {
+  const cards = loadSavedCards() ?? []
+  saveCards(
+    cards.map((card) => (card.id === cardId ? { ...card, subjectId: undefined } : card)),
+    'server',
+  )
+}
+
 // 지금 보내는 중인지. 보내는 중에 또 부르면 끝난 뒤 한 번 더 보냅니다.
 let isPushing = false
 let pushAgain = false
@@ -193,6 +213,7 @@ let pushAgain = false
 /**
  * 보낼 목록에 적힌 카드를 하나씩 서버로 보냅니다. 서버에 닿지 못하면 거기서 멈추고 남은 것은 다음에 보냅니다.
  * - 서버 번호가 없으면 만들고(POST), 있으면 이 기기의 카드와 똑같이 바꿉니다(PATCH). 서버에서 사라졌으면(404) 다시 만듭니다.
+ * - 카드의 과목이 서버에서 지워졌으면(만들기도 404) 과목을 빼고 다시 보냅니다. (#652)
  * - 지운 카드는 서버에서도 지웁니다(DELETE).
  * - 아직 안 보낸 미루기가 있는 카드는 기다립니다. 서버가 미루기로 카드를 옮겨야 해서, 날짜를 먼저 바꾸면 미루기가 거절됩니다. (lib/markSync.ts)
  */
@@ -227,6 +248,12 @@ export async function pushPendingCards(): Promise<void> {
       } catch (error) {
         if (isRejected(error)) {
           dropPending('upserts', cardId)
+          continue
+        }
+        // 과목이 지워졌으면 과목을 빼고 이번 일이 끝난 뒤 한 번 더 보냅니다. (안 그러면 이 카드에서 계속 멈춥니다)
+        if (isMissingSubject(error, card)) {
+          dropMissingSubject(card.id)
+          pushAgain = true
           continue
         }
         return

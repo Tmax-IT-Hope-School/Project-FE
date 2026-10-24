@@ -300,6 +300,7 @@ MCP 도구가 연결돼 있으면 `gh` CLI 대신 써도 됩니다. **규칙은 
 | [docs/SERVER-SYNC.md](./docs/SERVER-SYNC.md)           | 이 기기의 데이터를 서버와 맞추기 (#516)  |
 | [docs/design/README.md](./docs/design/README.md)       | 화면 시안 (데스크톱·모바일 그림)         |
 | [docs/AI-FEATURES.md](./docs/AI-FEATURES.md)           | 앱 안의 AI(GPT) 기능 — 원칙·지금·다음    |
+| [docs/HISTORY-REPORT.md](./docs/HISTORY-REPORT.md)     | 기록 탭(일간·주간 리포트) 규칙과 데이터  |
 | [docs/PLAN.md](./docs/PLAN.md)                         | 최종 기획서 (2026-10-17) — 이슈의 「장」 |
 | [docs/APP-BRIDGE.md](./docs/APP-BRIDGE.md)             | 휴대폰 앱과 말 주고받기 (앱 브릿지)      |
 

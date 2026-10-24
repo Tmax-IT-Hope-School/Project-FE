@@ -5,6 +5,9 @@
 > **2026-10-10 에 바뀐 것** — 피드백 반영 방향("덜 묻고, 타이머가 잰 숫자로 말한다", Tmax-IT-Hope-School/Project#11)에 맞춰
 > **홈 · 공부 계획 · 타이머 · 주간 리포트 · 설정**을 다시 그리고, 새 화면 12장을 더했습니다. 아래 표에서 **(새)** 가 붙은 것이 새 그림입니다.
 
+> **2026-10-24 기준이 바뀜** — 아래 탭이 **홈 · 카드 · 채팅 · 통계 · 기록** 5개가 되고, 기록 탭은 **History 리포트 목업**이 기준입니다.
+> 그림: [11. 기록 탭 (History 리포트)](#11-기록-탭-history-리포트-2026-10-24) · 규칙: [docs/HISTORY-REPORT.md](../HISTORY-REPORT.md). 아래 8 · 9번(옛 기록 · 리포트)은 예전 시안입니다.
+
 - 데스크톱: 폭 1280px / 모바일: 폭 375px (프로젝트 기준 폭, CLAUDE.md 4장)
 - 그 사이 폭(태블릿)은 그림이 없습니다 → 아래 [반응형으로 만들 때](#반응형으로-만들-때) 를 따릅니다
 - 그림 파일: [`screens/`](./screens/) — 이름 규칙 `<화면>-desktop.png`, `<화면>-mobile.png` (모바일 전용 화면은 `-mobile.png` 만)
@@ -145,6 +148,18 @@
 | ----------------------------- | ---------------------------------------------------- | --------------------------------------------------- | ------------------------------ |
 | 설정                          | <img src="screens/settings-desktop.png" width="360"> | <img src="screens/settings-mobile.png" width="180"> | #39 #59 #60 #90 #96            |
 | 도움 안내 (위기 표현 감지 시) | <img src="screens/support-desktop.png" width="360">  | <img src="screens/support-mobile.png" width="180">  | 2026-10-18 삭제 (시연 범위 밖) |
+
+### 11. 기록 탭 (History 리포트, 2026-10-24)
+
+사용자가 준 HTML 목업(390px)입니다. 이 화면들은 **모바일 그림만** 있고, PC 는 가운데 폭(`max-w-xl`)으로 같은 모양을 씁니다. 숫자 · 문장은 예시이고, 규칙은 [docs/HISTORY-REPORT.md](../HISTORY-REPORT.md) 에 있습니다. (예전 8 · 9번 시안 대신 이것을 봅니다)
+
+| 화면                  | 모바일                                                       | 관련      |
+| --------------------- | ------------------------------------------------------------ | --------- |
+| ① 일간 리포트         | <img src="screens/history-daily-mobile.png" width="180">     | #641 #684 |
+| ② 주간 리포트         | <img src="screens/history-weekly-mobile.png" width="180">    | #641 #684 |
+| ③ 주간 · 쉬어 간 주   | <img src="screens/history-rest-week-mobile.png" width="180"> | #641 #684 |
+| ④ 주간 · 첫 리포트 전 | <img src="screens/history-countdown-mobile.png" width="180"> | #641 #684 |
+| ⑤ 나 사용설명서       | <img src="screens/history-manual-mobile.png" width="180">    | #642 #684 |
 
 ## 반응형으로 만들 때
 

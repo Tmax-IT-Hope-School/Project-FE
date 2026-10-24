@@ -7,6 +7,7 @@ import { useIsServerData } from '@/hooks/useIsServerData'
 import { loadManualItems, useManualItems } from '@/hooks/useManualItems'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useSubjects } from '@/hooks/useSubjects'
+import { useWeeklyPicks } from '@/hooks/useWeeklyPicks'
 import { answerChecksBetweenQuery, answerChecksQuery } from '@/lib/answerChecksApi'
 import { loadCheckInsByDate } from '@/lib/callSummary'
 import { loadCardMarks } from '@/lib/cardMarks'
@@ -54,9 +55,10 @@ import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
 import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
 import { CHAT_PATH, MANUAL_PATH, QUIZ_REPORT_PATH } from '@/lib/tabMenu'
-import { findWeeklyPick, loadWeeklyPicks, saveWeeklyPick, type WeeklyPick } from '@/lib/weeklyPicks'
+import { findWeeklyPick, type WeeklyPick, type WeeklyPickInput } from '@/lib/weeklyPicks'
+import { getPicksRange, weeklyPicksQuery } from '@/lib/weeklyPicksApi'
 import type { Card as CardData, Goal, StudyPlan, StudySession, Subject } from '@/types'
-import { useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
+import { usePrefetchQuery, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -81,18 +83,21 @@ import { Link } from 'react-router-dom'
 /**
  * 공부 기록 하나의 과목 이름을 찾습니다.
  *   1. 기록에 과목이 있으면 그 과목 (내 과목 → 예시 과목. 시연용 가상 기록은 예시 과목 id 로 저장됨)
- *   2. 카드 타이머 기록은 과목 칸이 비어 있어서(카드에 과목 칸이 아직 없음), 카드 제목 · 목표 제목에 든 과목 이름
+ *   2. 기록에 과목이 없으면 그 카드의 과목 (과목을 고르기 전에 잰 기록 · 사후 입력, #652)
+ *   3. 과목을 고르지 않은 옛 카드만 카드 제목 · 목표 제목에 든 과목 이름으로 찾습니다
  *      예) 카드 '수학 문제집 2쪽' → 수학 · 목표 '11월 학평 영어 2등급' 에 붙은 카드 → 영어
- *   3. 그래도 없으면 '기타'
+ *   4. 그래도 없으면 '기타'
  */
 function makeSubjectOf(subjects: Subject[], cards: CardData[], goals: Goal[]) {
   const names = [...new Set([...subjects, ...mockSubjects].map((subject) => subject.name))]
   return (session: StudySession): string => {
-    const byId =
-      subjects.find((item) => item.id === session.subjectId) ??
-      mockSubjects.find((item) => item.id === session.subjectId)
-    if (byId) return byId.name
     const card = cards.find((item) => item.id === session.cardId)
+    const subjectId = session.subjectId || card?.subjectId
+    const byId =
+      subjects.find((item) => item.id === subjectId) ??
+      mockSubjects.find((item) => item.id === subjectId)
+    if (byId) return byId.name
+    // 여기부터는 과목이 없는(또는 지워진) 카드라서 제목으로 짐작합니다.
     const goal = goals.find((item) => item.id === card?.goalId)
     const text = `${card?.title ?? ''} ${goal?.title ?? ''}`
     return names.find((name) => text.includes(name)) ?? '기타'
@@ -120,29 +125,40 @@ export function RecordsPage() {
   )
 }
 
-/** 서버의 공부 기록을 31일씩 나눠 받아서(useSuspenseQueries) 이 기기 기록과 합친 뒤 그립니다. */
+/**
+ * 서버의 공부 기록을 31일씩 나눠 받아서(useSuspenseQueries) 이 기기 기록과 합친 뒤 그립니다.
+ * 서버의 "이번 주에 고른 것"(#654)도 받습니다. 고른 것은 못 받아도 에러 대신 null 이라서,
+ * 공부 기록은 그대로 보이고 고른 것만 이 기기 것으로 봅니다. (lib/weeklyPicksApi.ts)
+ */
 function ServerHistory({ localSessions }: { localSessions: StudySession[] }) {
   const [todayKey] = useState(getTodayKey)
   const { cards } = useCards()
+  const picksRange = getPicksRange(todayKey)
+  // 고른 것을 공부 기록과 "같이" 받기 시작합니다. 이 줄이 없으면 아래 useSuspenseQuery 는
+  // 공부 기록을 다 받은 뒤에야 불려서, 그때부터 받기 시작하느라 늦어집니다.
+  usePrefetchQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
   const results = useSuspenseQueries({
     queries: getServerRanges(todayKey).map((range) => sessionsByRangeQuery(range.from, range.to)),
   })
+  const { data: serverPicks } = useSuspenseQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
   const sessions = mergeServerSessions({
     local: localSessions,
     server: results.flatMap((result) => result.data),
     sentServerIds: Object.values(loadSessionSyncState().sent),
     cards,
   })
-  return <HistoryView sessions={sessions} />
+  return <HistoryView sessions={sessions} serverPicks={serverPicks} />
 }
 
 interface HistoryViewProps {
   /** 리포트에 쓸 공부 기록 (노는 기록 뺀 것) */
   sessions: StudySession[]
+  /** 서버에서 받은 "이번 주에 고른 것". 테스트 로그인 · 받는 중 · 못 받았으면 없음 (이 기기 것만 봅니다) */
+  serverPicks?: WeeklyPick[] | null
 }
 
 /** 기록 탭 화면 본체. 공부 기록만 밖에서 받고, 나머지(카드 · 체크인 · 고른 것 …)는 여기서 읽습니다. */
-function HistoryView({ sessions }: HistoryViewProps) {
+function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
   // 오늘 · 지금 시각은 화면을 처음 그릴 때 한 번만 정합니다. (다시 그릴 때마다 바뀌면 숫자가 흔들립니다)
   const [todayKey] = useState(getTodayKey)
   const [now] = useState(Date.now)
@@ -163,7 +179,8 @@ function HistoryView({ sessions }: HistoryViewProps) {
   const [cardIdByPlanId] = useState(() =>
     buildCardIdByPlanId(loadRecord<StudyPlan[]>('plans'), loadRoutines()),
   )
-  const [picks, setPicks] = useState(loadWeeklyPicks)
+  // 이번 주에 고른 것. 이 기기 것 + 서버 것을 합쳐 보고, 고르면 이 기기에 저장한 뒤 서버로도 보냅니다. (#654)
+  const { picks, savePick } = useWeeklyPicks({ serverPicks, todayKey })
   // 아래 "나 사용설명서" 줄에 보일 항목 수 (주간 리포트에서 넣으면 다음에 열 때 늘어납니다)
   const [manualCount] = useState(() => loadManualItems().length)
   const [goals] = useState(loadGoals)
@@ -241,7 +258,7 @@ function HistoryView({ sessions }: HistoryViewProps) {
               quizResults={quizResults}
               subjectNames={subjects.map((subject) => subject.name)}
               picks={picks}
-              onPicksChange={setPicks}
+              onSavePick={savePick}
             />
           </AsyncBoundary>
         ) : (
@@ -635,11 +652,12 @@ interface PickFormProps {
   targetWeekStart: string
   options: PickOption[]
   picks: WeeklyPick[]
-  onPicksChange: (picks: WeeklyPick[]) => void
+  /** 고른 것을 저장 (이 기기 + 서버, hooks/useWeeklyPicks.ts) */
+  onSavePick: (input: WeeklyPickInput) => void
 }
 
 /** 보기 3개 중 하나 고르고 [이걸로 정하기]. 이미 고른 게 있으면 그것이 골라진 채로 보입니다. */
-function PickForm({ targetWeekStart, options, picks, onPicksChange }: PickFormProps) {
+function PickForm({ targetWeekStart, options, picks, onSavePick }: PickFormProps) {
   const saved = findWeeklyPick(picks, targetWeekStart)
   const [selectedTitle, setSelectedTitle] = useState<string | null>(saved?.title ?? null)
   const selected = options.find((option) => option.title === selectedTitle)
@@ -647,14 +665,12 @@ function PickForm({ targetWeekStart, options, picks, onPicksChange }: PickFormPr
 
   function handleSave() {
     if (!selected) return
-    onPicksChange(
-      saveWeeklyPick({
-        weekStart: targetWeekStart,
-        title: selected.title,
-        hint: selected.hint,
-        skip: selected.skip,
-      }),
-    )
+    onSavePick({
+      weekStart: targetWeekStart,
+      title: selected.title,
+      hint: selected.hint,
+      skip: selected.skip,
+    })
   }
 
   return (
@@ -859,7 +875,7 @@ interface WeeklyReportProps {
   quizResults: QuizResult[]
   subjectNames: string[]
   picks: WeeklyPick[]
-  onPicksChange: (picks: WeeklyPick[]) => void
+  onSavePick: (input: WeeklyPickInput) => void
 }
 
 function WeeklyReport({
@@ -871,7 +887,7 @@ function WeeklyReport({
   quizResults,
   subjectNames,
   picks,
-  onPicksChange,
+  onSavePick,
 }: WeeklyReportProps) {
   const lastWeekStart = moveDateKey(weekStart, -7)
   // 사진 채점은 지난주 ~ 이번 주(14일)를 한 번에 받아 둘로 나눕니다.
@@ -899,7 +915,7 @@ function WeeklyReport({
         canPickNext={canPickNext}
         nextWeekStart={nextWeekStart}
         picks={picks}
-        onPicksChange={onPicksChange}
+        onSavePick={onSavePick}
       />
     )
   }
@@ -1012,7 +1028,7 @@ function WeeklyReport({
           canRepeat={canPickNext}
           nextWeekStart={nextWeekStart}
           picks={picks}
-          onPicksChange={onPicksChange}
+          onSavePick={onSavePick}
         />
       )}
 
@@ -1036,7 +1052,7 @@ function WeeklyReport({
             targetWeekStart={nextWeekStart}
             options={finding.options}
             picks={picks}
-            onPicksChange={onPicksChange}
+            onSavePick={onSavePick}
           />
         </ReportCard>
       )}
@@ -1171,7 +1187,7 @@ interface PickResultCardProps {
   canRepeat: boolean
   nextWeekStart: string
   picks: WeeklyPick[]
-  onPicksChange: (picks: WeeklyPick[]) => void
+  onSavePick: (input: WeeklyPickInput) => void
 }
 
 /** 이번 주에 고른 것의 결과 + [1주 더 해 보기] [사용설명서에 넣기] */
@@ -1182,7 +1198,7 @@ function PickResultCard({
   canRepeat,
   nextWeekStart,
   picks,
-  onPicksChange,
+  onSavePick,
 }: PickResultCardProps) {
   const { items, addItem } = useManualItems()
   const result = getPickResult(pick, week)
@@ -1194,9 +1210,7 @@ function PickResultCard({
   const minutesGain = week.totalMinutes - lastWeek.totalMinutes
 
   function handleRepeat() {
-    onPicksChange(
-      saveWeeklyPick({ weekStart: nextWeekStart, title: pick.title, hint: pick.hint, skip: false }),
-    )
+    onSavePick({ weekStart: nextWeekStart, title: pick.title, hint: pick.hint, skip: false })
   }
 
   function handleAddToManual() {
@@ -1276,7 +1290,7 @@ interface RestWeekReportProps {
   canPickNext: boolean
   nextWeekStart: string
   picks: WeeklyPick[]
-  onPicksChange: (picks: WeeklyPick[]) => void
+  onSavePick: (input: WeeklyPickInput) => void
 }
 
 /** 쉬어 간 주: 숫자 비교와 발견 없이, 그래도 해낸 것과 다음 주의 아주 작은 한 걸음만 */
@@ -1287,7 +1301,7 @@ function RestWeekReport({
   canPickNext,
   nextWeekStart,
   picks,
-  onPicksChange,
+  onSavePick,
 }: RestWeekReportProps) {
   const studiedDays = week.days.filter((day) => day.studyMinutes > 0)
 
@@ -1347,7 +1361,7 @@ function RestWeekReport({
             targetWeekStart={nextWeekStart}
             options={RESTART_OPTIONS}
             picks={picks}
-            onPicksChange={onPicksChange}
+            onSavePick={onSavePick}
           />
         </ReportCard>
       )}

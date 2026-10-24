@@ -7,7 +7,7 @@ import { loadData, saveData } from '@/lib/storage'
  *   다음 주가 끝나면 그 주 리포트가 "공부한 5일 중 4일 했어요" 처럼 결과를 보여 주고 [1주 더 해 보기] · [사용설명서에 넣기]
  *
  * '지켰어?' 를 따로 묻지 않습니다. 그 주에 계획을 끝까지 해낸 날로 결과를 봅니다. (lib/historyReport.ts)
- * 지금은 이 기기(localStorage)에만 저장합니다. 서버에 올리려면 BE 에 새 표가 필요합니다.
+ * 이 기기(localStorage)에 먼저 저장하고, 진짜 로그인이면 서버에도 같이 저장합니다. (#654, lib/weeklyPicksApi.ts · hooks/useWeeklyPicks.ts)
  */
 
 // 저장소 이름 (실제 키는 'study-weekly-picks'). "모든 기록 지우기" 가 이 키도 지웁니다. (lib/myData.ts)
@@ -53,14 +53,19 @@ export function findWeeklyPick(picks: WeeklyPick[], weekStart: string): WeeklyPi
   return picks.find((pick) => pick.weekStart === weekStart)
 }
 
+/** 새로 고를 때 넣는 값 (id · 고른 시각은 저장할 때 붙입니다) */
+export type WeeklyPickInput = Omit<WeeklyPick, 'id' | 'decidedAt'>
+
 /**
- * 그 주의 고른 것을 저장합니다. 같은 주에 이미 있으면 새로 고른 것으로 바꿉니다. 바뀐 전체 목록을 돌려줍니다.
+ * 그 주의 고른 것을 이 기기에 저장합니다. 같은 주에 이미 있으면 새로 고른 것으로 바꿉니다. 저장한 것을 돌려줍니다.
+ * 서버로 보내는 일은 hooks/useWeeklyPicks.ts 가 합니다.
  *
  *   saveWeeklyPick({ weekStart: '2026-10-26', title: '폰을 다른 방에 두기', hint: '…', skip: false })
+ *   -> { id: 'pick-2026-10-26', weekStart: '2026-10-26', …, decidedAt: 1792800000000 }
  */
-export function saveWeeklyPick(input: Omit<WeeklyPick, 'id' | 'decidedAt'>): WeeklyPick[] {
+export function saveWeeklyPick(input: WeeklyPickInput): WeeklyPick {
   const pick: WeeklyPick = { ...input, id: `pick-${input.weekStart}`, decidedAt: Date.now() }
   const next = [...loadWeeklyPicks().filter((item) => item.weekStart !== input.weekStart), pick]
   saveData(WEEKLY_PICKS_KEY, next)
-  return next
+  return pick
 }

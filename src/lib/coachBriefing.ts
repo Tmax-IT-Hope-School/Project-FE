@@ -16,6 +16,7 @@ import {
   type MissionSlot,
 } from '@/lib/dailyMission'
 import type { ChatReply } from '@/lib/chatApi'
+import type { NotifyChange } from '@/lib/chatNotifySettings'
 import { sessionMinutes } from '@/lib/dailyRecords'
 import type { FocusScoreRecord } from '@/lib/focusScore'
 import { dayLabelOf, type SchoolToday } from '@/lib/schoolToday'
@@ -79,6 +80,8 @@ export type CoachChip =
   | { kind: 'pickPhoto'; label: string }
   /** 방금 공부의 후기를 코치와 말로 나눕니다. AI 가 이유를 짐작하면 "맞아?" 로 확인받아 기록에 남김 (#582) */
   | { kind: 'reviewTalk'; label: string; sessionId: string }
+  /** 채팅으로 부탁한 알림 설정 변경안에 답합니다. change 가 null 이면 [그대로 둘게] (#594, lib/chatNotifySettings.ts) */
+  | { kind: 'notifySettings'; label: string; change: NotifyChange | null }
 
 /**
  * 계획 칩. 코치가 먼저 계획을 짜 주고, 학생이 고칠 곳을 말하며 핑퐁합니다. (lib/coachPlan.ts)

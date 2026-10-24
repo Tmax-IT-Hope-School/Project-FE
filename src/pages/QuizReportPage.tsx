@@ -871,8 +871,10 @@ function SummaryTable({ week, dates, selected, onSelect }: SummaryTableProps) {
   const total = week.week
   return (
     <>
-      {/* 표가 화면보다 넓으면 표만 옆으로 밀어 봅니다. (화면 전체에 가로 스크롤이 생기지 않게) */}
-      <div className="-mx-5 overflow-x-auto px-5 sm:-mx-6 sm:px-6">
+      {/* 표가 화면보다 넓으면 표만 옆으로 밀어 봅니다. (화면 전체에 가로 스크롤이 생기지 않게)
+          relative: 표 안의 화면 읽기용 글자(sr-only, position: absolute)가 이 칸 밖으로 빠져나가
+          화면 전체를 넓히지 않게 이 칸을 기준으로 둡니다. (없으면 390px 휴대폰에서 문서 폭이 666px 이 됨) */}
+      <div className="relative -mx-5 overflow-x-auto px-5 sm:-mx-6 sm:px-6">
         {/* whitespace-nowrap: 좁은 화면에서 '100점' 이 두 줄로 꺾이지 않게 칸 글자를 한 줄로 둡니다. */}
         <table className="w-full min-w-[640px] text-sm whitespace-nowrap tabular-nums">
           <thead>

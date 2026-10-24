@@ -9,6 +9,7 @@ import { useCards } from '@/hooks/useCards'
 import { useSendCheckIn } from '@/hooks/useCheckInSync'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useStudySessions } from '@/hooks/useStudySessions'
+import { requestSettingsFromText } from '@/lib/aiSettingsApi'
 import { ApiError, getApiErrorMessage } from '@/lib/api'
 import { finishCall, type CallLine } from '@/lib/callReview'
 import { addCardMark, CARD_FAIL_CAUSES, loadCardMarks } from '@/lib/cardMarks'
@@ -37,6 +38,18 @@ import {
   type PlanHandoffChip,
   type TalkRequest,
 } from '@/lib/chatRooms'
+import {
+  applyNotifyChange,
+  buildNotifyChange,
+  getNotifyChangeRows,
+  loadTalkableSettings,
+  notifyDoneText,
+  notifyProposalText,
+  notifySummaryOf,
+  parseNotifyRequest,
+  type NotifyChange,
+  type NotifyRequest,
+} from '@/lib/chatNotifySettings'
 import { canSyncCheckIns, todayCheckInForCoachQuery } from '@/lib/checkInsApi'
 import {
   SKIP_FOCUS_NAME_LABEL,
@@ -530,6 +543,28 @@ function withReasonCheck(
 }
 
 /** 계획 이야기인지 (매일 코치 방 등에서 누르면 계획 방으로 넘깁니다) */
+const NOTIFY_HELP_REPLY = '알림은 잠깐 미뤄 두자. 마음이 힘들면 아래 번호로 언제든 이야기해도 돼.'
+const NOTIFY_FAILED_REPLY = '그건 채팅으로 못 바꿨어. 설정 → 알림에서 직접 바꿔 줘.'
+
+/** 알림 설정 변경안을 코치 말풍선으로 붙입니다. 바뀌는 칸이 없으면 그렇다고만 말합니다. (#594) */
+function withNotifyProposal(thread: CoachThread, change: NotifyChange): CoachThread {
+  const rows = getNotifyChangeRows(change, loadTalkableSettings())
+  if (rows.length === 0) {
+    return withBubble(thread, {
+      speaker: 'ai',
+      text: '이미 그렇게 돼 있어서 바꿀 게 없어. 설정 → 알림에서 자세히 볼 수 있어.',
+    })
+  }
+  return withBubble(thread, {
+    speaker: 'ai',
+    text: notifyProposalText(notifySummaryOf(change), rows),
+    chips: [
+      { kind: 'notifySettings', label: '✅ 바꿀게', change },
+      { kind: 'notifySettings', label: '그대로 둘게', change: null },
+    ],
+  })
+}
+
 function isPlanChip(chip: CoachChip): chip is PlanHandoffChip {
   return chip.kind === 'dayPlan' || chip.kind === 'longPlan' || chip.kind === 'makePlan'
 }
@@ -849,6 +884,28 @@ function RoomChat({ room }: RoomChatProps) {
     },
   })
 
+  // 시각이 든 알림 부탁("밤 10시 이후엔 연락하지 마")은 서버 AI 가 변경안을 만듭니다. 바꾸는 건 [✅ 바꿀게] 를 누른 뒤입니다. (#594)
+  const settingsTalk = useMutation({
+    mutationFn: requestSettingsFromText,
+    onSuccess: (result) => {
+      setThread((current) => {
+        if (result.kind === 'proposal') {
+          return withNotifyProposal(current, { settings: result.proposal, nudge: null })
+        }
+        if (result.kind === 'help') {
+          return withBubble(
+            { ...current, isHelpShown: true },
+            { speaker: 'ai', text: NOTIFY_HELP_REPLY },
+          )
+        }
+        return withBubble(current, { speaker: 'ai', text: NOTIFY_FAILED_REPLY })
+      })
+    },
+    onError: () => {
+      setThread((current) => withBubble(current, { speaker: 'ai', text: NOTIFY_FAILED_REPLY }))
+    },
+  })
+
   // [이야기하기] 로 연 주제 대화: 서버가 사실 줄을 보고 첫 말을 씁니다. 그 첫 말부터가 이 세션의 대화입니다.
   const topicTalk = useMutation({
     mutationFn: (about: ChatAbout) => startChat({ room: roomInfo.serverRoom, about }),
@@ -978,7 +1035,12 @@ function RoomChat({ room }: RoomChatProps) {
     },
   })
   // AI 의 답이나 계획 · 문제를 기다리는 중인지 (그동안은 새 말 · 칩을 막습니다)
-  const isBusy = talk.isPending || topicTalk.isPending || planTalk.isPending || quizTalk.isPending
+  const isBusy =
+    talk.isPending ||
+    topicTalk.isPending ||
+    planTalk.isPending ||
+    quizTalk.isPending ||
+    settingsTalk.isPending
 
   const bubbles = thread.bubbles
   const lastBubble = bubbles[bubbles.length - 1]
@@ -1101,6 +1163,17 @@ function RoomChat({ room }: RoomChatProps) {
     return buildFocusReaction(focus, myEvent?.dDay ?? null, needsPlan)
   }
 
+  /** 알림 설정을 바꿔 달라는 말에 변경안을 보여 줍니다. 모양이 뻔한 말은 코드가, 시각이 든 말은 서버 AI 가 만듭니다. (#594) */
+  function askNotifyChange(request: NotifyRequest, text: string) {
+    const withAsk = withBubble(thread, { speaker: 'me', text })
+    if (request.type === 'ai') {
+      setThread(withAsk)
+      settingsTalk.mutate(text)
+      return
+    }
+    setThread(withNotifyProposal(withAsk, buildNotifyChange(request, loadTalkableSettings())))
+  }
+
   /** 학생의 말을 보냅니다. 진짜 로그인은 서버 AI, 테스트 로그인은 시연용 정해진 답이 답합니다. */
   function sendText(raw: string) {
     // [💬 이 사진으로 물어보기] 로 붙인 사진이 있으면 이번 말에 같이 보냅니다. 글이 없으면 정해 둔 한 줄로.
@@ -1113,6 +1186,12 @@ function RoomChat({ room }: RoomChatProps) {
       // 계획 말풍선이 열려 있으면 학생이 쓴 말은 그 계획을 고치는 요청입니다. (계획 핑퐁)
       if (openPlanBubble?.plan) {
         revisePlan(openPlanBubble, text)
+        return
+      }
+      // "알림 좀 줄여 줘" 처럼 알림 설정을 바꿔 달라고 하면 변경안을 보여 줍니다. (#594, 상담 방만)
+      const notifyRequest = isDailyCoach ? parseNotifyRequest(text) : null
+      if (notifyRequest) {
+        askNotifyChange(notifyRequest, text)
         return
       }
       // "11월 2일 중간고사 미적분 계획 짜 줘" 처럼 긴 계획을 부탁하면 바로 짜 줍니다.
@@ -1660,6 +1739,23 @@ function RoomChat({ room }: RoomChatProps) {
       sendText(chip.label)
       return
     }
+    if (chip.kind === 'notifySettings') {
+      // [✅ 바꿀게] 를 누르면 그제야 이 기기의 설정에 저장하고, 무엇을 바꿨는지 코치가 한 줄로 알려 줍니다.
+      const withAnswer = withBubble(thread, { speaker: 'me', text: chip.label })
+      if (chip.change === null) {
+        setThread(withBubble(withAnswer, { speaker: 'ai', text: '알겠어, 그대로 둘게.' }))
+        return
+      }
+      const rows = getNotifyChangeRows(chip.change, loadTalkableSettings())
+      applyNotifyChange(chip.change)
+      setThread(
+        withBubble(withAnswer, {
+          speaker: 'ai',
+          text: rows.length > 0 ? notifyDoneText(rows) : '이미 그렇게 돼 있어.',
+        }),
+      )
+      return
+    }
     if (chip.kind === 'checkIn') {
       // 오늘의 체크인으로 저장하고(서버로도), 그 말을 보내서 AI 와 이야기를 이어 갑니다. (미션 ① 끝)
       const checkIn = saveQuickCheckIn(chip.condition, chip.emotions)
@@ -2070,7 +2166,7 @@ function RoomChat({ room }: RoomChatProps) {
               </Fragment>
             )
           })}
-          {(talk.isPending || topicTalk.isPending) && (
+          {(talk.isPending || topicTalk.isPending || settingsTalk.isPending) && (
             <li>
               <TypingBubble
                 roomName={roomInfo.name}

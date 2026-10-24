@@ -32,6 +32,8 @@ export interface ServerCard {
   durationMinutes: number
   checklist: { id: string; text: string }[]
   goalId: string | null
+  /** 카드의 과목 번호. "과목 없음" 이면 null. 과목 칸이 없는 옛 서버(BE #404 전)면 없습니다 */
+  subjectId?: string | null
   priority: Card['priority']
   type: Card['type']
   expectedDone: number | null
@@ -101,6 +103,8 @@ export function toServerCardBody(
     durationMinutes: clamp(card.durationMinutes, 1, MAX_DURATION_MINUTES),
     checklist,
     goalId: goalServerId,
+    // 진짜 로그인의 과목은 서버에서 받아서 id 가 곧 서버 번호입니다. 숫자가 아니면 "과목 없음"('') 으로 보냅니다. (#652)
+    subjectId: card.subjectId && /^\d{1,18}$/.test(card.subjectId) ? card.subjectId : '',
     priority: card.priority,
     type: card.type,
     expectedDone: clamp(card.expectedDone ?? checklist.length, 0, checklist.length),
@@ -150,6 +154,9 @@ export function fromServerCard(server: ServerCard, local?: Card, goals: Goal[] =
   if (server.startTime) card.startTime = server.startTime
   const goalId = toLocalGoalId(server.goalId, local, goals)
   if (goalId) card.goalId = goalId
+  // 과목 칸이 아예 없는 옛 서버면 이 기기의 과목을 그대로 둡니다. (#652)
+  const subjectId = server.subjectId === undefined ? local?.subjectId : server.subjectId
+  if (subjectId) card.subjectId = subjectId
   if (server.expectedDone !== null) card.expectedDone = server.expectedDone
   if (server.expectedDoneReason) card.expectedDoneReason = server.expectedDoneReason
   if (server.expectedFailCauses && server.expectedFailCauses.length > 0) {

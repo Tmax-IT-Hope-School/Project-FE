@@ -42,6 +42,8 @@ export interface ActiveCardSession {
   /** 딴생각 주차장 메모 */
   memos: SessionMemo[]
   mode: SessionMode
+  /** 카드의 과목 id. 시작할 때 카드에서 옮겨 두고, 끝낼 때 기록에 넣습니다 (#652) */
+  subjectId?: string
 }
 
 /**
@@ -130,7 +132,8 @@ export function finishActiveSession(
     : active.pauses
   return {
     id,
-    subjectId: '',
+    // 카드에 과목이 있으면 기록에도 넣습니다. 그래야 기록 탭의 과목별 시간이 맞습니다. (#652)
+    subjectId: active.subjectId ?? '',
     startedAt: active.startedAt,
     endedAt,
     ...summarizePauses(pauses),
