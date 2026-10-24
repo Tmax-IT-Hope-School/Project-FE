@@ -146,7 +146,7 @@ export function subjectNameOf(text: string, subjects: Subject[]): string {
 
 /** 공부 기록 하나가 어느 과목인지. 과목을 골라 잰 기록은 그 과목, 카드 타이머 기록은 카드 제목으로 정합니다. */
 function sessionSubjectName(session: StudySession, cards: Card[], subjects: Subject[]): string {
-  // 시연 데이터의 과목 id 는 서버 과목에 없을 수 있어서 기본 과목에서도 찾습니다. (RecordListPage 의 findSubject 와 같음)
+  // 시연 데이터의 과목 id 는 서버 과목에 없을 수 있어서 기본 과목에서도 찾습니다. (StatsPage 의 findSubject 와 같음)
   const subject =
     subjects.find((item) => item.id === session.subjectId) ??
     mockSubjects.find((item) => item.id === session.subjectId)

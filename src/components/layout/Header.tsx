@@ -16,8 +16,8 @@ interface HeaderProps {
   hideOnMobile?: boolean
 }
 
-// 아래 탭 4개의 첫 화면. 여기서는 로고를, 그 밖의 하위 화면(설정 · 알림 · 카드 등)에서는 모바일에 ‹ 뒤로 를 보여 줍니다. (2026-10-22 앱 기준)
-const TAB_ROOT_PATHS = ['/', '/chat', '/timer', '/records']
+// 아래 탭 5개의 첫 화면. 여기서는 로고를, 그 밖의 하위 화면(설정 · 알림 · 타이머 등)에서는 모바일에 ‹ 뒤로 를 보여 줍니다. (2026-10-22 앱 기준, 2026-10-24 5탭)
+const TAB_ROOT_PATHS = ['/', '/cards', '/chat', '/stats', '/records']
 
 /**
  * 화면 안에 자기 돌아가기 링크("← 카드" · "‹ 설정")가 있는 화면입니다. 헤더에 ‹ 뒤로를 또 두지 않고 로고를 보여 줍니다.
@@ -25,29 +25,29 @@ const TAB_ROOT_PATHS = ['/', '/chat', '/timer', '/records']
  *
  *   hasOwnBackLink('/cards/new')        -> true
  *   hasOwnBackLink('/goals/abc')        -> true
- *   hasOwnBackLink('/cards')            -> false
+ *   hasOwnBackLink('/settings')         -> false
  */
 function hasOwnBackLink(pathname: string): boolean {
   return (
     pathname.startsWith('/cards/') ||
     pathname.startsWith('/goals') ||
     pathname.startsWith('/settings/') ||
-    // 사진 채점(/records/answer-check)은 폰에서 QR 로 바로 열려 "바로 전 화면" 이 없어서, 화면 안의 "‹ 기록" 으로 돌아갑니다.
+    // 사진 채점(/stats/answer-check)은 폰에서 QR 로 바로 열려 "바로 전 화면" 이 없어서, 화면 안의 "‹ 통계" 로 돌아갑니다.
+    pathname.startsWith('/stats/') ||
+    // 나 사용설명서(/records/manual)는 화면 안의 "‹ 기록" 으로 돌아갑니다.
     pathname.startsWith('/records/')
   )
 }
 
 /**
  * ‹ 뒤로를 눌렀을 때 늘 같은 곳으로 가야 하는 화면과 그 위 화면입니다. 없으면 null(바로 전 화면으로).
- * 카드 목록은 카드를 저장한 뒤에도 열리는데, 그때 "바로 전 화면" 은 방금 쓴 폼이라 정해진 곳(홈)으로 갑니다.
- * 통화 화면도 전화 울림 화면으로 되돌아가지 않게 채팅 목록으로 갑니다.
+ * 통화 화면은 전화 울림 화면으로 되돌아가지 않게 채팅 목록으로 갑니다.
+ * (카드 목록은 2026-10-24 부터 카드 탭의 첫 화면이라 ‹ 뒤로 가 없습니다)
  *
- *   getFixedParentPath('/cards')        -> '/'
  *   getFixedParentPath('/call/result')  -> '/chat'
  *   getFixedParentPath('/settings')     -> null
  */
 function getFixedParentPath(pathname: string): string | null {
-  if (pathname === '/cards') return '/'
   if (pathname.startsWith('/call')) return '/chat'
   return null
 }
@@ -57,7 +57,7 @@ function getFixedParentPath(pathname: string): string | null {
  *   hideNav           -> action 만 (온보딩의 "나중에 하기" 등). 없으면 앱 이름만 보입니다.
  *                         로그인·가입·온보딩처럼 탭 없이 뜨는 화면(PlainLayout)이라, 로그인 전이어도 "로그인" 을 띄우지 않습니다.
  *   로그인 전          -> "로그인" 하나만 (처음 온 사람도 로그인 화면에서 시작하면 가입으로 이어지기 때문입니다, #319)
- *   로그인             -> PC 는 탭 4개(홈 · 채팅 · 타이머 · 기록) 메뉴 + 맨 오른쪽 "설정", 모바일은 오른쪽 위 ⚙️ 톱니(하단 탭은 4개 그대로)
+ *   로그인             -> PC 는 탭 5개(홈 · 카드 · 채팅 · 통계 · 기록) 메뉴 + 맨 오른쪽 "설정", 모바일은 오른쪽 위 ⚙️ 톱니(하단 탭은 5개 그대로)
  * 설정은 아래 탭에 넣지 않고 헤더에 따로 둡니다. 로그아웃 · 탈퇴가 설정에 있어서 어느 화면에서든 찾을 수 있게. (2026-10-19)
  * 알림 종도 휴대폰 앱처럼 늘 오른쪽 위(설정 옆)에 둡니다. 전에는 채팅 목록 · 대화방에만 있어서 홈에서 찾을 수 없었습니다. (2026-10-22)
  * 모바일 하위 화면(탭 첫 화면이 아닌 곳)은 로고 자리에 ‹ 뒤로 버튼이 나옵니다. (2026-10-22)
@@ -145,7 +145,7 @@ export function Header({ hideNav = false, action, hideOnMobile = false }: Header
           </nav>
         ) : (
           <div className="flex items-center gap-1 sm:gap-2">
-            {/* 데스크톱(sm 이상)에서만 보이는 가로 메뉴. 모바일은 하단 탭(BottomTabNav)을 씁니다. (같은 4개) */}
+            {/* 데스크톱(sm 이상)에서만 보이는 가로 메뉴. 모바일은 하단 탭(BottomTabNav)을 씁니다. (같은 5개) */}
             <nav className="hidden gap-1 sm:flex">
               {navItems.map((item) => (
                 <NavLink
@@ -154,14 +154,14 @@ export function Header({ hideNav = false, action, hideOnMobile = false }: Header
                   // 메뉴를 누르면 맨 위로 올립니다. 지금 보고 있는 메뉴를 다시 눌러도 올라갑니다. (하단 탭과 같은 규칙)
                   onClick={scrollToTop}
                   className={({ isActive }) =>
-                    // 홈 · 기록 아래 화면(카드 · 목표 등)에서도 그 탭이 선택된 모양이 되게 합니다.
+                    // 카드 · 통계 아래 화면(목표 · 타이머 · 사진 채점)에서도 그 탭이 선택된 모양이 되게 합니다.
                     navLinkClass({ isActive: isActive || isNavItemSelected(item.to, pathname) })
                   }
                 >
                   {item.label}
                 </NavLink>
               ))}
-              {/* 설정은 탭 4개 뒤 맨 오른쪽에 따로 둡니다. /settings/account(내 계정)에서도 선택된 모양입니다. */}
+              {/* 설정은 탭 5개 뒤 맨 오른쪽에 따로 둡니다. /settings/account(내 계정)에서도 선택된 모양입니다. */}
               <NavLink to="/settings" onClick={scrollToTop} className={navLinkClass}>
                 설정
               </NavLink>

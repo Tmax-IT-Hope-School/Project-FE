@@ -136,7 +136,7 @@ export function FocusUnlockScreen({ onStay, onUnlock }: FocusUnlockScreenProps) 
             해제하기
           </Button>
           <p className="text-[13px] break-keep text-slate-500">
-            해제 기록은 벌이 아니라 나를 알기 위한 데이터야. 어떤 시간에 약한지 기록 탭에서
+            해제 기록은 벌이 아니라 나를 알기 위한 데이터야. 어떤 시간에 약한지 통계 탭에서
             보여줄게.
           </p>
         </div>

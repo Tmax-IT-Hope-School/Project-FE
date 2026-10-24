@@ -8,7 +8,7 @@ interface UnderstandingBadgeProps {
 
 /**
  * 확인 통화에서 코치가 말한 이해도 배지. (2026-10-18, lib/checkCall.ts 의 splitUnderstanding)
- * 통화 결과 화면과 기록 탭 "지난 통화 요약" 에서 씁니다. 색만으로 구분하지 않게 글자를 같이 씁니다.
+ * 통화 결과 화면과 통계 탭 "지난 통화 요약" 에서 씁니다. 색만으로 구분하지 않게 글자를 같이 씁니다.
  *
  *   <UnderstandingBadge understanding="조금 헷갈림" />
  */

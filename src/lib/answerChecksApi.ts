@@ -1,8 +1,8 @@
 /**
  * "사진 채점" 의 서버 약속 · 타입 · 함수를 모아 둔 곳입니다. (2026-10-24)
- * 화면은 pages/AnswerCheckPage.tsx(폰에서 찍어 올리기)와 components/ui/AnswerCheckCard.tsx(기록 탭의 결과)입니다.
+ * 화면은 pages/AnswerCheckPage.tsx(폰에서 찍어 올리기)와 components/ui/AnswerCheckCard.tsx(통계 탭의 결과)입니다.
  *
- * 흐름: PC 기록 탭에서 QR 을 띄움 → 폰으로 찍어 올림(POST) → PC 가 3초마다 오늘 결과를 물어봄(GET) → 결과 카드
+ * 흐름: PC 통계 탭에서 QR 을 띄움 → 폰으로 찍어 올림(POST) → PC 가 3초마다 오늘 결과를 물어봄(GET) → 결과 카드
  *
  * 서버와 정한 약속 (BE, 로그인 필요 · 계약 초안 v1.1) — 약속이 바뀌면 이 파일만 고치면 됩니다.
  *   POST  /answer-checks                         { mode, image: 'data:image/jpeg;base64,…', date: '2026-10-24' }
@@ -15,6 +15,7 @@
  *     - showHelp 가 true 면 사진의 글에 위기 표현이 있어서, 화면이 상담 전화 안내를 먼저 보여 줍니다.
  *
  * mode: MARKED = "채점했어요" (O · X 표시를 읽음) / UNMARKED = "아직 안 했어요" (AI 가 풂)
+ * 사진을 여러 장 고르면 사진마다 POST 를 한 번씩 부릅니다. (사진 1장 = 채점 결과 1개, 서버 약속은 그대로)
  *
  * ⚠️ 사진은 어디에도 저장하지 않습니다. 브라우저 저장소에도 넣지 않고, 서버도 채점 뒤 버립니다.
  * 테스트 로그인(서버 없음)이면 서버 대신 시연용 예시를 이 기기(브라우저 저장소)에 만들어 씁니다. 사진은 여기에도 넣지 않습니다.
@@ -243,6 +244,32 @@ function wait(ms: number): Promise<void> {
 // 서버 부르기
 // ---------------------------------------------------------------------------
 
+/**
+ * 여러 일을 limit 개까지만 동시에 합니다. 하나가 끝나면 남은 것 중 다음 것을 시작합니다.
+ * 사진 여러 장을 한꺼번에 보내면 장마다 25초쯤 걸리는 AI 채점이 겹치고 폰 데이터도 몰려서, 몇 장씩만 보냅니다.
+ * task 가 에러를 던지지 않게 쓰는 쪽에서 장마다 잡아야, 한 장이 실패해도 나머지를 계속 보냅니다.
+ *
+ *   runWithLimit([사진1, 사진2, 사진3], 2, sendOne)
+ *   → 사진1 · 사진2 를 보내고, 둘 중 먼저 끝난 자리에서 사진3 을 보냅니다.
+ */
+export async function runWithLimit<T>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  // 다음에 보낼 차례 (여러 일꾼이 같이 보고 하나씩 가져갑니다)
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex]
+      nextIndex += 1
+      await task(item)
+    }
+  }
+  const workerCount = Math.min(limit, items.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+}
+
 /** 찍은 사진(줄인 data URL)을 보내 채점을 부탁합니다. */
 export async function sendAnswerCheck(input: {
   mode: AnswerCheckMode
@@ -275,8 +302,33 @@ export async function fetchAnswerChecks(date: string): Promise<AnswerCheck[]> {
     if (!Array.isArray(result)) throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
     return result.map(toAnswerCheck).filter((check): check is AnswerCheck => check !== null)
   } catch (error) {
-    // 서버에 이 기능이 아직 배포되지 않았으면 404 입니다. 기록 탭 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
+    // 서버에 이 기능이 아직 배포되지 않았으면 404 입니다. 통계 탭 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
     if (error instanceof ApiError && error.status === 404) return []
+    throw error
+  }
+}
+
+/**
+ * from ~ to(둘 다 포함) 동안의 채점 결과를 한 번에 받아옵니다. 기록 탭의 주간 리포트(정답률)가 씁니다.
+ * 서버는 한 번에 31일까지 줍니다. (BE GET /answer-checks?from=&to=, Project-BE#377)
+ * 기간 조회가 아직 배포되지 않은 서버(400 · 404)면 리포트 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
+ */
+export async function fetchAnswerChecksBetween(from: string, to: string): Promise<AnswerCheck[]> {
+  if (!isServerDataMode()) {
+    const byDate = loadDemoChecks()
+    return Object.entries(byDate)
+      .filter(([date]) => date >= from && date <= to)
+      .flatMap(([, checks]) => checks)
+  }
+
+  try {
+    const result = await api<unknown>(
+      `/answer-checks?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    )
+    if (!Array.isArray(result)) throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
+    return result.map(toAnswerCheck).filter((check): check is AnswerCheck => check !== null)
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 400 || error.status === 404)) return []
     throw error
   }
 }
@@ -322,10 +374,18 @@ export async function fixAnswerCheckItem(input: {
   return toAnswerCheck(result)
 }
 
-/** 그날 채점 결과 쿼리. 기록 탭의 결과 카드와 QR 창(3초마다 다시 묻기)이 같이 씁니다. */
+/** 그날 채점 결과 쿼리. 통계 탭의 결과 카드와 QR 창(3초마다 다시 묻기)이 같이 씁니다. */
 export function answerChecksQuery(date: string) {
   return queryOptions({
     queryKey: ['answer-checks', date],
     queryFn: () => fetchAnswerChecks(date),
+  })
+}
+
+/** 기간 채점 결과 쿼리. 기록 탭의 주간 리포트가 지난주 ~ 이번 주(14일)를 한 번에 받습니다. */
+export function answerChecksBetweenQuery(from: string, to: string) {
+  return queryOptions({
+    queryKey: ['answer-checks', from, to],
+    queryFn: () => fetchAnswerChecksBetween(from, to),
   })
 }

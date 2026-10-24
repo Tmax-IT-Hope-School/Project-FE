@@ -1,6 +1,5 @@
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AiAnalysisCard, AnalysisInsight } from '@/components/ui/AiAnalysisCard'
 import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
 import { Button } from '@/components/ui/Button'
@@ -11,7 +10,7 @@ import { SubjectBadge } from '@/components/ui/SubjectBadge'
 import { TalkButton } from '@/components/ui/TalkButton'
 import { UnderstandingBadge } from '@/components/ui/UnderstandingBadge'
 import { useCards } from '@/hooks/useCards'
-import { loadManualItems } from '@/hooks/useManualItems'
+import { countTrustedManualItems } from '@/hooks/useManualItems'
 import { usePlans } from '@/hooks/usePlans'
 import {
   buildCalendarDay,
@@ -55,7 +54,6 @@ import { EMOTION_OPTIONS, isEmotionTag } from '@/lib/quickCheckIn'
 import { loadRoutines } from '@/lib/routines'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
-import { QUIZ_REPORT_PATH } from '@/lib/tabMenu'
 import { dayReviewLines } from '@/lib/talkLines'
 import { formatHoursMinutes, getWeeklyStudy } from '@/lib/weeklyStudy'
 import type { CareLevel, CheckIn, EmotionTag, StudyPlan, StudySession, Subject } from '@/types'
@@ -116,7 +114,11 @@ function SubjectTag({ subject }: SubjectTagProps) {
   return <SubjectBadge name={subject.name} color={subject.color} />
 }
 
-export function RecordListPage() {
+/**
+ * 통계 탭 화면(/stats)입니다. (2026-10-24)
+ * 2026-10-24 까지 기록 탭(/records)이던 화면을 그대로 옮겼습니다. 기록 탭은 일간 · 주간 리포트(History)가 됩니다.
+ */
+export function StatsPage() {
   // 공부 기록은 타이머가 저장해 둔 것을 읽기만 합니다. 과목은 계획 화면에서 저장한 목록을 씁니다.
   const [sessions] = useState<StudySession[]>(loadSessions)
   const subjects = useSubjects()
@@ -139,7 +141,7 @@ export function RecordListPage() {
   const [forest] = useState(() => {
     const todayKey = getTodayKey()
     runDailyCareStage(todayKey, now)
-    return loadForestState(todayKey, now, loadManualItems().length)
+    return loadForestState(todayKey, now, countTrustedManualItems())
   })
   // 옛 계획으로 잰 기록도 그 카드의 기록으로 보려고 "옛 계획 id → 카드 id" 표를 만듭니다. (lib/sessionRecords.ts)
   const [cardIdByPlanId] = useState(() =>
@@ -170,29 +172,10 @@ export function RecordListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 예전에는 위의 하위 탭 [기록 | 리포트] 가 화면 이름을 대신했는데, 리포트를 빼면서(2026-10-23) 제목을 보이게 했습니다. */}
-      <h1 className="text-[28px] leading-tight font-bold tracking-tight">기록</h1>
+      <h1 className="text-[28px] leading-tight font-bold tracking-tight">통계</h1>
 
       {/* 오늘 푼 문제 사진 채점: [사진 올리기] → (PC) QR 창 → 폰으로 찍어 올리면 아래에 결과 카드 (2026-10-24) */}
       <AnswerCheckCard />
-
-      {/* 문제 풀이 주간 리포트(과목별 점수 그래프 · 주간 정리표)로 가는 입구 (2026-10-24, pages/QuizReportPage.tsx) */}
-      <Link
-        to={QUIZ_REPORT_PATH}
-        className="flex items-center justify-between gap-3 rounded-2xl bg-white p-5 hover:bg-slate-50 active:scale-[0.99] sm:p-6"
-      >
-        <span className="min-w-0">
-          <span className="block text-[17px] font-bold tracking-tight text-slate-900">
-            문제 풀이 리포트
-          </span>
-          <span className="mt-0.5 block text-sm text-slate-500">
-            과목별 점수 변화 · 취약 단원 · 주간 정리표
-          </span>
-        </span>
-        <span aria-hidden="true" className="text-xl text-slate-400">
-          ›
-        </span>
-      </Link>
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → 내 숲 → AI 분석 (가장 자주 보는 것을 위로) */}
       {/* 최근 4주 실행률 · 최근 7일 막대그래프 · 7일 집중도. 모바일은 한 줄에 하나, PC 는 두 칸으로 카드를 놓습니다. */}

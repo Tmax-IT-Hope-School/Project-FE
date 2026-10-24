@@ -57,6 +57,10 @@ const RECORD_KEYS = [
   'suggestion-checks',
   // 실험에서 효과가 확인되어 "나 사용설명서" 에 올린 항목 (#93)
   'manual-items',
+  // 나 사용설명서에서 "틀렸어요" 를 누른 항목 (hooks/useManualItems.ts)
+  'manual-disputes',
+  // 주간 리포트에서 고른 "다음 주에 하나만 해 볼 것" (lib/weeklyPicks.ts)
+  'weekly-picks',
   // 날짜마다 "이미 계획으로 넣은 루틴" 표시. 계획을 지우면 이 표시도 같이 지워야 루틴이 다시 채워집니다. (#236)
   'routine-filled',
   // 타이머가 재고 있던 계획 (timer-subject 와 같이 지웁니다)

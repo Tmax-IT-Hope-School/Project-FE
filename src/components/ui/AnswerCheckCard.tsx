@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { Button } from '@/components/ui/Button'
@@ -21,11 +21,16 @@ import { cn } from '@/lib/cn'
 import { getTodayKey } from '@/lib/date'
 
 /** 폰에서 여는 주소 (QR 에 담깁니다) */
-const ANSWER_CHECK_PATH = '/records/answer-check'
-/** QR 창이 열린 동안 오늘 결과를 다시 묻는 간격 */
+const ANSWER_CHECK_PATH = '/stats/answer-check'
+/** QR 창이 열린 동안(과 창이 닫힌 뒤 남은 사진을 기다리는 동안) 오늘 결과를 다시 묻는 간격 */
 const POLL_INTERVAL_MS = 3000
 /** 이만큼 지나도 폰이 안 올리면 기다리기를 멈춥니다. (10분) */
 const WAIT_LIMIT_MS = 10 * 60 * 1000
+/**
+ * 첫 결과가 와서 QR 창이 닫힌 뒤에도, 폰이 나머지 사진을 보내는 동안 결과를 계속 받아옵니다.
+ * 이만큼 새 결과가 없으면 다 보낸 것으로 보고 멈춥니다. (2분 · 사진 한 장이 최대 25초 + 보내는 시간)
+ */
+const FOLLOW_QUIET_MS = 2 * 60 * 1000
 
 /** 결과별 이름 · 모양 · 색. 색만으로 나누지 않도록 모양(○ ✕ △)과 글자를 같이 씁니다. */
 const RESULT_INFO: Record<AnswerResult, { label: string; symbol: string; className: string }> = {
@@ -46,16 +51,27 @@ function formatDate(dateKey: string): string {
 }
 
 /**
- * 기록 탭 맨 위의 "오늘 푼 문제 채점" 카드와 오늘 채점 결과입니다. (2026-10-24)
- * 기록 화면 파일(pages/RecordListPage.tsx)이 이미 아주 길어서, AI 분석 카드처럼 따로 둡니다.
+ * 통계 탭 맨 위의 "오늘 푼 문제 채점" 카드와 오늘 채점 결과입니다. (2026-10-24)
+ * 통계 화면 파일(pages/StatsPage.tsx)이 이미 아주 길어서, AI 분석 카드처럼 따로 둡니다.
  *
  *   PC: [사진 올리기] → QR 창 → 폰으로 찍어 올리면 창이 닫히고 아래에 결과 카드가 생깁니다.
- *   폰: QR 을 찍을 수 없으니 [사진 올리기] 가 바로 찍기 화면(/records/answer-check)으로 갑니다.
+ *       폰이 사진을 여러 장 보내면, 창이 닫힌 뒤에도 끝난 사진부터 결과 카드가 하나씩 늘어납니다.
+ *   폰: QR 을 찍을 수 없으니 [사진 올리기] 가 바로 찍기 화면(/stats/answer-check)으로 갑니다.
  */
 export function AnswerCheckCard() {
   // 오늘 날짜는 화면을 처음 그릴 때 한 번만 정합니다. (새벽 4시 기준, lib/date.ts)
   const [todayKey] = useState(getTodayKey)
   const [isQrOpen, setIsQrOpen] = useState(false)
+  // QR 창이 닫힌 뒤에도 남은 사진의 결과를 계속 받아오는 중인지
+  const [isFollowing, setIsFollowing] = useState(false)
+  // 아래 TodayResults 의 useEffect 가 이 함수를 지켜봐서, 다시 그릴 때마다 새로 만들지 않습니다.
+  const stopFollowing = useCallback(() => setIsFollowing(false), [])
+
+  /** QR 창을 연 뒤에 생긴 첫 결과를 찾았을 때: 창을 닫고, 나머지 사진의 결과를 이어서 받아옵니다. */
+  function handleFound() {
+    setIsQrOpen(false)
+    setIsFollowing(true)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,7 +100,7 @@ export function AnswerCheckCard() {
           pendingFallback={<Skeleton className="mx-auto size-48 rounded-2xl" />}
           errorMessage="오늘 채점 결과를 불러오지 못했어요. 다시 시도해 주세요."
         >
-          <QrWaiting todayKey={todayKey} onFound={() => setIsQrOpen(false)} />
+          <QrWaiting todayKey={todayKey} onFound={handleFound} />
         </AsyncBoundary>
       </Modal>
 
@@ -92,7 +108,7 @@ export function AnswerCheckCard() {
         pendingFallback={<Skeleton className="h-40 w-full rounded-2xl" />}
         errorMessage="오늘 채점 결과를 불러오지 못했어요. 다시 시도해 주세요."
       >
-        <TodayResults todayKey={todayKey} />
+        <TodayResults todayKey={todayKey} isFollowing={isFollowing} onQuiet={stopFollowing} />
       </AsyncBoundary>
     </div>
   )
@@ -180,11 +196,26 @@ function QrWaitingRound({ todayKey, onFound, onRestart }: QrWaitingRoundProps) {
 
 interface TodayResultsProps {
   todayKey: string
+  /** true 면 3초마다 다시 받아옵니다. (폰이 남은 사진을 보내는 중) */
+  isFollowing: boolean
+  /** 받아오는 동안 FOLLOW_QUIET_MS 만큼 새 결과가 없을 때 */
+  onQuiet: () => void
 }
 
 /** 오늘 채점 결과 카드들 (최신 것이 위). 없으면 아무것도 그리지 않습니다. */
-function TodayResults({ todayKey }: TodayResultsProps) {
-  const { data } = useSuspenseQuery(answerChecksQuery(todayKey))
+function TodayResults({ todayKey, isFollowing, onQuiet }: TodayResultsProps) {
+  const { data } = useSuspenseQuery({
+    ...answerChecksQuery(todayKey),
+    refetchInterval: isFollowing ? POLL_INTERVAL_MS : false,
+  })
+
+  // 새 결과가 생길 때마다(개수가 바뀔 때마다) 2분을 처음부터 다시 셉니다. 2분 동안 그대로면 멈춥니다.
+  useEffect(() => {
+    if (!isFollowing) return
+    const timer = setTimeout(onQuiet, FOLLOW_QUIET_MS)
+    return () => clearTimeout(timer)
+  }, [isFollowing, data.length, onQuiet])
+
   if (data.length === 0) return null
   return (
     <>

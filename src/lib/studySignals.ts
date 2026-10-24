@@ -98,7 +98,7 @@ export function buildStudySignals(input: {
   const weekAgo = input.now - DAYS * DAY_MS
   const isRecent = (at: number) => at > weekAgo && at <= input.now
 
-  // 집중도: 기록 탭과 같은 계산(공부한 시간 전체 중 딴짓이 아닌 비율)
+  // 집중도: 통계 탭과 같은 계산(공부한 시간 전체 중 딴짓이 아닌 비율)
   const week = summarizeFocusWeek(input.focusScores, input.now)
   const recentFocus = input.focusScores.filter((record) => isRecent(record.startedAt))
 

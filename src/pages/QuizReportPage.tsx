@@ -148,7 +148,7 @@ function QuizReportBody({ weekStart }: QuizReportBodyProps) {
       <Card>
         <p className="font-semibold text-slate-900">이 주에 푼 문제가 없어요</p>
         <p className="mt-1 text-sm text-slate-500">
-          채팅에서 확인 문제를 풀거나, 기록 탭에서 문제집 사진을 채점하면 과목별 점수가 여기에
+          채팅에서 확인 문제를 풀거나, 통계 탭에서 문제집 사진을 채점하면 과목별 점수가 여기에
           쌓여요.
         </p>
       </Card>

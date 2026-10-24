@@ -67,7 +67,7 @@ export function InsightCard({
   return (
     <Card className={className}>
       {/* 표시(예시 · AI · 가설)가 하나라도 있을 때만 줄을 그립니다.
-          "이번 주 발견" 같은 작은 머리 글자는 바깥 제목(기록 화면의 h2 '이번 발견')과 겹쳐서 뺐습니다. (2026-10-22) */}
+          "이번 주 발견" 같은 작은 머리 글자는 바깥 제목(통계 화면의 h2 '이번 발견')과 겹쳐서 뺐습니다. (2026-10-22) */}
       {(isExample || isAiWritten || insight.isHypothesis) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {/* 예시는 내 기록으로 만든 문장이 아니라는 것을 먼저 알려줍니다. */}

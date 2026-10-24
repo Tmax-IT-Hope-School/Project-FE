@@ -6,7 +6,7 @@ import type { Card } from '@/types'
 
 /**
  * 시연용 계정 하나에 "가상 사용자 28일" 을 자동으로 넣는 규칙입니다. (lib/demoData.ts 의 addDemoData 를 그대로 씁니다)
- * 기록 탭은 공부 기록을 이 기기(localStorage)에서만 읽어서, DB 에 넣어도 화면에 안 보입니다. (lib/sessionSync.ts)
+ * 통계 탭은 공부 기록을 이 기기(localStorage)에서만 읽어서, DB 에 넣어도 화면에 안 보입니다. (lib/sessionSync.ts)
  * 그래서 정해 둔 계정으로 로그인하면, 그 기기에 가상 데이터가 없을 때 이 기기에 넣어 줍니다.
  * 어느 기기에서 로그인해도 한 달치 기록이 보이게 됩니다. (화면은 hooks/useDemoAutoSeed.ts)
  *

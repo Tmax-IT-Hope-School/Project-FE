@@ -353,7 +353,7 @@ export interface DemoPersona {
   sessions: StudySession[]
   /** 공부 기록마다의 집중도 (나중에 적은 기록은 타이머로 재지 않아서 없음) */
   focusScores: FocusScoreRecord[]
-  /** 알림 화면의 "어제 순공" 메시지 글 (기록 탭과 같은 숫자) */
+  /** 알림 화면의 "어제 순공" 메시지 글 (통계 탭과 같은 숫자) */
   yesterdayMessage: string
   /** 홈 화면이 아직 읽는 옛 계획 (카드 하루치마다 하나, 날짜별) */
   plansByDate: Record<string, StudyPlan[]>
@@ -599,8 +599,8 @@ function buildFocusScore(
 }
 
 /**
- * 알림 화면의 "어제 순공" 한 줄. 기록 탭 · 통화 요약과 같은 계산(getDaySummary)이라 숫자가 같습니다.
- * (예전에는 '어제 순공 3시간 10분, 계획의 80%' 로 박혀 있어서 기록 탭과 숫자가 달랐습니다)
+ * 알림 화면의 "어제 순공" 한 줄. 통계 탭 · 통화 요약과 같은 계산(getDaySummary)이라 숫자가 같습니다.
+ * (예전에는 '어제 순공 3시간 10분, 계획의 80%' 로 박혀 있어서 통계 탭과 숫자가 달랐습니다)
  *   -> '어제 순공 1시간 43분, 계획의 85%야. 폰은 다른 방에 두기 15일째!'
  */
 function buildYesterdayMessage(

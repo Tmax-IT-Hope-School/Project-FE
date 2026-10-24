@@ -509,7 +509,7 @@ function FinishError({ error, onRetry }: FinishErrorProps) {
     return (
       <Card>
         <p className="text-sm break-keep text-slate-700">
-          이미 정리한 통화예요. 내 기록에서 다시 볼 수 있어요.
+          이미 정리한 통화예요. 통계 탭의 지난 통화 요약에서 다시 볼 수 있어요.
         </p>
       </Card>
     )

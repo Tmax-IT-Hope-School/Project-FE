@@ -32,7 +32,7 @@ export interface DistractionSpan {
  */
 export type FocusMeasure = 'lift' | 'outside' | 'hidden'
 
-/** 세션 하나의 집중도. 세션 번호로 저장해 두고 코치 · 기록 탭이 씁니다. */
+/** 세션 하나의 집중도. 세션 번호로 저장해 두고 코치 · 통계 탭이 씁니다. */
 export interface FocusScoreRecord {
   sessionId: string
   /** 공부를 시작한 시각. 시간대별 평균(오전 · 오후 · 저녁 · 밤)에 씁니다. */
@@ -289,7 +289,7 @@ function combinedScore(records: FocusScoreRecord[]): number | null {
 }
 
 /**
- * 기록 탭 카드에 쓰는 최근 7일 집중도와 시간대별 집중도.
+ * 통계 탭 카드에 쓰는 최근 7일 집중도와 시간대별 집중도.
  *
  *   summarizeFocusWeek(기록들, 지금)
  *     -> { average: 88, sessionCount: 6, bands: [{ label: '오전', average: 92 }, { label: '오후', average: null }, …] }

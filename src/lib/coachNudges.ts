@@ -8,7 +8,7 @@
  * | 아침         | 평일 07:20 · 주말 09:30 | 서버 AI (못 받으면 정해 둔 문장)      | 코치 → 오늘의 미션 칩           |
  * | 복습         | 17:30                   | 1 · 3 · 7일 전에 틀린 확인 문제가 있을 때 | 코치 → [📝 틀린 문제 다시]   |
  * | 시험 D-day   | 18:30                   | 시험 · 내 일정이 D-14 · D-7 · D-3 인 날 | 코치 → [📅 계획 짜기]          |
- * | 주간 분석    | 일요일 20:00            | 정해 둔 문장                          | 기록 탭 (AI 분석)               |
+ * | 주간 분석    | 일요일 20:00            | 정해 둔 문장                          | 통계 탭 (AI 분석)               |
  * | 밤 정리      | 21:30                   | 서버 AI (못 받으면 정해 둔 문장)      | 코치 → [📅 내일 계획 짜 줘]     |
  *
  * 규칙
@@ -42,7 +42,7 @@ import { loadData, saveData } from '@/lib/storage'
 import { loadStudyFocus } from '@/lib/studyFocus'
 import { loadQuizResults, wrongForReview } from '@/lib/studyQuiz'
 import { COACH_PATH } from '@/lib/chatRooms'
-import { RECORDS_PATH } from '@/lib/tabMenu'
+import { STATS_PATH } from '@/lib/tabMenu'
 import { queryOptions } from '@tanstack/react-query'
 import type { Card } from '@/types'
 
@@ -227,9 +227,9 @@ function nudgeTimeOf(kind: NudgeKind, dateKey: string): string {
   return EVENING_TIME
 }
 
-/** 알림을 누르면 갈 주소. 주간 분석은 기록 탭(AI 분석), 나머지는 코치(첫 말이 그 알림 글) */
+/** 알림을 누르면 갈 주소. 주간 분석은 통계 탭(AI 분석), 나머지는 코치(첫 말이 그 알림 글) */
 export function nudgeUrlOf(kind: NudgeKind): string {
-  return kind === 'weekly' ? RECORDS_PATH : `${COACH_PATH}?nudge=${kind}`
+  return kind === 'weekly' ? STATS_PATH : `${COACH_PATH}?nudge=${kind}`
 }
 
 export interface CoachNudgesInput {

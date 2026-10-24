@@ -10,7 +10,7 @@ import {
 } from '@/lib/onboardingProgress'
 import { CONSENT_PATH } from '@/lib/consentApi'
 import { PSYCH_TEST_PATH } from '@/lib/psychTest'
-import { RECORDS_PATH } from '@/lib/tabMenu'
+import { MANUAL_PATH, RECORDS_PATH, STATS_PATH } from '@/lib/tabMenu'
 import { PageBoundary } from '@/components/layout/PageBoundary'
 import { SubjectsGate } from '@/components/layout/SubjectsGate'
 import { ErrorPage } from '@/pages/ErrorPage'
@@ -29,9 +29,11 @@ const AccountPage = lazy(() =>
 const RecordsPage = lazy(() =>
   import('@/pages/RecordsPage').then((m) => ({ default: m.RecordsPage })),
 )
+const StatsPage = lazy(() => import('@/pages/StatsPage').then((m) => ({ default: m.StatsPage })))
 const QuizReportPage = lazy(() =>
   import('@/pages/QuizReportPage').then((m) => ({ default: m.QuizReportPage })),
 )
+const ManualPage = lazy(() => import('@/pages/ManualPage').then((m) => ({ default: m.ManualPage })))
 const CallActivePage = lazy(() =>
   import('@/pages/CallActivePage').then((m) => ({ default: m.CallActivePage })),
 )
@@ -148,12 +150,18 @@ export const router = createBrowserRouter([
       // 상담 탭(/counsel) · 상담 채팅(/counsel/chat)은 2026-10-18 에 AI 코치로 합쳤습니다. 옛 주소는 채팅의 상담 방으로 보냅니다.
       { path: 'counsel', element: <OldCoachRedirect /> },
       { path: 'counsel/chat', element: <OldCoachRedirect /> },
-      // 기록 탭(예전 '분석'). 하위 탭 [리포트] 는 2026-10-23 에 빼서 [기록] 화면 하나입니다.
+      // 통계 탭 (2026-10-24). 예전 기록 탭의 실행률 · 그래프 · 숲 · AI 분석 · 사진 채점을 그대로 옮겼습니다.
+      { path: 'stats', element: <StatsPage /> },
+      // 사진 채점 (2026-10-24). PC 통계 탭의 QR 을 폰으로 찍으면 열립니다. 사진은 저장하지 않고 채점 뒤 버립니다.
+      { path: 'stats/answer-check', element: <AnswerCheckPage /> },
+      // 기록 탭 (일간 · 주간 리포트). 2026-10-24 시안대로 History 화면으로 바뀝니다.
       { path: 'records', element: <RecordsPage /> },
-      // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 기록 화면 위의 입구에서 들어옵니다.
+      // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 기록 탭의 입구에서 들어옵니다.
       { path: 'records/quiz', element: <QuizReportPage /> },
-      // 사진 채점 (2026-10-24). PC 기록 탭의 QR 을 폰으로 찍으면 열립니다. 사진은 저장하지 않고 채점 뒤 버립니다.
-      { path: 'records/answer-check', element: <AnswerCheckPage /> },
+      // 나 사용설명서 (2026-10-24 History 시안 ⑤). 기록 탭 아래쪽 줄과 주간 리포트의 [사용설명서에 넣기] 뒤에서 들어옵니다.
+      { path: 'records/manual', element: <ManualPage /> },
+      // 사진 채점의 옛 주소(통계 탭으로 옮기기 전). 이미 띄워 둔 QR 로 열어도 같은 화면이 나오게 넘겨 줍니다.
+      { path: 'records/answer-check', element: <RedirectWithQuery to="/stats/answer-check" /> },
       // v2 체크인(/check)은 #417 에서 지웠습니다. 옛 링크 · 즐겨찾기로 오면 홈으로 보냅니다. (그날 컨디션은 코치가 채팅에서 묻습니다)
       { path: 'check', element: <Navigate to="/" replace /> },
       // 일기 · 성찰일기는 최종 기획서 MVP 밖이라 #417 에서 지웠습니다. 옛 링크는 홈으로 보냅니다.
@@ -179,11 +187,11 @@ export const router = createBrowserRouter([
       { path: 'support', element: <Navigate to="/" replace /> },
       // 탭 이름을 바꾸기 전의 옛 주소들. ?date= 같은 값은 그대로 가져갑니다. (#386)
       { path: 'planner', element: <RedirectWithQuery to="/cards" /> },
-      // 탭 이름을 '분석' 에서 '기록' 으로 바꾸기 전 주소(2026-10-18). ?tab= 같은 값은 그대로 가져갑니다.
-      { path: 'analysis', element: <RedirectWithQuery to={RECORDS_PATH} /> },
+      // 탭 이름을 '분석' 에서 '기록' 으로 바꾸기 전 주소(2026-10-18). 분석 내용은 지금 통계 탭에 있습니다.
+      { path: 'analysis', element: <RedirectWithQuery to={STATS_PATH} /> },
       // 리포트(/report · /records?tab=report)는 2026-10-23 에 뺐습니다. 옛 링크로 오면 기록 화면이 보입니다.
       { path: 'report', element: <RedirectWithQuery to={RECORDS_PATH} /> },
-      { path: 'manual', element: <RedirectWithQuery to={RECORDS_PATH} /> },
+      { path: 'manual', element: <RedirectWithQuery to={MANUAL_PATH} /> },
       // 없는 주소는 404 화면으로. 이 줄은 항상 맨 마지막에 둡니다.
       { path: '*', element: <NotFoundPage /> },
     ],

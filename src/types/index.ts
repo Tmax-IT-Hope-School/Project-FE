@@ -558,6 +558,8 @@ export interface ManualItem {
   confirmedDate: string
   /** 근거 (예: '폰을 다른 방에 두면 효과 있음 (2주 실험: 순공 +35분)') */
   evidence: string
+  /** 확인한 날짜 뒤에 붙는 짧은 출처 (예: '주간 리포트에서 넣음' · '실험 14일 · 이행률 79%'). 없으면 날짜만 */
+  note?: string
 }
 
 /**

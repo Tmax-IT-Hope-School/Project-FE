@@ -289,7 +289,7 @@ function tutorDemo(text: string, hasPhoto: boolean): DemoReply {
 function plannerDemo(text: string): DemoReply {
   if (hasAny(text, ['점검', '이번 주'])) {
     return {
-      text: '좋아, 이번 주 같이 보자. 기록 탭 AI 분석에서 [📅 AI 분석 같이 볼래] 를 누르면 내 숫자를 들고 와서 볼 수 있어. 다음 주에 바꿀 걸 하나만 정하자.',
+      text: '좋아, 이번 주 같이 보자. 통계 탭 AI 분석에서 [📅 AI 분석 같이 볼래] 를 누르면 내 숫자를 들고 와서 볼 수 있어. 다음 주에 바꿀 걸 하나만 정하자.',
       chips: [PLAN_CHIP, { kind: 'say', label: '정시 시작이 아쉬워' }],
       showHelp: false,
     }
