@@ -43,6 +43,9 @@ const recordsChildPaths: string[] = [QUIZ_REPORT_PATH]
 /** 카드 탭 아래에 묶인 화면. 목표는 카드 목록에서, 타이머는 카드의 [시작] 에서 들어갑니다. */
 const cardsChildPaths = ['/goals', '/timer']
 
+/** 통계 탭 아래에 묶인 화면. 위에 "‹ 통계" 돌아가기 링크가 나옵니다. 수학 변형 문제(/variants)를 2026-10-24 에 더했습니다. */
+const statsChildPaths: string[] = ['/variants']
+
 /**
  * pathname 이 base 이거나 그 아래 주소인지 봅니다.
  * 앞부분만 같은 다른 주소(/cards-old)는 아닙니다. (그래서 '/' 를 붙여서 비교합니다)
@@ -85,10 +88,11 @@ export function isCardsPath(pathname: string): boolean {
  *
  *   isStatsPath('/stats')                -> true
  *   isStatsPath('/stats/answer-check')   -> true
+ *   isStatsPath('/variants')             -> true
  *   isStatsPath('/records')              -> false
  */
 export function isStatsPath(pathname: string): boolean {
-  return isUnder(pathname, STATS_PATH)
+  return isUnder(pathname, STATS_PATH) || statsChildPaths.some((path) => isUnder(pathname, path))
 }
 
 /**
@@ -96,11 +100,15 @@ export function isStatsPath(pathname: string): boolean {
  * (카드 · 목표 화면은 자기 화면에 돌아가기 링크가 있습니다)
  *
  *   getBackToTabLink('/records/quiz') -> { to: '/records', label: '기록' }
+ *   getBackToTabLink('/variants')     -> { to: '/stats', label: '통계' }
  *   getBackToTabLink('/timer')        -> null
  */
 export function getBackToTabLink(pathname: string): { to: string; label: string } | null {
   if (recordsChildPaths.some((path) => isUnder(pathname, path))) {
     return { to: RECORDS_PATH, label: '기록' }
+  }
+  if (statsChildPaths.some((path) => isUnder(pathname, path))) {
+    return { to: STATS_PATH, label: '통계' }
   }
   return null
 }

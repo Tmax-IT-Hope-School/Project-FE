@@ -1,5 +1,6 @@
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AiAnalysisCard, AnalysisInsight } from '@/components/ui/AiAnalysisCard'
 import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
 import { Card } from '@/components/ui/Card'
@@ -150,6 +151,24 @@ export function StatsPage() {
 
       {/* 오늘 푼 문제 사진 채점: [사진 올리기] → (PC) QR 창 → 폰으로 찍어 올리면 아래에 결과 카드 (2026-10-24) */}
       <AnswerCheckCard />
+
+      {/* 수학 변형 문제(틀린 문제를 매일 바꿔서 다시 풀기) 화면으로 가는 입구 (2026-10-24, pages/VariantPage.tsx) */}
+      <Link
+        to="/variants"
+        className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-white px-5 py-4 transition-colors hover:bg-slate-50"
+      >
+        <span className="flex flex-col">
+          <span className="text-[17px] font-semibold tracking-tight text-slate-900">
+            수학 변형 문제
+          </span>
+          <span className="text-sm break-keep text-slate-500">
+            틀린 문제를 매일 바꿔서 다시 풀어요
+          </span>
+        </span>
+        <span aria-hidden className="text-slate-400">
+          ›
+        </span>
+      </Link>
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → AI 분석 (가장 자주 보는 것을 위로)
           내 숲 · 지난 통화 요약은 2026-10-24 에 뺐습니다. (lib/forest*.ts · lib/callSummary.ts 는 다른 곳이 써서 남김) */}
