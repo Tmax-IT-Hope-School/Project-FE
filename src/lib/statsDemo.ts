@@ -35,12 +35,16 @@ export interface StatsUnit {
   correct: number
   /** 이번 주 푼 문제 수 */
   solved: number
-  /** 이번 주 공부 시간 (시간) */
-  hours: number
+  /** 이번 주 공부 시간 (시간). 모르면 null (서버 기록에는 단원별 공부 시간이 없음) */
+  hours: number | null
   /** 한 문제 푸는 데 걸린 평균 시간 (초) */
   speedSec: number
-  /** 지난주보다 몇 초 달라졌는지. 음수면 빨라짐 */
-  speedDeltaSec: number
+  /** 지난주보다 몇 초 달라졌는지. 음수면 빨라짐. 모르면 null */
+  speedDeltaSec: number | null
+  /** 그래프 선 · 막대 색 */
+  color: string
+  /** 요일별 점수 (월 ~ 일, 7개). 그날 푼 문제가 없으면 null */
+  dailyScores: (number | null)[]
 }
 
 /** 일간 리포트 하나 */
@@ -63,8 +67,8 @@ export interface StatsSubject {
   name: string
   /** 그래프 선 · 점 색 (SVG 에 바로 씁니다) */
   color: string
-  /** 요일별 점수 (월 ~ 일, 7개) */
-  scores: number[]
+  /** 요일별 점수 (월 ~ 일, 7개). 그날 푼 문제가 없으면 null */
+  scores: (number | null)[]
   /** 요일별 공부 시간 (시간, 7개) */
   hours: number[]
   /** 지난주와 비교한 한 줄. 예) '지난주보다 +6점' */
@@ -83,6 +87,24 @@ export interface StatsSubject {
 /** 단원 선의 색. 과목을 골랐을 때 단원 4개를 이 순서로 칠합니다. (과목 색과 같은 4색) */
 export const UNIT_COLORS = ['#e8590c', '#4f46e5', '#0c8a6c', '#d6336c']
 
+/** 통계 탭이 그리는 데이터 한 벌 (시연용 예시든 서버든 같은 모양) */
+export interface StatsData {
+  /** true 면 시연용 예시 */
+  isDemo: boolean
+  /** 예) '10월 19일 ~ 10월 25일' */
+  weekLabel: string
+  /** 요일별 날짜 글자 7개. 예) '10월 23일 (금)' */
+  dateLabels: string[]
+  subjects: StatsSubject[]
+  /** 요일별 전체 공부 시간 (시간, 7개). 과목이 없는 카드 타이머 기록도 들어 있습니다. */
+  totalHours: number[]
+  all: StatsAllText
+}
+
+/** 예시 데이터를 적을 때 쓰는 단원 모양 (색 · 요일별 점수는 아래 DEMO_STATS 에서 채움) */
+type DemoUnit = Omit<StatsUnit, 'color' | 'dailyScores'>
+type DemoSubject = Omit<StatsSubject, 'units'> & { units: DemoUnit[] }
+
 function unit(
   name: string,
   correct: number,
@@ -90,11 +112,11 @@ function unit(
   hours: number,
   speedSec: number,
   speedDeltaSec: number,
-): StatsUnit {
+): DemoUnit {
   return { name, correct, solved, hours, speedSec, speedDeltaSec }
 }
 
-export const DEMO_STATS_SUBJECTS: StatsSubject[] = [
+const DEMO_SUBJECTS_RAW: DemoSubject[] = [
   {
     id: 'korean',
     name: '국어',
@@ -370,10 +392,21 @@ export function sum(values: number[]): number {
 /**
  * 모든 과목의 요일별 평균 점수 (그래프의 검은 '전체 평균' 선)
  *
- *   allSubjectsAverage(DEMO_STATS_SUBJECTS) -> [70, 72, 72, 74, 77, 78, 81]
+ * 그날 점수가 있는 과목만 평균 냅니다. 아무 과목도 없으면 null
+ *
+ *   allSubjectsAverage(예시 과목들) -> [70, 72, 72, 74, 77, 78, 81]
  */
-export function allSubjectsAverage(subjects: StatsSubject[]): number[] {
-  return STATS_DAYS.map((_, dayIndex) => average(subjects.map((s) => s.scores[dayIndex])))
+export function allSubjectsAverage(subjects: StatsSubject[]): (number | null)[] {
+  return STATS_DAYS.map((_, dayIndex) => {
+    const scores = subjects.map((s) => s.scores[dayIndex]).filter((score) => score !== null)
+    return scores.length > 0 ? average(scores) : null
+  })
+}
+
+/** 점수 목록에서 null 을 빼고 평균. 하나도 없으면 null */
+export function averageOrNull(values: (number | null)[]): number | null {
+  const numbers = values.filter((value) => value !== null)
+  return numbers.length > 0 ? average(numbers) : null
 }
 
 // 단원별 요일 점수의 오르내림 모양입니다. (예시 데이터라 단원의 주간 평균에서 만들어 냅니다)
@@ -388,7 +421,7 @@ const UNIT_WAVES = [
  * 단원 하나의 요일별 점수를 만듭니다. 평균이 단원의 정답률(correct)과 비슷하게 나옵니다. (예시용)
  * unitIndex 는 과목 안에서 몇 번째 단원인지 (0 ~ 3)
  */
-export function unitDailyScores(unitData: StatsUnit, unitIndex: number): number[] {
+export function unitDailyScores(unitData: Pick<StatsUnit, 'correct'>, unitIndex: number): number[] {
   const wave = UNIT_WAVES[unitIndex % UNIT_WAVES.length]
   const waveAverage = sum(wave) / wave.length
   return wave.map((offset) =>
@@ -421,4 +454,26 @@ export function formatHours(hours: number): string {
 export function formatSpeedDelta(deltaSec: number): string {
   if (deltaSec === 0) return '그대로'
   return deltaSec < 0 ? `${Math.abs(deltaSec)}초 빨라짐` : `${deltaSec}초 느려짐`
+}
+
+/** 시연용 예시 과목 (단원마다 색과 요일별 점수를 채운 것) */
+export const DEMO_STATS_SUBJECTS: StatsSubject[] = DEMO_SUBJECTS_RAW.map((subject) => ({
+  ...subject,
+  units: subject.units.map((item, index) => ({
+    ...item,
+    color: UNIT_COLORS[index % UNIT_COLORS.length],
+    dailyScores: unitDailyScores(item, index),
+  })),
+}))
+
+/** 통계 탭의 시연용 예시 한 벌 (테스트 로그인) */
+export const DEMO_STATS: StatsData = {
+  isDemo: true,
+  weekLabel: STATS_WEEK_LABEL,
+  dateLabels: STATS_DATES,
+  subjects: DEMO_STATS_SUBJECTS,
+  totalHours: STATS_DAYS.map((_, dayIndex) =>
+    sum(DEMO_STATS_SUBJECTS.map((subject) => subject.hours[dayIndex])),
+  ),
+  all: DEMO_STATS_ALL,
 }

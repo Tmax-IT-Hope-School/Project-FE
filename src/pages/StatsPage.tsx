@@ -1,34 +1,36 @@
+import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { Card } from '@/components/ui/Card'
+import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { cn } from '@/lib/cn'
+import { getTodayKey } from '@/lib/date'
+import { quizStatsQuery, toStatsData, weekDateKeys } from '@/lib/quizStatsApi'
 import {
   allSubjectsAverage,
   average,
-  DEMO_STATS_ALL,
-  DEMO_STATS_SUBJECTS,
+  averageOrNull,
+  DEMO_STATS,
   formatHours,
   formatSpeedDelta,
-  STATS_DATES,
   STATS_DAYS,
-  STATS_WEEK_LABEL,
   sum,
-  UNIT_COLORS,
-  unitDailyScores,
   WEAK_SCORE,
+  type StatsData,
   type StatsReport,
 } from '@/lib/statsDemo'
+import { useSuspenseQuery } from '@tanstack/react-query'
 
 /*
  * 통계 탭(/stats) 화면입니다. (2026-10-24)
  *
- *   위: [전체 · 국어 · 수학 · 영어 · 과학] 과목 고르기 + [이번 주 전체 · 월 ~ 일] 요일 고르기 (처음엔 둘 다 전체)
+ *   위: [전체 · 과목들] 과목 고르기 + [이번 주 전체 · 월 ~ 일] 요일 고르기 (처음엔 둘 다 전체)
  *   왼쪽: 꺾은선 그래프 (세로 = 점수, 가로 = 요일)
  *         전체   -> 모든 과목 평균(검은 굵은 선) + 과목별 선(옅게)
  *         과목   -> 그 과목의 단원별 선
  *   오른쪽: 상세 분석 (요약 숫자 4개 · 과목/단원별 정답률 · 공부 시간 · 풀이 속도 · 일간 리포트)
  *
- * 고른 과목 · 요일은 주소(?subject=math&day=thu)에 둡니다. 새로고침해도 그대로입니다.
- * ⚠️ 지금은 시연용 예시 데이터입니다. (lib/statsDemo.ts)
+ * 진짜 로그인은 서버의 퀴즈 결과로(lib/quizStatsApi.ts), 테스트 로그인은 시연용 예시로(lib/statsDemo.ts) 그립니다.
+ * 고른 과목 · 요일은 주소(?subject=3&day=thu)에 둡니다. 새로고침해도 그대로입니다.
  */
 
 /** 주소에 쓰는 요일 이름 (STATS_DAYS 와 같은 순서). 'week' 는 이번 주 전체 */
@@ -37,11 +39,11 @@ const DAY_IDS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 /** '전체' 를 골랐을 때 쓰는 색 */
 const ALL_COLOR = '#191f28'
 
-/** 그래프 선 하나 */
+/** 그래프 선 하나. 점수가 null 인 날은 점을 찍지 않습니다. */
 interface ChartLine {
   name: string
   color: string
-  scores: number[]
+  scores: (number | null)[]
   /** true 면 옅고 가늘게 (전체 화면의 과목 선) */
   faded: boolean
 }
@@ -50,11 +52,14 @@ interface ChartLine {
 interface DetailRow {
   name: string
   color: string
-  correct: number
-  solved: number
-  hours: number
-  speedSec: number
-  speedDeltaSec: number
+  /** 정답률(%). 푼 문제가 없으면 null */
+  correct: number | null
+  /** 푼 문제 수. 모르면 null */
+  solved: number | null
+  /** 공부 시간(시간). 모르면 null (서버 기록에는 단원 · 과목별 시간이 없음) */
+  hours: number | null
+  speedSec: number | null
+  speedDeltaSec: number | null
 }
 
 /** 오른쪽 상세 분석에 보여 줄 것 */
@@ -62,10 +67,12 @@ interface Detail {
   name: string
   title: string
   color: string
-  score: number
+  score: number | null
   scoreNote: string
-  hours: number
-  speedSec: number
+  /** 공부 시간(시간). 모르면 null */
+  hours: number | null
+  hoursNote: string
+  speedSec: number | null
   summary: string
   effect: string
   rowHeader: '과목' | '단원'
@@ -75,28 +82,48 @@ interface Detail {
 }
 
 export function StatsPage() {
+  const isServerData = useIsServerData()
+  if (!isServerData) return <StatsView data={DEMO_STATS} />
+  return (
+    <AsyncBoundary
+      pendingFallback={<p className="px-1 py-10 text-center text-slate-500">통계를 불러오는 중…</p>}
+      errorMessage="통계를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+    >
+      <ServerStats />
+    </AsyncBoundary>
+  )
+}
+
+/** 진짜 로그인: 이번 주(월 ~ 일) 통계를 서버에서 받아 그립니다. */
+function ServerStats() {
+  const dates = weekDateKeys(getTodayKey())
+  const { data } = useSuspenseQuery(quizStatsQuery(dates[0], dates[6]))
+  return <StatsView data={toStatsData(data, dates)} />
+}
+
+function StatsView({ data }: { data: StatsData }) {
   const [subjectId, setSubjectId] = useQueryParam('subject', 'all')
   const [dayId, setDayId] = useQueryParam('day', 'week')
 
   // 주소는 손으로 고칠 수 있어서, 모르는 값이면 전체로 봅니다.
-  const subjectIndex = DEMO_STATS_SUBJECTS.findIndex((subject) => subject.id === subjectId)
+  const subjectIndex = data.subjects.findIndex((subject) => subject.id === subjectId)
   const dayIndex = DAY_IDS.indexOf(dayId)
 
-  const { title, lines, averageLine } = buildChart(subjectIndex)
-  const detail = buildDetail(subjectIndex, dayIndex)
+  const { title, lines, averageLine } = buildChart(data, subjectIndex)
+  const detail = buildDetail(data, subjectIndex, dayIndex)
 
   const subjectChips = [
     {
       id: 'all',
       name: '전체',
       color: ALL_COLOR,
-      score: average(allSubjectsAverage(DEMO_STATS_SUBJECTS)),
+      score: averageOrNull(allSubjectsAverage(data.subjects)),
     },
-    ...DEMO_STATS_SUBJECTS.map((s) => ({
+    ...data.subjects.map((s) => ({
       id: s.id,
       name: s.name,
       color: s.color,
-      score: average(s.scores),
+      score: averageOrNull(s.scores),
     })),
   ]
   const dayChips = [
@@ -114,15 +141,23 @@ export function StatsPage() {
           </p>
         </div>
         <p className="text-sm font-semibold text-slate-700">
-          {STATS_WEEK_LABEL}
-          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-            시연용 예시
-          </span>
+          {data.weekLabel}
+          {data.isDemo && (
+            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              시연용 예시
+            </span>
+          )}
         </p>
       </div>
 
+      {data.subjects.length === 0 && (
+        <p className="rounded-2xl bg-white p-5 text-[15px] break-keep text-slate-600">
+          아직 과목이 없어요. 확인 문제를 다 푼 뒤 과목을 고르면 여기에 점수가 쌓여요.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        {/* 왼쪽: 고르기 + 그래프 + AI 한 줄 */}
+        {/* 왼쪽: 고르기 + 그래프 + 한 줄 정리 */}
         <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <div role="group" aria-label="과목 고르기" className="flex flex-wrap gap-2">
@@ -146,7 +181,7 @@ export function StatsPage() {
                     <ColorDot color={chip.color} />
                     {chip.name}
                     <span className="text-[13px] font-medium text-slate-500">
-                      평균 {chip.score}점
+                      {chip.score === null ? '기록 없음' : `평균 ${chip.score}점`}
                     </span>
                   </button>
                 )
@@ -190,7 +225,9 @@ export function StatsPage() {
           </Card>
 
           <div className="bg-brand-light rounded-2xl p-5">
-            <p className="text-brand text-[13px] font-bold">AI 한 줄 정리 · {detail.name}</p>
+            <p className="text-brand text-[13px] font-bold">
+              {data.isDemo ? 'AI 한 줄 정리' : '한 줄 정리'} · {detail.name}
+            </p>
             <p className="mt-1 text-base leading-relaxed break-keep text-slate-900">
               {detail.summary}
             </p>
@@ -204,7 +241,7 @@ export function StatsPage() {
         </div>
 
         {/* 오른쪽: 상세 분석 */}
-        <DetailPanel detail={detail} />
+        <DetailPanel detail={detail} dateLabels={data.dateLabels} />
       </div>
     </div>
   )
@@ -222,30 +259,29 @@ function ColorDot({ color }: { color: string }) {
 }
 
 /** 왼쪽 그래프에 그릴 선들을 정합니다. 전체면 과목별 + 평균선, 과목이면 단원별 */
-function buildChart(subjectIndex: number): {
-  title: string
-  lines: ChartLine[]
-  averageLine: number[] | null
-} {
+function buildChart(
+  data: StatsData,
+  subjectIndex: number,
+): { title: string; lines: ChartLine[]; averageLine: (number | null)[] | null } {
   if (subjectIndex < 0) {
     return {
       title: '전체 평균 점수 (모든 과목)',
-      lines: DEMO_STATS_SUBJECTS.map((s) => ({
+      lines: data.subjects.map((s) => ({
         name: s.name,
         color: s.color,
         scores: s.scores,
         faded: true,
       })),
-      averageLine: allSubjectsAverage(DEMO_STATS_SUBJECTS),
+      averageLine: allSubjectsAverage(data.subjects),
     }
   }
-  const subject = DEMO_STATS_SUBJECTS[subjectIndex]
+  const subject = data.subjects[subjectIndex]
   return {
     title: `${subject.name} 단원별 점수`,
-    lines: subject.units.map((u, i) => ({
+    lines: subject.units.map((u) => ({
       name: u.name,
-      color: UNIT_COLORS[i],
-      scores: unitDailyScores(u, i),
+      color: u.color,
+      scores: u.dailyScores,
       faded: false,
     })),
     averageLine: null,
@@ -253,53 +289,66 @@ function buildChart(subjectIndex: number): {
 }
 
 /** 오른쪽 상세 분석의 내용을 정합니다. 요일을 고르면 그날 값, 아니면 이번 주 평균 · 합계 */
-function buildDetail(subjectIndex: number, dayIndex: number): Detail {
+function buildDetail(data: StatsData, subjectIndex: number, dayIndex: number): Detail {
   const isDay = dayIndex >= 0
-  const pick = (series: number[]) => (isDay ? series[dayIndex] : average(series))
-  const dayNote = (series: number[]) => {
-    if (dayIndex === 0) return '이번 주 첫날'
-    const diff = series[dayIndex] - series[dayIndex - 1]
+  const pick = (series: (number | null)[]) => (isDay ? series[dayIndex] : averageOrNull(series))
+  const dayNote = (series: (number | null)[]) => {
+    const today = series[dayIndex]
+    const yesterday = dayIndex > 0 ? series[dayIndex - 1] : null
+    if (today === null) return '이날 푼 문제 없음'
+    if (yesterday === null) return '전날 기록 없음'
+    const diff = today - yesterday
     return `전날보다 ${diff >= 0 ? '+' : ''}${diff}점`
   }
   const daySuffix = isDay ? ` · ${STATS_DAYS[dayIndex]}요일` : ''
+  const totalHours = isDay ? data.totalHours[dayIndex] : sum(data.totalHours)
 
   if (subjectIndex < 0) {
-    const allScores = allSubjectsAverage(DEMO_STATS_SUBJECTS)
-    const rows = DEMO_STATS_SUBJECTS.map((s) => ({
+    const allScores = allSubjectsAverage(data.subjects)
+    const rows: DetailRow[] = data.subjects.map((s) => ({
       name: s.name,
       color: s.color,
       correct: pick(s.scores),
-      solved: isDay ? 10 : sum(s.units.map((u) => u.solved)),
-      hours: isDay ? s.hours[dayIndex] : sum(s.hours),
-      speedSec: average(s.units.map((u) => u.speedSec)),
-      speedDeltaSec: average(s.units.map((u) => u.speedDeltaSec)),
+      // 그날 푼 문제 수는 예시에서만 압니다. (예시는 하루 10문제)
+      solved: isDay ? (data.isDemo ? 10 : null) : sum(s.units.map((u) => u.solved)),
+      // 과목별 공부 시간은 예시에만 있습니다. (서버 기록의 카드 타이머에는 과목이 없음)
+      hours: data.isDemo ? (isDay ? s.hours[dayIndex] : sum(s.hours)) : null,
+      speedSec: s.units.length > 0 ? average(s.units.map((u) => u.speedSec)) : null,
+      speedDeltaSec: averageOrNull(s.units.map((u) => u.speedDeltaSec)),
     }))
+    const speeds = rows.map((r) => r.speedSec)
     return {
       name: '전체',
       title: `전체 과목 분석${daySuffix}`,
       color: ALL_COLOR,
       score: pick(allScores),
-      scoreNote: isDay ? dayNote(allScores) : DEMO_STATS_ALL.weekDelta,
-      hours: sum(rows.map((r) => r.hours)),
-      speedSec: average(rows.map((r) => r.speedSec)),
-      summary: DEMO_STATS_ALL.summary,
-      effect: DEMO_STATS_ALL.effect,
+      scoreNote: isDay ? dayNote(allScores) : data.all.weekDelta,
+      hours: totalHours,
+      hoursNote: '타이머 기록 전체',
+      speedSec: averageOrNull(speeds),
+      summary: data.all.summary,
+      effect: data.all.effect,
       rowHeader: '과목',
       rows,
-      reportFocus: DEMO_STATS_ALL.reportFocus,
-      reports: pickReports(DEMO_STATS_ALL.reports, allScores, rows, dayIndex),
+      reportFocus: data.all.reportFocus,
+      reports: pickReports(data.all.reports, allScores, rows, dayIndex),
     }
   }
 
-  const subject = DEMO_STATS_SUBJECTS[subjectIndex]
+  const subject = data.subjects[subjectIndex]
   const weekHours = sum(subject.hours)
-  const rows = subject.units.map((u, i) => ({
+  const rows: DetailRow[] = subject.units.map((u) => ({
     name: u.name,
-    color: UNIT_COLORS[i],
-    correct: pick(unitDailyScores(u, i)),
-    // 요일을 고르면 그날 공부 시간을 단원 비율대로 나눠서 보여 줍니다. (예시용)
-    solved: isDay ? Math.max(1, Math.round(u.solved / 7)) : u.solved,
-    hours: isDay ? (u.hours * subject.hours[dayIndex]) / weekHours : u.hours,
+    color: u.color,
+    correct: pick(u.dailyScores),
+    // 요일을 고르면 예시는 하루치를 어림해서 보여 줍니다. 서버 기록은 그날 문제 수를 따로 주지 않습니다.
+    solved: isDay ? (data.isDemo ? Math.max(1, Math.round(u.solved / 7)) : null) : u.solved,
+    hours:
+      u.hours === null
+        ? null
+        : isDay && weekHours > 0
+          ? (u.hours * subject.hours[dayIndex]) / weekHours
+          : u.hours,
     speedSec: u.speedSec,
     speedDeltaSec: u.speedDeltaSec,
   }))
@@ -309,8 +358,10 @@ function buildDetail(subjectIndex: number, dayIndex: number): Detail {
     color: subject.color,
     score: pick(subject.scores),
     scoreNote: isDay ? dayNote(subject.scores) : subject.weekDelta,
-    hours: isDay ? subject.hours[dayIndex] : weekHours,
-    speedSec: average(subject.units.map((u) => u.speedSec)),
+    // 과목별 공부 시간은 예시에만 있습니다. 서버 기록은 "전체" 에서만 봅니다.
+    hours: data.isDemo ? (isDay ? subject.hours[dayIndex] : weekHours) : null,
+    hoursNote: data.isDemo ? '타이머 기록' : '전체에서만 봐요',
+    speedSec: subject.units.length > 0 ? average(subject.units.map((u) => u.speedSec)) : null,
     summary: subject.summary,
     effect: subject.effect,
     rowHeader: '단원',
@@ -323,11 +374,11 @@ function buildDetail(subjectIndex: number, dayIndex: number): Detail {
 /**
  * 보여 줄 일간 리포트를 고릅니다.
  * 이번 주 전체면 써 둔 리포트 전부, 요일을 고르면 그날 것 하나.
- * 그날 리포트가 없으면 그날 점수로 간단히 만듭니다. (예시용)
+ * 그날 리포트가 없으면 그날 점수로 간단히 만듭니다. 그날 점수도 없으면 없음.
  */
 function pickReports(
   reports: StatsReport[],
-  scores: number[],
+  scores: (number | null)[],
   rows: DetailRow[],
   dayIndex: number,
 ): StatsReport[] {
@@ -335,23 +386,30 @@ function pickReports(
   const written = reports.filter((report) => report.dayIndex === dayIndex)
   if (written.length > 0) return written
 
-  const delta = dayIndex === 0 ? 0 : scores[dayIndex] - scores[dayIndex - 1]
-  const sorted = [...rows].sort((a, b) => b.correct - a.correct)
-  const best = sorted[0].name
-  const worst = sorted[sorted.length - 1].name
-  let note = `전날보다 ${Math.abs(delta)}점 내려갔어. ${worst} 쪽을 내일 다시 볼게.`
-  if (dayIndex === 0) note = '이번 주 첫날이야. 이 점수를 기준으로 한 주 변화를 볼게.'
-  else if (delta >= 0) note = `전날보다 ${delta}점 올랐어. ${best} 쪽이 특히 좋았어.`
+  const score = scores[dayIndex]
+  if (score === null) return []
+  const yesterday = dayIndex > 0 ? scores[dayIndex - 1] : null
+  const delta = yesterday === null ? 0 : score - yesterday
+  const scored = rows.filter((row) => row.correct !== null) as (DetailRow & { correct: number })[]
+  const sorted = [...scored].sort((a, b) => b.correct - a.correct)
+  const best = sorted[0]?.name
+  const worst = sorted[sorted.length - 1]?.name
+  let note = `전날보다 ${Math.abs(delta)}점 내려갔어. ${worst ?? ''} 쪽을 내일 다시 볼게.`
+  if (yesterday === null) note = '이날 점수를 기준으로 한 주 변화를 볼게.'
+  else if (delta >= 0) note = `전날보다 ${delta}점 올랐어. ${best ?? ''} 쪽이 특히 좋았어.`
   return [
     {
       dayIndex,
-      score: scores[dayIndex],
+      score,
       delta,
       note,
-      tags: [
-        ['가장 좋음', best],
-        ['더 볼 것', worst],
-      ],
+      tags:
+        best && worst && best !== worst
+          ? [
+              ['가장 좋음', best],
+              ['더 볼 것', worst],
+            ]
+          : [],
     },
   ]
 }
@@ -372,9 +430,18 @@ function yOf(score: number): number {
   return CHART_BOTTOM - (score / 100) * (CHART_BOTTOM - CHART_TOP)
 }
 
-/** 점수 7개를 polyline 의 points 글자로 바꿉니다. 예) '60,93 166.7,85 …' */
-function toPoints(scores: number[]): string {
-  return scores.map((score, i) => `${xOf(i).toFixed(1)},${yOf(score).toFixed(1)}`).join(' ')
+/** 점수들을 polyline 의 points 글자로 바꿉니다. 점수가 없는 날은 건너뛰고 이어서 그립니다. */
+function toPoints(scores: (number | null)[]): string {
+  return scores
+    .map((score, i) => (score === null ? null : `${xOf(i).toFixed(1)},${yOf(score).toFixed(1)}`))
+    .filter((point) => point !== null)
+    .join(' ')
+}
+
+/** 마지막으로 점수가 있는 날의 점수. 하나도 없으면 null */
+function lastScore(scores: (number | null)[]): number | null {
+  const numbers = scores.filter((score) => score !== null)
+  return numbers.length > 0 ? numbers[numbers.length - 1] : null
 }
 
 /** 선 끝 이름들이 겹치지 않게 세로 위치를 22 이상 띄워서 돌려줍니다. (lastScores 와 같은 순서) */
@@ -391,7 +458,7 @@ function labelYs(lastScores: number[]): number[] {
 interface ScoreChartProps {
   lines: ChartLine[]
   /** 전체 평균 선 (검은 굵은 선). 없으면 null */
-  averageLine: number[] | null
+  averageLine: (number | null)[] | null
   /** 강조할 요일. -1 이면 없음 */
   dayIndex: number
   title: string
@@ -399,10 +466,12 @@ interface ScoreChartProps {
 
 /** 꺾은선 그래프. 라이브러리 없이 SVG 로 그립니다. */
 function ScoreChart({ lines, averageLine, dayIndex, title }: ScoreChartProps) {
-  const labeled = averageLine
+  const all = averageLine
     ? [...lines, { name: '전체 평균', color: ALL_COLOR, scores: averageLine, faded: false }]
     : lines
-  const ys = labelYs(labeled.map((line) => line.scores[6]))
+  // 점수가 하루도 없는 선은 그리지 않습니다.
+  const drawn = all.filter((line) => lastScore(line.scores) !== null)
+  const ys = labelYs(drawn.map((line) => lastScore(line.scores) ?? 0))
 
   return (
     // 375px 에서는 그래프만 옆으로 밀어서 봅니다. (페이지 전체 가로 스크롤은 생기지 않음)
@@ -450,9 +519,14 @@ function ScoreChart({ lines, averageLine, dayIndex, title }: ScoreChartProps) {
         <text x={335} y={340} textAnchor="middle" fontSize={15} fill="#64748b">
           요일
         </text>
+        {drawn.length === 0 && (
+          <text x={335} y={160} textAnchor="middle" fontSize={17} fill="#94a3b8">
+            이번 주에 푼 확인 문제가 아직 없어요
+          </text>
+        )}
 
-        {labeled.map((line, lineIndex) => {
-          const isAverage = averageLine !== null && lineIndex === labeled.length - 1
+        {drawn.map((line, lineIndex) => {
+          const isAverage = averageLine !== null && line.scores === averageLine
           const width = isAverage ? 5 : line.faded ? 2 : 3.5
           const opacity = line.faded ? 0.4 : 1
           return (
@@ -464,15 +538,17 @@ function ScoreChart({ lines, averageLine, dayIndex, title }: ScoreChartProps) {
                 strokeWidth={width}
                 strokeLinejoin="round"
               />
-              {line.scores.map((score, i) => (
-                <circle
-                  key={i}
-                  cx={xOf(i)}
-                  cy={yOf(score)}
-                  r={isAverage ? 5 : 4}
-                  fill={line.color}
-                />
-              ))}
+              {line.scores.map((score, i) =>
+                score === null ? null : (
+                  <circle
+                    key={i}
+                    cx={xOf(i)}
+                    cy={yOf(score)}
+                    r={isAverage ? 5 : 4}
+                    fill={line.color}
+                  />
+                ),
+              )}
               <text
                 x={624}
                 y={ys[lineIndex]}
@@ -492,8 +568,10 @@ function ScoreChart({ lines, averageLine, dayIndex, title }: ScoreChartProps) {
 
 /* ---------- 오른쪽 상세 분석 ---------- */
 
-function DetailPanel({ detail }: { detail: Detail }) {
-  const weakCount = detail.rows.filter((row) => row.correct < WEAK_SCORE).length
+function DetailPanel({ detail, dateLabels }: { detail: Detail; dateLabels: string[] }) {
+  const weakCount = detail.rows.filter(
+    (row) => row.correct !== null && row.correct < WEAK_SCORE,
+  ).length
 
   return (
     <Card className="flex min-w-0 flex-col gap-5">
@@ -508,9 +586,21 @@ function DetailPanel({ detail }: { detail: Detail }) {
 
       {/* 요약 숫자 4개. 375px 에서는 2 x 2 */}
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
-        <SummaryTile label="평균 정답률" value={`${detail.score}%`} note={detail.scoreNote} />
-        <SummaryTile label="공부 시간" value={formatHours(detail.hours)} note="타이머 기록" />
-        <SummaryTile label="풀이 속도" value={`${detail.speedSec}초`} note="한 문제당 평균" />
+        <SummaryTile
+          label="평균 정답률"
+          value={detail.score === null ? '–' : `${detail.score}%`}
+          note={detail.scoreNote}
+        />
+        <SummaryTile
+          label="공부 시간"
+          value={detail.hours === null ? '–' : formatHours(detail.hours)}
+          note={detail.hoursNote}
+        />
+        <SummaryTile
+          label="풀이 속도"
+          value={detail.speedSec === null ? '–' : `${detail.speedSec}초`}
+          note="한 문제당 평균"
+        />
         <SummaryTile
           label="취약"
           value={`${weakCount}개`}
@@ -521,41 +611,53 @@ function DetailPanel({ detail }: { detail: Detail }) {
 
       <section>
         <h3 className="text-base font-bold text-slate-900">{detail.rowHeader}별 분석</h3>
+        {detail.rows.length === 0 && (
+          <p className="mt-2 text-sm text-slate-500">아직 푼 확인 문제가 없어요.</p>
+        )}
         <ul className="mt-2 divide-y divide-slate-100">
           {detail.rows.map((row) => (
             <li key={row.name} className="py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <p className="flex items-center gap-2 font-bold text-slate-900">
                   {row.name}
-                  {row.correct < WEAK_SCORE && (
+                  {row.correct !== null && row.correct < WEAK_SCORE && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
                       {detail.rowHeader === '단원' ? '취약' : '주의'}
                     </span>
                   )}
                 </p>
                 <p className="text-[13px] text-slate-500">
-                  {formatHours(row.hours)} · <b className="text-slate-800">{row.speedSec}초</b>{' '}
-                  <span
-                    className={cn(
-                      'font-semibold',
-                      row.speedDeltaSec < 0
-                        ? 'text-emerald-700'
-                        : row.speedDeltaSec > 0
-                          ? 'text-orange-700'
-                          : 'text-slate-500',
-                    )}
-                  >
-                    ({formatSpeedDelta(row.speedDeltaSec)})
-                  </span>
+                  {row.hours !== null && `${formatHours(row.hours)} · `}
+                  {row.speedSec !== null && <b className="text-slate-800">{row.speedSec}초</b>}
+                  {row.speedDeltaSec !== null && (
+                    <span
+                      className={cn(
+                        'ml-1 font-semibold',
+                        row.speedDeltaSec < 0
+                          ? 'text-emerald-700'
+                          : row.speedDeltaSec > 0
+                            ? 'text-orange-700'
+                            : 'text-slate-500',
+                      )}
+                    >
+                      ({formatSpeedDelta(row.speedDeltaSec)})
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-slate-200">
                 {/* 정답률만큼 막대를 채웁니다. 너비 · 색이 값마다 달라서 style 로 줍니다. */}
-                <div style={{ width: `${row.correct}%`, backgroundColor: row.color }} />
+                <div style={{ width: `${row.correct ?? 0}%`, backgroundColor: row.color }} />
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                정답 <b className="text-slate-900">{row.correct}%</b> · 오답 {100 - row.correct}% ·{' '}
-                {row.solved}문제
+                {row.correct === null ? (
+                  '이날 푼 문제 없음'
+                ) : (
+                  <>
+                    정답 <b className="text-slate-900">{row.correct}%</b> · 오답 {100 - row.correct}
+                    %{row.solved !== null && ` · ${row.solved}문제`}
+                  </>
+                )}
               </p>
             </li>
           ))}
@@ -565,6 +667,9 @@ function DetailPanel({ detail }: { detail: Detail }) {
       <section>
         <h3 className="text-base font-bold text-slate-900">실력 변화 분석 · 일간 리포트</h3>
         <p className="mt-0.5 text-xs break-keep text-slate-500">{detail.reportFocus}</p>
+        {detail.reports.length === 0 && (
+          <p className="mt-2 text-sm text-slate-500">이 기간에는 리포트가 없어요.</p>
+        )}
         <ul className="mt-2 flex flex-col gap-2">
           {detail.reports.map((report) => (
             <li
@@ -574,7 +679,7 @@ function DetailPanel({ detail }: { detail: Detail }) {
               style={{ borderLeftColor: detail.color }}
             >
               <div className="w-24 shrink-0">
-                <p className="text-xs text-slate-500">{STATS_DATES[report.dayIndex]}</p>
+                <p className="text-xs text-slate-500">{dateLabels[report.dayIndex]}</p>
                 <p className="text-xl font-bold text-slate-900">{report.score}점</p>
                 <p
                   className={cn(

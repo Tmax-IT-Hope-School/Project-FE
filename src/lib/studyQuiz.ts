@@ -63,6 +63,10 @@ export interface CoachQuiz {
   /** true 면 AI 가 아니라 시연용 예시 문제입니다. */
   isDemo: boolean
   status: QuizStatus
+  /** AI 가 정한 큰 단원 하나 (예: '함수'). 모르면 null. 통계 탭에 저장할 때 씁니다. (2026-10-24) */
+  unit: string | null
+  /** 통계에 저장한 과목의 id. 아직 안 골랐으면 null (다 푼 뒤 과목을 고르면 서버에 저장) */
+  savedSubjectId: string | null
 }
 
 /** 이 기기에 남기는 결과 하나. 틀린 문제를 1 · 3 · 7일 뒤 다시 낼 수 있게 문제 전체를 남깁니다. */
@@ -110,6 +114,8 @@ export interface QuizReply {
   isDemo: boolean
   /** 시연용 예시를 낸 이유 한 줄 (서버 준비 전 등). 없으면 null */
   notice: string | null
+  /** AI 가 정한 큰 단원 하나. 모르거나 시연용 예시면 null (2026-10-24) */
+  unit: string | null
 }
 
 /** 한 번에 내는 문제 수 (서버는 1 ~ 5개를 받습니다) */
@@ -178,6 +184,7 @@ export function newQuiz(input: {
   cardId: string | null
   questions: QuizQuestion[]
   isDemo: boolean
+  unit: string | null
   now: number
 }): CoachQuiz {
   return {
@@ -192,6 +199,8 @@ export function newQuiz(input: {
     wasGuessed: false,
     isDemo: input.isDemo,
     status: 'open',
+    unit: input.unit,
+    savedSubjectId: null,
   }
 }
 
@@ -446,7 +455,14 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
     throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
   }
   const record = result as Record<string, unknown>
-  const empty = { showHelp: false, notStudy: false, questions: null, isDemo: false, notice: null }
+  const empty = {
+    showHelp: false,
+    notStudy: false,
+    questions: null,
+    isDemo: false,
+    notice: null,
+    unit: null,
+  }
   if (record.showHelp === true) return { ...empty, showHelp: true }
   if (record.reason === 'NOT_STUDY') return { ...empty, notStudy: true }
   if (!Array.isArray(record.questions)) return empty
@@ -454,7 +470,12 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
     .map(toQuizQuestion)
     .filter((question) => question !== null)
     .slice(0, QUIZ_COUNT)
-  return { ...empty, questions: questions.length > 0 ? questions : null }
+  // 단원: 비었거나 30자를 넘으면 모르는 것으로 봅니다. (서버 quiz_results.unit 과 같은 한도)
+  const unit =
+    typeof record.unit === 'string' && record.unit.trim() !== '' && record.unit.trim().length <= 30
+      ? record.unit.trim()
+      : null
+  return { ...empty, questions: questions.length > 0 ? questions : null, unit }
 }
 
 /**
@@ -658,6 +679,7 @@ export function makeDemoQuiz(input: Pick<QuizInput, 'topic' | 'checklist'>): Qui
     questions: (set?.questions ?? DEMO_DEFAULT).slice(0, QUIZ_COUNT),
     isDemo: true,
     notice: null,
+    unit: null,
   }
 }
 
@@ -690,5 +712,8 @@ export function toCoachQuiz(value: unknown): CoachQuiz | null {
     wasGuessed: quiz.wasGuessed === true,
     isDemo: quiz.isDemo === true,
     status,
+    // 예전에 저장된 문제 말풍선에는 이 칸이 없습니다.
+    unit: isText(quiz.unit) ? quiz.unit : null,
+    savedSubjectId: isText(quiz.savedSubjectId) ? quiz.savedSubjectId : null,
   }
 }

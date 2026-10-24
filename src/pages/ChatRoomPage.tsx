@@ -172,7 +172,11 @@ import {
 } from '@/lib/talkLines'
 import { CHAT_PATH } from '@/lib/tabMenu'
 import { getTodayCardsState } from '@/lib/todayCards'
-import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
+import { postQuizResult, toQuizResultBody } from '@/lib/quizStatsApi'
+import { createSubject } from '@/lib/subjectsApi'
+import { useSubjects } from '@/hooks/useSubjects'
+import type { Subject, SubjectColor } from '@/types'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import {
   Fragment,
   useEffect,
@@ -460,7 +464,13 @@ function closeOpenQuizzes(thread: CoachThread): CoachThread {
 function withNewQuiz(
   thread: CoachThread,
   text: string,
-  quiz: { topic: string; cardId: string | null; questions: QuizQuestion[]; isDemo: boolean },
+  quiz: {
+    topic: string
+    cardId: string | null
+    questions: QuizQuestion[]
+    isDemo: boolean
+    unit: string | null
+  },
 ): CoachThread {
   const made = newQuiz({ ...quiz, now: Date.now() })
   return withBubble(closeOpenQuizzes(thread), { speaker: 'ai', text, quiz: made, typing: true })
@@ -494,6 +504,7 @@ function applyQuizReply(thread: CoachThread, result: QuizReply, input: QuizInput
     cardId: input.cardId,
     questions: result.questions,
     isDemo: result.isDemo,
+    unit: result.unit,
   })
 }
 
@@ -548,6 +559,8 @@ function RoomChat({ room }: RoomChatProps) {
   const navigate = useNavigate()
   const { token, user } = useAuth()
   const isServerData = isServerDataToken(token)
+  const subjects = useSubjects()
+  const queryClient = useQueryClient()
   const [todayKey] = useState(getTodayKey)
   const [now] = useState(() => Date.now())
   const sendCheckIn = useSendCheckIn()
@@ -1540,6 +1553,29 @@ function RoomChat({ room }: RoomChatProps) {
     setThread((current) => withQuiz(current, bubbleId, () => after))
   }
 
+  // 다 푼 확인 문제를 고른 과목으로 통계에 저장합니다. (lib/quizStatsApi.ts, 통계 탭 2026-10-24)
+  // 카드에는 과목이 없어서, 다 푼 뒤 학생이 과목을 고릅니다. 저장되면 그 말풍선에 과목을 적어 둬서 다시 묻지 않습니다.
+  const saveQuizStats = useMutation({
+    mutationFn: async (request: { bubbleId: number; quiz: CoachQuiz; pick: StatsSubjectPick }) => {
+      // 아직 없는 기본 과목(국어 등)을 골랐으면 서버에 과목을 먼저 만듭니다.
+      const subjectId =
+        request.pick.subjectId ??
+        (await createSubject({ name: request.pick.name, color: request.pick.color })).id
+      const body = toQuizResultBody(request.quiz, subjectId)
+      if (body === null) throw new Error('저장할 수 없는 문제예요')
+      await postQuizResult(body)
+      return subjectId
+    },
+    onSuccess: (subjectId, request) => {
+      setThread((current) =>
+        withQuiz(current, request.bubbleId, (quiz) => ({ ...quiz, savedSubjectId: subjectId })),
+      )
+      // 새로 만든 과목이 목록에 보이고, 통계 탭이 다음에 열릴 때 새로 받아 오게 합니다.
+      void queryClient.invalidateQueries({ queryKey: ['subjects'] })
+      void queryClient.invalidateQueries({ queryKey: ['quiz-stats'] })
+    },
+  })
+
   /** [틀린 것 다시 보기] — 그 문제 말풍선에서 틀린 문제만 다시 냅니다. (서버를 부르지 않음) */
   function handleReviewWrong(bubble: ThreadBubble) {
     const quiz = bubble.quiz
@@ -1556,6 +1592,7 @@ function RoomChat({ room }: RoomChatProps) {
           cardId: quiz.cardId,
           questions: wrong,
           isDemo: quiz.isDemo,
+          unit: quiz.unit,
         },
       ),
     )
@@ -1587,6 +1624,8 @@ function RoomChat({ room }: RoomChatProps) {
         cardId: null,
         questions: wrong,
         isDemo: false,
+        // 지난 결과에는 단원이 남아 있지 않아서, 다시 푼 결과는 통계에 저장하지 않습니다.
+        unit: null,
       }),
     )
   }
@@ -2030,6 +2069,19 @@ function RoomChat({ room }: RoomChatProps) {
                         onKeepResult={() =>
                           changeQuiz(bubble.id, (quiz) => ({ ...quiz, status: 'done' }))
                         }
+                        statsSubjects={
+                          isServerData && bubble.quiz.unit && !bubble.quiz.isDemo ? subjects : null
+                        }
+                        isSavingStats={saveQuizStats.isPending}
+                        statsError={
+                          saveQuizStats.isError && saveQuizStats.variables?.bubbleId === bubble.id
+                            ? '저장하지 못했어요. 다시 골라 주세요.'
+                            : null
+                        }
+                        onSaveStats={(pick) => {
+                          const quiz = bubble.quiz
+                          if (quiz) saveQuizStats.mutate({ bubbleId: bubble.id, quiz, pick })
+                        }}
                         onReviewWrong={() => handleReviewWrong(bubble)}
                         onAskTutor={() => handleAskTutor(bubble)}
                         onOtherTopic={() => !isBusy && openQuizForm({}, '다른 주제로 낼래')}
@@ -3010,6 +3062,13 @@ interface QuizCardProps {
   /** 찍은 것 같을 때 [괜찮아] — 그대로 결과 보기 */
   onKeepResult: () => void
   onReviewWrong: () => void
+  /** 통계에 저장할 과목 목록. null 이면 과목 고르기를 보여 주지 않음 (테스트 로그인 · 시연용 예시 · 단원 모름) */
+  statsSubjects: Subject[] | null
+  isSavingStats: boolean
+  /** 저장 실패 안내. 없으면 null */
+  statsError: string | null
+  /** 과목을 고르면 그 과목으로 통계에 저장 */
+  onSaveStats: (pick: StatsSubjectPick) => void
   /** [📚 과목 쌤한테 물어보기] — 틀린 문제를 들고 과목 쌤 방에서 대화 (#582) */
   onAskTutor: () => void
   onOtherTopic: () => void
@@ -3027,6 +3086,10 @@ function QuizCard({
   onRetry,
   onKeepResult,
   onReviewWrong,
+  statsSubjects,
+  isSavingStats,
+  statsError,
+  onSaveStats,
   onAskTutor,
   onOtherTopic,
 }: QuizCardProps) {
@@ -3169,6 +3232,15 @@ function QuizCard({
               틀린 문제는 내일 코치가 한 번 더 물어볼게.
             </p>
           )}
+          {statsSubjects && (
+            <QuizStatsPicker
+              quiz={quiz}
+              subjects={statsSubjects}
+              isSaving={isSavingStats}
+              error={statsError}
+              onPick={onSaveStats}
+            />
+          )}
           <div className="flex flex-wrap gap-2">
             {wrongCount > 0 && (
               <button
@@ -3191,6 +3263,77 @@ function QuizCard({
         </div>
       )}
       {quiz.isDemo && <p className="mt-1 text-xs text-amber-700">시연용 예시 문제 (AI 아님)</p>}
+    </div>
+  )
+}
+
+/** 통계에 저장할 과목 하나. subjectId 가 null 이면 아직 없는 기본 과목이라 고르면 새로 만듭니다. */
+interface StatsSubjectPick {
+  subjectId: string | null
+  name: string
+  color: SubjectColor
+}
+
+/** 과목이 없을 때도 고를 수 있게 같이 보여 주는 기본 과목 (서버 과목 색 5가지 안에서) */
+const DEFAULT_STATS_SUBJECTS: { name: string; color: SubjectColor }[] = [
+  { name: '국어', color: 'orange' },
+  { name: '수학', color: 'blue' },
+  { name: '영어', color: 'green' },
+  { name: '과학', color: 'red' },
+  { name: '사회', color: 'purple' },
+]
+
+interface QuizStatsPickerProps {
+  quiz: CoachQuiz
+  subjects: Subject[]
+  isSaving: boolean
+  error: string | null
+  onPick: (pick: StatsSubjectPick) => void
+}
+
+/**
+ * 다 푼 확인 문제를 통계 탭에 저장할 과목 고르기. (통계 탭 2026-10-24)
+ * 카드에는 과목이 없어서 학생이 고릅니다. 저장했으면 "통계에 저장했어" 한 줄만 보여 줍니다.
+ */
+function QuizStatsPicker({ quiz, subjects, isSaving, error, onPick }: QuizStatsPickerProps) {
+  const saved = subjects.find((subject) => subject.id === quiz.savedSubjectId)
+  if (quiz.savedSubjectId) {
+    return (
+      <p className="text-xs break-keep text-emerald-700">
+        📊 {saved?.name ?? '과목'} · {quiz.unit} 로 통계에 저장했어.
+      </p>
+    )
+  }
+  // 내 과목 + 아직 없는 기본 과목. 기본 과목을 고르면 그 이름으로 과목을 새로 만듭니다.
+  const picks: StatsSubjectPick[] = [
+    ...subjects.map((subject) => ({
+      subjectId: subject.id,
+      name: subject.name,
+      color: subject.color,
+    })),
+    ...DEFAULT_STATS_SUBJECTS.filter(
+      (item) => !subjects.some((subject) => subject.name === item.name),
+    ).map((item) => ({ subjectId: null, ...item })),
+  ]
+  return (
+    <div className="rounded-xl bg-slate-50 p-2.5">
+      <p className="text-sm break-keep text-slate-700">
+        📊 어느 과목 문제였어? 고르면 <b>{quiz.unit}</b> 단원으로 통계에 저장할게.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {picks.map((pick) => (
+          <button
+            key={pick.subjectId ?? `new-${pick.name}`}
+            type="button"
+            disabled={isSaving}
+            onClick={() => onPick(pick)}
+            className={cn(chipClass, 'disabled:opacity-50')}
+          >
+            {pick.name}
+          </button>
+        ))}
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   )
 }
