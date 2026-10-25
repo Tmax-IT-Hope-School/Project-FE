@@ -28,6 +28,8 @@ export interface ServerCard {
   title: string
   date: string
   repeatDays: number[] | null
+  /** 반복을 그만하는 날. 끝 없이 반복하면 null. 이 칸이 없는 옛 서버(BE #446 전)면 없습니다 */
+  endDate?: string | null
   startTime: string | null
   durationMinutes: number
   checklist: { id: string; text: string }[]
@@ -118,6 +120,9 @@ export function toServerCardBody(
   // 시작 시각 · 이유 · 예상 실패 원인: 만들 때는 있을 때만, 바꿀 때는 없으면 빈 값으로 지웁니다.
   if (card.startTime) body.startTime = card.startTime
   else if (mode === 'update') body.startTime = ''
+  // 반복을 그만하는 날도 같습니다. (#734) 이 칸을 모르는 옛 서버는 모르는 칸을 무시합니다.
+  if (card.endDate) body.endDate = card.endDate
+  else if (mode === 'update') body.endDate = ''
   if (reason !== '' || mode === 'update') body.expectedDoneReason = reason
   if (failCauses.length > 0 || mode === 'update') body.expectedFailCauses = failCauses
   return body
@@ -151,6 +156,9 @@ export function fromServerCard(server: ServerCard, local?: Card, goals: Goal[] =
     createdAt: local?.createdAt ?? server.createdAt,
   }
   if (server.repeatDays && server.repeatDays.length > 0) card.repeatDays = server.repeatDays
+  // 끝나는 날 칸이 아예 없는 옛 서버면 이 기기의 값을 그대로 둡니다. (subjectId 와 같은 약속, #734)
+  const endDate = server.endDate === undefined ? local?.endDate : server.endDate
+  if (endDate) card.endDate = endDate
   if (server.startTime) card.startTime = server.startTime
   const goalId = toLocalGoalId(server.goalId, local, goals)
   if (goalId) card.goalId = goalId

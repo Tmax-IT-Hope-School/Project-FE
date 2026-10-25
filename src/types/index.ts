@@ -244,6 +244,11 @@ export interface Card {
   date: string
   /** 반복 카드면 요일 목록 (0 = 일요일 … 6 = 토요일). 1회성 카드면 없음 */
   repeatDays?: number[]
+  /**
+   * 반복 카드를 그만하는 날 ('YYYY-MM-DD', 그 날까지는 함). 없으면 끝 없이 반복합니다.
+   * 연결한 목표가 끝나면 lib/goalCardEnd.ts 가 채웁니다. 1회성 카드는 보지 않습니다. (#734, BE cards.end_date)
+   */
+  endDate?: string
   /** 시작 시각 (예: '19:00'). 새 카드는 꼭 있고, 옛 계획에서 옮긴 카드만 없을 수 있습니다 */
   startTime?: string
   /** 길이 (분) */
