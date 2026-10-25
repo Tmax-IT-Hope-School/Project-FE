@@ -10,6 +10,7 @@ import { useAppAlerts } from '@/hooks/useAppAlerts'
 import { useAuth } from '@/hooks/useAuth'
 import { useCallReminder } from '@/hooks/useCallReminder'
 import { useCardAlerts } from '@/hooks/useCardAlerts'
+import { useCardCalendarSync } from '@/hooks/useCardCalendarSync'
 import { useCardSync } from '@/hooks/useCardSync'
 import { useDemoAutoSeed } from '@/hooks/useDemoAutoSeed'
 import { useUnsentCheckInRetry } from '@/hooks/useCheckInSync'
@@ -44,6 +45,8 @@ export function Layout() {
   useCardAlerts()
   // 진짜 로그인이면 이 기기의 카드를 서버와 맞춥니다. (못 보낸 것은 다시 보내고, 다른 기기에서 바뀐 것은 받아 옵니다, #516)
   useCardSync()
+  // 구글 캘린더를 연결했으면 시각이 있는 카드를 구글 일정으로도 맞춥니다. (#736)
+  useCardCalendarSync()
   // 진짜 로그인이면 목표도 서버와 맞춥니다. (카드의 목표 번호가 서버에서도 맞게, #516)
   useGoalSync()
   // 시연 계정(VITE_DEMO_SEED_USER_ID)으로 로그인하면 이 기기에 가상 28일을 넣습니다. 카드 · 목표를 받아 맞춘 뒤라서 이 자리입니다.
