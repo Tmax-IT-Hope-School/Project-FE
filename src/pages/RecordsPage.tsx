@@ -240,7 +240,9 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
 
       {/* 리포트 묶음들. 시안대로 달력 아래 · 묶음 사이를 28px 씩 띄웁니다. */}
       <div className="mt-7 flex flex-col gap-7">
-        {recordDays < REPORT_MIN_DAYS ? (
+        {/* 첫 리포트 전(기록 14일 미만) 카운트다운은 주간 리포트만입니다. 일간은 하루 기록만 있어도 되어서 첫날부터 보여 줍니다. */}
+        {/* (목업 ④ "주간 · 첫 리포트 전", QA 2026-10-25 #749) */}
+        {isWeekly && recordDays < REPORT_MIN_DAYS ? (
           <Countdown
             recordDays={recordDays}
             studyDays={[...reports.values()].filter((day) => day.studyMinutes > 0).length}
