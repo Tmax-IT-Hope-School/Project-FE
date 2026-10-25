@@ -4,7 +4,8 @@
  *
  * - 문제는 서버 AI 가 냅니다. POST /ai/quiz (주제 · 체크리스트 · 붙여 넣은 글 · 사진) → 4지선다 문제 1 ~ 5개
  * - 채점은 이 기기에서 합니다. (정답이 응답에 같이 옵니다. 시험이 아니라 스스로 확인하는 것이라 괜찮습니다)
- * - 결과는 이 기기에만 남깁니다. ('study-quiz-results', 최근 100개) 틀린 문제는 다음 날 코치가 다시 꺼냅니다.
+ * - 결과는 이 기기에 남깁니다. ('study-quiz-results', 최근 100개) 틀린 문제는 다음 날 코치가 다시 꺼냅니다.
+ *   진짜 로그인이면 맞은 수 · 단원만 서버에도 보냅니다. (lib/quizResultsApi.ts · hooks/useQuizResultSync.ts, #653)
  * - 서버가 아직 이 기능을 모르거나(404) · AI 가 꺼졌거나(503) · 오늘 한도를 다 썼으면(429) 시연용 예시 문제를 냅니다.
  *   테스트 로그인(서버 없음)도 시연용 예시입니다. 계획 말풍선(lib/coachPlan.ts)과 같은 방식입니다.
  * ⚠️ 사진은 서버에 보내기만 하고 어디에도 저장하지 않습니다. (lib/photoCards.ts 와 같음)
@@ -49,6 +50,8 @@ export interface CoachQuiz {
   topic: string
   /** 카드로 낸 문제면 그 카드 번호. 아니면 null */
   cardId: string | null
+  /** AI 가 정한 큰 단원 (예: '함수'). 모르면 null 이고, 그러면 결과를 서버에 보내지 않습니다. (lib/quizResultsApi.ts) */
+  unit: string | null
   questions: QuizQuestion[]
   /** 문제마다 고른 답. 아직 안 풀었으면 null (questions 와 같은 순서) */
   answers: (QuizAnswer | null)[]
@@ -74,6 +77,8 @@ export interface QuizResult {
   at: number
   topic: string
   cardId: string | null
+  /** AI 가 정한 큰 단원 (예: '함수'). 모르면 null (이 기능 전에 푼 결과 · 시연용 · 틀린 문제 다시) */
+  unit: string | null
   questions: QuizQuestion[]
   /** 문제마다 고른 답과 걸린 시간 (questions 와 같은 순서) */
   answers: QuizAnswer[]
@@ -106,6 +111,8 @@ export interface QuizReply {
   notStudy: boolean
   /** 받은 문제. null 이면 못 냈습니다. */
   questions: QuizQuestion[] | null
+  /** AI 가 정한 큰 단원 하나 (예: '함수'). 결과를 서버에 저장할 때 씁니다. 못 정했으면 null */
+  unit: string | null
   /** true 면 AI 가 아니라 시연용 예시 문제입니다. */
   isDemo: boolean
   /** 시연용 예시를 낸 이유 한 줄 (서버 준비 전 등). 없으면 null */
@@ -172,10 +179,11 @@ export function wrongQuestionsOf(quiz: Pick<CoachQuiz, 'questions' | 'answers'>)
   })
 }
 
-/** 새 문제 말풍선 */
+/** 새 문제 말풍선. 단원(unit)은 AI 가 낸 문제에만 있습니다. ("틀린 문제 다시" 는 없음) */
 export function newQuiz(input: {
   topic: string
   cardId: string | null
+  unit?: string | null
   questions: QuizQuestion[]
   isDemo: boolean
   now: number
@@ -184,6 +192,7 @@ export function newQuiz(input: {
     id: `quiz-${input.now}`,
     topic: input.topic,
     cardId: input.cardId,
+    unit: input.unit ?? null,
     questions: input.questions,
     answers: input.questions.map(() => null),
     current: 0,
@@ -241,6 +250,7 @@ export function toQuizResult(quiz: CoachQuiz, now: number, todayKey: string): Qu
     at: now,
     topic: quiz.topic,
     cardId: quiz.cardId,
+    unit: quiz.unit,
     questions: quiz.questions,
     answers: quiz.answers.map((answer) => answer ?? { choiceIndex: -1, ms: 0 }),
     correct: countCorrect(quiz),
@@ -322,6 +332,11 @@ function toQuizAnswer(value: unknown): QuizAnswer | null {
   return { choiceIndex: answer.choiceIndex, ms: answer.ms }
 }
 
+/** 서버 · 저장소에서 꺼낸 단원. 글자가 아니거나 비었으면 null ('  함수 ' -> '함수') */
+function toUnit(value: unknown): string | null {
+  return isText(value) && value.trim() !== '' ? value.trim() : null
+}
+
 function toQuizResultRecord(value: unknown): QuizResult | null {
   if (typeof value !== 'object' || value === null) return null
   const item = value as Record<string, unknown>
@@ -339,6 +354,7 @@ function toQuizResultRecord(value: unknown): QuizResult | null {
     at: item.at,
     topic: item.topic,
     cardId: isText(item.cardId) ? item.cardId : null,
+    unit: toUnit(item.unit),
     questions: questions as QuizQuestion[],
     answers: answers as QuizAnswer[],
     correct: typeof item.correct === 'number' ? item.correct : 0,
@@ -354,10 +370,14 @@ export function loadQuizResults(): QuizResult[] {
   return saved.map(toQuizResultRecord).filter((result) => result !== null)
 }
 
+/** 결과를 남길 때마다 보내는 이벤트 이름입니다. hooks/useQuizResultSync.ts 가 듣고 서버로 보냅니다. (#653) */
+export const QUIZ_RESULTS_CHANGED_EVENT = 'study-quiz-results-changed'
+
 /** 결과 하나를 남깁니다. 같은 번호가 있으면 바꾸고, 100개를 넘으면 오래된 것부터 지웁니다. */
 export function saveQuizResult(result: QuizResult): void {
   const others = loadQuizResults().filter((saved) => saved.id !== result.id)
   saveData(STORAGE_KEY, [...others, result].slice(-MAX_RESULTS))
+  window.dispatchEvent(new Event(QUIZ_RESULTS_CHANGED_EVENT))
 }
 
 /**
@@ -428,7 +448,7 @@ export function wrongForReview(
 /**
  * 확인 문제를 내 달라고 합니다. (진짜 로그인일 때만)
  *   요청 { topic, checklist, material?, image?, count }
- *   응답 { showHelp, questions: [{ question, choices[4], answerIndex, explanation }] | null, reason: null | 'NOT_STUDY' }
+ *   응답 { showHelp, questions: [{ question, choices[4], answerIndex, explanation }] | null, unit: '함수' | null, reason: null | 'NOT_STUDY' }
  */
 export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
   const result = await api<unknown>('/ai/quiz', {
@@ -446,7 +466,14 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
     throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
   }
   const record = result as Record<string, unknown>
-  const empty = { showHelp: false, notStudy: false, questions: null, isDemo: false, notice: null }
+  const empty = {
+    showHelp: false,
+    notStudy: false,
+    questions: null,
+    unit: null,
+    isDemo: false,
+    notice: null,
+  }
   if (record.showHelp === true) return { ...empty, showHelp: true }
   if (record.reason === 'NOT_STUDY') return { ...empty, notStudy: true }
   if (!Array.isArray(record.questions)) return empty
@@ -454,7 +481,8 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
     .map(toQuizQuestion)
     .filter((question) => question !== null)
     .slice(0, QUIZ_COUNT)
-  return { ...empty, questions: questions.length > 0 ? questions : null }
+  if (questions.length === 0) return empty
+  return { ...empty, questions, unit: toUnit(record.unit) }
 }
 
 /**
@@ -656,6 +684,8 @@ export function makeDemoQuiz(input: Pick<QuizInput, 'topic' | 'checklist'>): Qui
     showHelp: false,
     notStudy: false,
     questions: (set?.questions ?? DEMO_DEFAULT).slice(0, QUIZ_COUNT),
+    // 시연용 예시는 단원을 정하지 않습니다. (서버에도 보내지 않음)
+    unit: null,
     isDemo: true,
     notice: null,
   }
@@ -682,6 +712,7 @@ export function toCoachQuiz(value: unknown): CoachQuiz | null {
     id: quiz.id,
     topic: quiz.topic,
     cardId: isText(quiz.cardId) ? quiz.cardId : null,
+    unit: toUnit(quiz.unit),
     questions: questions as QuizQuestion[],
     answers,
     current: Math.min(Math.max(0, current), questions.length - 1),

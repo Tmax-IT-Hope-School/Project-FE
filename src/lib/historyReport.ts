@@ -7,6 +7,7 @@ import { moveDateKey, toDayKey } from '@/lib/date'
 import { getWeekday } from '@/lib/routines'
 import { getSessionCardId } from '@/lib/sessionRecords'
 import { getStudyMs } from '@/lib/studyTime'
+import type { ServerQuizCount } from '@/lib/quizResultsApi'
 import type { QuizResult } from '@/lib/studyQuiz'
 import type { WeeklyPick } from '@/lib/weeklyPicks'
 import type { Card, StudySession } from '@/types'
@@ -19,7 +20,8 @@ import type { Card, StudySession } from '@/types'
  *   공부 시간       : 타이머 세션 (노는 기록 빼고, 날짜는 새벽 4시 기준)
  *   계획 시간       : 그날 하는 카드의 길이 합
  *   계획 완료       : 그날 카드를 하나도 빼먹지 않고 끝까지 한 날 (아래 isCompleteDay)
- *   확인 문제 정답률 : 채팅의 확인 문제(lib/studyQuiz.ts) + 사진 채점(lib/answerChecksApi.ts, 애매는 뺌)
+ *   확인 문제 정답률 : 채팅의 확인 문제(lib/studyQuiz.ts) + 서버에만 있는 확인 문제(lib/quizResultsApi.ts)
+ *                      + 사진 채점(lib/answerChecksApi.ts, 애매는 뺌)
  *   이번 주에 고른 것: lib/weeklyPicks.ts
  *
  * ■ 숫자는 코드가 냅니다. "하루 한 줄" 같은 문장도 숫자를 끼워 넣는 정해 둔 문장입니다. (AI 를 부르지 않음)
@@ -350,6 +352,24 @@ function quizSubjectOf(
     if (session) return input.subjectOf(session)
   }
   return subjectNames.find((name) => result.topic.includes(name)) ?? '기타'
+}
+
+/**
+ * 서버에만 있는 확인 문제 결과(다른 기기에서 푼 것 등, lib/quizResultsApi.ts)를 문제 하나하나로 풉니다.
+ * 서버에는 과목 · 단원 · 날짜별 맞은 수만 있어서, 맞은 수만큼 "맞음" · 나머지는 "틀림" 으로 둡니다. 과목은 서버의 과목 이름입니다.
+ *
+ *   serverQuizMarks([{ subjectName: '수학', date: '2026-10-25', correct: 2, total: 3, … }], ['2026-10-25'])
+ *     -> [수학 맞음, 수학 맞음, 수학 틀림]
+ */
+export function serverQuizMarks(counts: ServerQuizCount[], dateKeys: string[]): QuestionMark[] {
+  const marks: QuestionMark[] = []
+  for (const count of counts) {
+    if (!dateKeys.includes(count.date)) continue
+    for (let index = 0; index < count.total; index++) {
+      marks.push({ subject: count.subjectName, correct: index < count.correct })
+    }
+  }
+  return marks
 }
 
 /** 사진 채점 결과를 문제 하나하나로 풉니다. 애매(UNSURE)는 맞았는지 몰라서 뺍니다. */

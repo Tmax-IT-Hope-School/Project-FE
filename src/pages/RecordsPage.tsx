@@ -35,6 +35,7 @@ import {
   quizMarks,
   REPORT_MIN_DAYS,
   RESTART_OPTIONS,
+  serverQuizMarks,
   summarizeAccuracy,
   weekdayNameOf,
   weekHeadline,
@@ -47,6 +48,7 @@ import {
 import { loadGoals } from '@/lib/goals'
 import { getServerRanges, mergeServerSessions } from '@/lib/historySessions'
 import { mockSubjects } from '@/lib/mock'
+import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { sessionsByRangeQuery } from '@/lib/sessionsApi'
@@ -823,11 +825,16 @@ interface DailyAccuracyProps {
   subjectNames: string[]
 }
 
-/** 그날의 확인 문제(채팅) + 사진 채점 정답률 */
+/** 그날의 확인 문제(채팅, 이 기기 + 서버에만 있는 것) + 사진 채점 정답률 */
 function DailyAccuracy({ dateKey, input, quizResults, subjectNames }: DailyAccuracyProps) {
-  const { data: checks } = useSuspenseQuery(answerChecksQuery(dateKey))
+  // 사진 채점과 서버의 확인 문제 결과를 같이 받습니다. 확인 문제는 주간 리포트와 같은 14일치라 한 번 받으면 같이 씁니다.
+  // 서버의 확인 문제 결과는 못 받아도 에러 대신 null 이라서, 이 기기의 결과만으로 셉니다. (lib/quizResultsApi.ts)
+  const [{ data: checks }, { data: serverCounts }] = useSuspenseQueries({
+    queries: [answerChecksQuery(dateKey), serverQuizCountsQuery(getWeekStart(dateKey))],
+  })
   const accuracy = summarizeAccuracy([
     ...quizMarks(quizResults, [dateKey], input, subjectNames),
+    ...serverQuizMarks(serverCounts ?? [], [dateKey]),
     ...photoMarks(checks, [dateKey]),
   ])
 
@@ -890,10 +897,14 @@ function WeeklyReport({
   onSavePick,
 }: WeeklyReportProps) {
   const lastWeekStart = moveDateKey(weekStart, -7)
-  // 사진 채점은 지난주 ~ 이번 주(14일)를 한 번에 받아 둘로 나눕니다.
-  const { data: checks } = useSuspenseQuery(
-    answerChecksBetweenQuery(lastWeekStart, moveDateKey(weekStart, 6)),
-  )
+  // 사진 채점 · 서버의 확인 문제 결과는 지난주 ~ 이번 주(14일)를 한 번에 받아 둘로 나눕니다.
+  // 서버의 확인 문제 결과는 못 받아도 에러 대신 null 이라서, 이 기기의 결과만으로 셉니다. (lib/quizResultsApi.ts)
+  const [{ data: checks }, { data: serverCounts }] = useSuspenseQueries({
+    queries: [
+      answerChecksBetweenQuery(lastWeekStart, moveDateKey(weekStart, 6)),
+      serverQuizCountsQuery(weekStart),
+    ],
+  })
 
   const week = buildWeekReport(reports, weekStart, todayKey)
   const lastWeek = buildWeekReport(reports, lastWeekStart, todayKey)
@@ -924,6 +935,7 @@ function WeeklyReport({
     const dateKeys = target.days.map((day) => day.dateKey)
     return summarizeAccuracy([
       ...quizMarks(quizResults, dateKeys, input, subjectNames),
+      ...serverQuizMarks(serverCounts ?? [], dateKeys),
       ...photoMarks(checks, dateKeys),
     ])
   }

@@ -108,8 +108,8 @@ const ACTION_TYPES: ChatAction['type'][] = [
 
 // 날짜 모양 'YYYY-MM-DD'
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-// 시각 모양 'HH:mm' (00:00 ~ 23:59)
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+// 시각 모양 'HH:mm' (00:00 ~ 23:59). 통화 중 계획 도구의 시작 시각도 이 모양으로 확인합니다. (lib/callTools.ts)
+export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 /** day_plan 의 오늘 총 공부 분 범위 (서버와 같음) */
 const DAY_PLAN_MIN_MINUTES = 20
 const DAY_PLAN_MAX_MINUTES = 600
@@ -165,9 +165,10 @@ export function readChatSources(value: unknown): ChatSource[] {
 /**
  * day_plan 의 오늘 총 공부 분을 확인합니다. 정수이고 20 ~ 600 이면 그대로, 아니면 null
  * (카드 하나의 분처럼 범위 안으로 당기지 않습니다. 틀린 값으로 계획을 짜는 것보다 모르는 채로 짜는 게 낫습니다)
+ * 통화 중 계획 도구(show_day_plan)의 총 분도 같은 규칙으로 확인합니다. (lib/callTools.ts)
  *   readDayPlanMinutes(120) -> 120   readDayPlanMinutes(5) -> null   readDayPlanMinutes('120') -> null
  */
-function readDayPlanMinutes(value: unknown): number | null {
+export function readDayPlanMinutes(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isInteger(value)) return null
   return value >= DAY_PLAN_MIN_MINUTES && value <= DAY_PLAN_MAX_MINUTES ? value : null
 }

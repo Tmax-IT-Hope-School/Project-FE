@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -76,6 +76,9 @@ import { CALL_TIME_STORAGE_KEY, parseCallTime } from '@/lib/callReminder'
 import { buildLateEntrySession, checkLateEntry, makeLateEntryReport } from '@/lib/lateEntry'
 import { loadData } from '@/lib/storage'
 import { requestFirstStep, requestQuickCard, type QuickCardDraft } from '@/lib/aiCardApi'
+import { YOUTH_HELP_LINE } from '@/lib/helpLines'
+import { shrinkPhoto } from '@/lib/photoCards'
+import { requestProofFromPhoto } from '@/lib/proofPhotoApi'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { MAX_SHRINK, getPrepStep, isCountdownOn } from '@/lib/cardAlerts'
@@ -1392,6 +1395,11 @@ function PausePicker({ isOpen, onClose, onFirstPick, onChange }: PausePickerProp
   )
 }
 
+/** 증빙 요약 칸의 최대 글자 수 (아래 textarea 의 maxLength · 서버 endReport.proof.summary 와 같음) */
+const MAX_PROOF_LENGTH = 300
+/** [📷 사진으로 적기] 가 한 줄을 못 받았을 때의 안내 (#670) */
+const PROOF_PHOTO_FAIL_NOTICE = '사진에서 공부한 내용을 못 찾았어요. 직접 적어 주세요.'
+
 /** 종료 팝업의 단계 — 체크리스트 → 같이 한 것 → 증빙 → (가끔) 잘 된 이유 → 다음 행동 */
 type EndStep = 'checklist' | 'with' | 'proof' | 'good' | 'next'
 
@@ -1421,7 +1429,7 @@ interface EndPopupProps {
  * 종료 팝업 (최종 기획서 「4.4 타이머」 종료, #398) — 이유는 여러 개 고를 수 있고, 나머지는 1탭입니다.
  * 1. 체크리스트 최종 확인 (다 못 했으면 미달 사유, 여러 개 가능) · 즉석 카드면 "무엇을 했나요?" 한 줄
  * 2. 같이 한 것: 음악 / 영상 틀어둠 / 없음
- * 3. 산출물 증빙: 링크나 2~3줄 요약 (선택 — 관리 4단계에서는 꼭 필요)
+ * 3. 산출물 증빙: 링크나 2~3줄 요약 (선택 — 관리 4단계에서는 꼭 필요). [📷 사진으로 적기] 로 AI 가 한 줄을 채워 줄 수 있음
  * 4. 잘 된 이유: 체크리스트를 다 했을 때 N번에 1번만
  * 5. 다음 행동
  */
@@ -1464,6 +1472,38 @@ function EndPopup({
   // 지금 적힌 한 줄을 정리한 초안만 씁니다. 한 줄을 고치면 예전 초안은 쓰지 않습니다.
   const currentDraft = draft !== null && draft.line === line.trim() ? draft : null
   const [proofText, setProofText] = useState('')
+  // [📷 사진으로 적기] (#670): 사진을 줄여 서버 AI 에 보내고 받은 한 줄을 요약 칸에 넣습니다.
+  // ⚠️ 사진은 서버 · 기기 어디에도 저장하지 않습니다. 이 함수 안에서 보내고 끝입니다.
+  const [proofPhotoNotice, setProofPhotoNotice] = useState<string | null>(null)
+  const [isProofHelpShown, setIsProofHelpShown] = useState(false)
+  const { mutate: readProofPhoto, isPending: isReadingProofPhoto } = useMutation({
+    mutationFn: async (file: File) => {
+      const image = await shrinkPhoto(file)
+      // 제목을 아직 안 정한 즉석 카드("지금 시작한 공부")면 제목은 보내지 않습니다.
+      const cardTitle = card && !isUntitledInstantCard(card) ? card.title : undefined
+      return requestProofFromPhoto({ image, cardTitle })
+    },
+    onSuccess: (result) => {
+      if (result.showHelp) {
+        setIsProofHelpShown(true)
+        return
+      }
+      const summary = result.summary
+      if (summary === null) {
+        setProofPhotoNotice(PROOF_PHOTO_FAIL_NOTICE)
+        return
+      }
+      // 이미 적어 둔 글이 있으면 지우지 않고 다음 줄에 붙입니다.
+      setProofText((current) =>
+        (current.trim() === '' ? summary : `${current.trimEnd()}\n${summary}`).slice(
+          0,
+          MAX_PROOF_LENGTH,
+        ),
+      )
+    },
+    // 사진을 줄이지 못했을 때(사진 파일이 아님 등)도 같은 안내로 넘어갑니다.
+    onError: () => setProofPhotoNotice(PROOF_PHOTO_FAIL_NOTICE),
+  })
   // 다 못 했을 때: 이유 칩은 접어 두고 [💬 코치랑 후기 나누기] 를 먼저 보여 줍니다. [이유만 고르기] 를 누르면 펼칩니다. (#582)
   const [isPickingReasons, setIsPickingReasons] = useState(false)
   // 후기를 나눌 대화방 (lib/chatRooms.ts — 방 이름이 바뀌어도 여기는 그대로)
@@ -1511,6 +1551,16 @@ function EndPopup({
       },
     })
     setStep('with')
+  }
+
+  function handleProofPhotoPick(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // 같은 사진을 다시 골라도 다시 읽게 비워 둡니다.
+    event.target.value = ''
+    if (!file) return
+    setProofPhotoNotice(null)
+    setIsProofHelpShown(false)
+    readProofPhoto(file)
   }
 
   function handleProofDone(skip: boolean) {
@@ -1707,6 +1757,48 @@ function EndPopup({
             placeholder="예: 42~45쪽 풀고 틀린 3문제 다시 풂"
             className="w-full rounded-xl border border-slate-300 p-3 text-base sm:text-sm"
           />
+          {/* [📷 사진으로 적기] (#670) — 진짜 로그인일 때만. 테스트 로그인은 서버 AI 를 못 불러서 숨깁니다. */}
+          {isServerData && (
+            <div className="flex flex-col gap-2">
+              <label
+                aria-busy={isReadingProofPhoto}
+                className={cn(
+                  'flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[15px] font-semibold text-slate-900 transition hover:bg-slate-50 active:scale-[0.98]',
+                  'focus-within:ring-brand/30 focus-within:ring-2',
+                  isReadingProofPhoto && 'pointer-events-none opacity-50',
+                )}
+              >
+                {isReadingProofPhoto ? '사진을 읽는 중…' : '📷 사진으로 적기'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={isReadingProofPhoto}
+                  onChange={handleProofPhotoPick}
+                />
+              </label>
+              <p className="text-xs break-keep text-slate-500">
+                사진은 저장하지 않아요. AI 가 한 일을 한 줄로 적어 주면, 고쳐서 남기면 돼요.
+              </p>
+              {proofPhotoNotice && (
+                <p role="status" className="text-sm break-keep text-amber-800">
+                  {proofPhotoNotice}
+                </p>
+              )}
+              {/* 사진 속 글이나 카드 제목에 위기 표현이 있었을 때 — 도움 안내 한 줄 (CardsFromPhotoPage 와 같음) */}
+              {isProofHelpShown && (
+                <a
+                  href={`tel:${YOUTH_HELP_LINE.number}`}
+                  className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-2 text-sm"
+                >
+                  <span className="break-keep text-slate-700">
+                    지금 이야기할 곳: {YOUTH_HELP_LINE.name} · {YOUTH_HELP_LINE.detail}
+                  </span>
+                  <span className="text-brand font-semibold">{YOUTH_HELP_LINE.number}</span>
+                </a>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Button
               className="w-full"

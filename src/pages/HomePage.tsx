@@ -2,7 +2,6 @@ import { RedirectWithQuery } from '@/components/layout/RedirectWithQuery'
 import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { CareModeBanner } from '@/components/ui/CareModeBanner'
 import { ChipButton } from '@/components/ui/ChipButton'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { MissionBar } from '@/components/ui/MissionBar'
@@ -16,7 +15,6 @@ import { useQueryParam } from '@/hooks/useQueryParam'
 import { isInApp } from '@/lib/appBridge'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { getCardsOnDate } from '@/lib/cards'
-import { getCareLimits } from '@/lib/careLimits'
 import { localCheckCall, type StudiedInfo } from '@/lib/checkCall'
 import { cn } from '@/lib/cn'
 import { runDailyCareStage } from '@/lib/dailyCareRun'
@@ -53,7 +51,6 @@ import {
   type TodayCardsState,
   type TodayCardStatus,
 } from '@/lib/todayCards'
-import { getTodayCareLevel, getTodayCareReason } from '@/lib/todayCare'
 import type { Card as CardModel, StudySession } from '@/types'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -90,9 +87,9 @@ const textLinkClass =
  *      오늘을 고르면 예전 "오늘 계획" 목록 그대로 [시작] 이 붙습니다. 카드가 없으면 [코치와 오늘 계획 짜기] · [사진으로 만들기]
  *   ③ 학교 정보 한 묶음: 위 탭 [시간표 | 급식 | 일정 | 공지] 중 하나만 펼침 (2026-10-22, 주소 ?school=)
  *      일정 = 학교 일정 + 내 일정을 날짜 순서로 D-day 와 함께, 공지 = 학교 홈페이지 글 제목 · 대회 글은 🏆
- *   맨 아래: 지금 관리 모드와 이유 · AI 가 바꾼 설정 알림
+ *   맨 아래: AI 가 바꾼 설정 알림
  *
- * 숲(2026-10-24 에 뺌) · 오늘 한 줄은 빠졌습니다. 알림 · 통화는 코치 화면 머리에, 설정은 헤더(PC 메뉴 · 모바일 오른쪽 위 톱니)에 있습니다.
+ * 숲(2026-10-24 에 뺌) · 오늘 한 줄 · 관리 모드 띠(2026-10-25 에 뺌)는 빠졌습니다. 알림 · 통화는 코치 화면 머리에, 설정은 헤더(PC 메뉴 · 모바일 오른쪽 위 톱니)에 있습니다.
  */
 export function HomePage() {
   const { search } = useLocation()
@@ -107,13 +104,10 @@ function HomeView() {
   // 화면을 연 시각. 그리는 동안 Date.now() 를 여러 번 부르지 않게 한 번만 잡습니다.
   const [now] = useState(() => Date.now())
 
-  // 하루 1번 관리 단계를 판정해 저장합니다. ("통화가 없으면 다음 날 첫 진입 때", 기획서 5.4 · lib/dailyCareRun.ts)
-  // 판정이 저장된 뒤에 오늘 단계를 읽어야 해서, 관리 모드보다 먼저 부릅니다. 오늘 이미 판정했으면 그대로 씁니다.
-  const [careLevel] = useState(() => {
-    runDailyCareStage(todayKey, now)
-    return getTodayCareLevel()
-  })
-  const [maxCareLevel] = useState(() => getCareLimits().maxCareLevel)
+  // 하루 1번 관리 단계를 판정해 저장합니다. ("통화가 없으면 다음 날 첫 진입 때", lib/dailyCareRun.ts)
+  // 홈에 보여 주던 관리 모드 띠는 2026-10-25 에 뺐지만, 판정은 남깁니다. 통화 · 채팅의 말투와
+  // 안전 브레이크(위기 표현 · 기분 저하 때 0단계)가 이 값을 씁니다. 오늘 이미 판정했으면 그대로 둡니다.
+  useState(() => runDailyCareStage(todayKey, now))
   // 오늘의 미션 (컨디션 · 오늘 계획 · 첫 공부). 이미 있는 기록으로 끝났는지 봅니다. (lib/dailyMission.ts)
   const [missions] = useState(() => loadDailyMissions(todayKey))
 
@@ -194,13 +188,6 @@ function HomeView() {
 
       {/* ③ 학교 정보 한 묶음: [시간표 | 급식 | 일정 | 공지] 중 하나만 펼칩니다. (BE GET /school/today · /school/notices) */}
       <SchoolInfoSection todayKey={todayKey} />
-
-      {/* 지금 관리 모드와 그 이유 — 하루 1번 판정한 결과입니다 (#384 규칙, lib/dailyCareRun.ts) */}
-      <CareModeBanner
-        level={careLevel}
-        reason={getTodayCareReason(careLevel)}
-        maxLevel={maxCareLevel}
-      />
 
       {/* AI 가 설정을 바꿨으면 알림 줄 + [되돌리기] (#385) */}
       {settingChanges.length > 0 && (

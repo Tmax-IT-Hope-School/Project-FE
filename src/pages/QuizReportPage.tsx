@@ -26,8 +26,9 @@ import {
   type SubjectWeek,
   type UnitStat,
 } from '@/lib/quizReport'
+import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { loadQuizResults } from '@/lib/studyQuiz'
-import { useSuspenseQueries } from '@tanstack/react-query'
+import { usePrefetchQuery, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 
 /** '2026-10-19' -> '10월 19일 (월)' */
@@ -124,12 +125,15 @@ function QuizReportBody({ weekStart }: QuizReportBodyProps) {
   const subjects = useSubjects()
   const { cards } = useCards()
   const { sessions } = useStudySessions()
-  // 채팅 확인 문제 결과는 이 기기에만 있어서(lib/studyQuiz.ts) 화면을 열 때 한 번 읽습니다.
+  // 이 기기의 채팅 확인 문제 결과(lib/studyQuiz.ts)는 화면을 열 때 한 번 읽습니다.
   const [results] = useState(loadQuizResults)
   const [subjectParam, setSubjectParam] = useQueryParam('subject', '', { replace: true })
   const [dayParam, setDayParam] = useQueryParam('day', '', { replace: true })
 
   const dates = weekDates(weekStart)
+  // 서버에만 있는 확인 문제 결과(다른 기기에서 푼 것 등)를 사진 채점과 "같이" 받기 시작합니다.
+  // 이 줄이 없으면 아래 useSuspenseQuery 는 사진 채점을 다 받은 뒤에야 불려서 늦어집니다.
+  usePrefetchQuery(serverQuizCountsQuery(weekStart))
   // 지난주 점수도 내야 해서 지난주 7일 + 이번 주 7일의 사진 채점 결과를 받아옵니다. (서버 약속이 날짜 하나씩이라 요청 14개)
   const checkQueries = useSuspenseQueries({
     queries: [...weekDates(moveDateKey(weekStart, -7)), ...dates].map((date) =>
@@ -137,8 +141,18 @@ function QuizReportBody({ weekStart }: QuizReportBodyProps) {
     ),
   })
   const answerChecks = checkQueries.flatMap((query) => query.data)
+  // 서버의 확인 문제 결과는 못 받아도 에러 대신 null 이라서, 이 기기의 결과만으로 셉니다. (lib/quizResultsApi.ts)
+  const { data: serverCounts } = useSuspenseQuery(serverQuizCountsQuery(weekStart))
 
-  const weeks = buildQuizWeeks({ results, answerChecks, sessions, cards, subjects, weekStart })
+  const weeks = buildQuizWeeks({
+    results,
+    answerChecks,
+    serverCounts: serverCounts ?? [],
+    sessions,
+    cards,
+    subjects,
+    weekStart,
+  })
   const week = weeks.find((item) => item.name === subjectParam) ?? weeks[0]
   // 'day' 는 0(월) ~ 6(일). 그 밖의 값이면 요일을 안 고른 것(전체 평균)으로 봅니다.
   const dayIndex = /^[0-6]$/.test(dayParam) ? Number(dayParam) : null
@@ -223,7 +237,8 @@ function QuizReportBody({ weekStart }: QuizReportBodyProps) {
         점수는 그날 처음 푼 문제(채팅 확인 문제 + 사진 채점)의 정답률이에요. 사진 채점의
         &lsquo;애매&rsquo;는 빼요. 틀린 확인 문제를 다시 풀어 맞힌 건 점수에 넣지 않고 &lsquo;오답
         다시 풀기&rsquo;로 따로 보여 줘요. 단원은 확인 문제를 낼 때 적은 주제로 나누고, 사진 채점은
-        한 칸으로 모아요. 풀이 속도는 확인 문제에만 있어요. 확인 문제 결과는 이 기기에만 저장돼요.
+        한 칸으로 모아요. 풀이 속도는 이 기기에서 푼 확인 문제에만 있어요. 다른 기기에서 푼 확인
+        문제는 서버에 과목 · 단원별 맞은 수만 있어서, AI 가 정한 단원으로 점수에만 더해요.
       </p>
     </>
   )

@@ -204,7 +204,8 @@ function toResult(input: {
   const correct = input.questions.filter(
     (question, index) => input.answers[index].choiceIndex === question.answerIndex,
   ).length
-  return { ...input, correct, guessed: false, isDemo: false }
+  // 단원(unit)은 비워 둡니다. 시연 데이터는 서버로 보내지 않습니다. (id 가 'demo-' 로 시작, lib/quizResultsApi.ts)
+  return { ...input, unit: null, correct, guessed: false, isDemo: false }
 }
 
 /**

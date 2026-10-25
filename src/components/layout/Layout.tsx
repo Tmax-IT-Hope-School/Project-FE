@@ -18,6 +18,7 @@ import { useGoalSync } from '@/hooks/useGoalSync'
 import { useMarkSync } from '@/hooks/useMarkSync'
 import { useOnboardingCompletionSync } from '@/hooks/useOnboardingCompletionSync'
 import { usePsychTestSync } from '@/hooks/usePsychTestSync'
+import { useQuizResultSync } from '@/hooks/useQuizResultSync'
 import { useScrollToTopOnPageChange } from '@/hooks/useScrollToTopOnPageChange'
 import { useSessionSync } from '@/hooks/useSessionSync'
 import { useTimerLock } from '@/hooks/useTimerLock'
@@ -51,6 +52,8 @@ export function Layout() {
   useSessionSync()
   // 진짜 로그인이면 미루기 · 실패 · 휴식 · 사후 입력도 서버로 보냅니다. (한도 · 기한은 서버가 다시 봅니다, #516)
   useMarkSync()
+  // 진짜 로그인이면 채팅 확인 문제의 결과(맞은 수 · 단원)도 서버로 보냅니다. (그날 푼 것만, #653)
+  useQuizResultSync()
   // 예전에 서버로 못 보낸 체크인 · 심리검사 결과 · 온보딩 마침 표시를 앱을 열 때 다시 보냅니다.
   // (예전에는 화면 맨 위의 "오늘 컨디션" 한 줄이 맡았는데, 2026-10-18 에 그 한 줄을 없애서 여기로 옮겼습니다)
   useUnsentCheckInRetry()

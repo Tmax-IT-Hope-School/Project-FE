@@ -1,6 +1,7 @@
 import type { AnswerCheck } from '@/lib/answerChecksApi'
 import { moveDateKey, toDayKey } from '@/lib/date'
 import { mockSubjects } from '@/lib/mock'
+import type { ServerQuizCount } from '@/lib/quizResultsApi'
 import type { QuizResult } from '@/lib/studyQuiz'
 import { getStudyMs } from '@/lib/studyTime'
 import type { Card, StudySession, Subject } from '@/types'
@@ -9,9 +10,11 @@ import type { Card, StudySession, Subject } from '@/types'
  * 문제 풀이 주간 리포트(기록 › 문제 풀이 리포트)의 숫자를 계산하는 함수들입니다. 화면은 pages/QuizReportPage.tsx 입니다.
  * React 없이 돌아가는 순수 함수라서 lib/ 에 둡니다. (2026-10-24)
  *
- * 문제 풀이 기록 두 가지를 합쳐서 셉니다.
- *   ① 채팅 확인 문제 (lib/studyQuiz.ts, 이 기기에만 저장) — 문제마다 고른 답 · 걸린 시간이 있습니다.
+ * 문제 풀이 기록 세 가지를 합쳐서 셉니다.
+ *   ① 채팅 확인 문제 (lib/studyQuiz.ts, 이 기기에 저장) — 문제마다 고른 답 · 걸린 시간이 있습니다.
  *   ② 사진 채점 (lib/answerChecksApi.ts, 서버에 저장) — 문제집 사진 한 장의 문제마다 맞음 · 틀림 · 애매가 있습니다.
+ *   ③ 서버에만 있는 확인 문제 (lib/quizResultsApi.ts, 다른 기기에서 푼 것 등) — 과목 · 단원 · 날짜별 맞은 수만 있습니다.
+ *      그래서 풀이 시간 · 다시 푼 것인지 · 찍은 것 같았는지를 몰라서, 모두 "처음 푼 문제" 로 점수에만 넣습니다. (serverAttempts)
  *
  * ■ 세는 규칙
  *   - 점수 = 그날 "처음 푼" 문제의 정답률 (100점 만점).
@@ -209,6 +212,25 @@ function photoAttempts(checks: AnswerCheck[], subjects: Subject[]): Attempt[] {
   })
 }
 
+/**
+ * 서버에만 있는 확인 문제 결과(다른 기기에서 푼 것 등)를 문제 하나씩 "처음 푼 것" 으로 바꿉니다.
+ * 서버에는 과목 · 단원 · 날짜별 맞은 수만 있어서, 맞은 수만큼 "맞음" · 나머지는 "틀림" 으로 둡니다.
+ *   - 과목은 서버의 과목 이름, 단원은 AI 가 정한 단원입니다. (이 기기의 결과는 문제를 낼 때 적은 주제가 단원)
+ *   - 풀이 시간을 몰라서(null) 평균 시간 · "빨리 풀고 틀림" 에는 들어가지 않습니다.
+ */
+function serverAttempts(counts: ServerQuizCount[], subjects: Subject[]): Attempt[] {
+  return counts.flatMap((count) => {
+    const subject = subjectNameOf(count.subjectName, subjects)
+    return Array.from({ length: count.total }, (_, index) => ({
+      date: count.date,
+      subject,
+      unit: count.unit,
+      correct: index < count.correct,
+      ms: null,
+    }))
+  })
+}
+
 /** 처음 푼 기록들의 개수 · 정답률 · 평균 시간 (시간은 잰 문제만으로 냅니다) */
 function countUp(attempts: Attempt[]) {
   const correct = attempts.filter((attempt) => attempt.correct).length
@@ -242,22 +264,28 @@ function toStat(attempts: Attempt[]): QuizStat | null {
 /**
  * 과목마다 한 주의 결과를 만듭니다. 그 주에 문제를 푼 과목만 돌려줍니다. (내 과목 순서, '기타' 는 맨 뒤)
  *
- *   buildQuizWeeks({ results, answerChecks, sessions, cards, subjects, weekStart: '2026-10-19' })
+ *   buildQuizWeeks({ results, answerChecks, serverCounts, sessions, cards, subjects, weekStart: '2026-10-19' })
  *     -> [{ name: '수학', days: [월 ~ 일], minutes: [50, 0, …], week: {…}, lastWeekRate: 58, … }, …]
  *
- * answerChecks 에는 이번 주와 지난주(지난주 점수) 사진 채점 결과를 넣습니다.
+ * answerChecks · serverCounts 에는 이번 주와 지난주(지난주 점수) 것을 넣습니다.
+ * serverCounts 는 서버에만 있는 확인 문제 결과입니다. 테스트 로그인 · 못 받았으면 빈 목록을 넣습니다.
  */
 export function buildQuizWeeks(input: {
   results: QuizResult[]
   answerChecks: AnswerCheck[]
+  serverCounts: ServerQuizCount[]
   sessions: StudySession[]
   cards: Card[]
   subjects: Subject[]
   weekStart: string
 }): SubjectWeek[] {
-  const { results, answerChecks, sessions, cards, subjects, weekStart } = input
+  const { results, answerChecks, serverCounts, sessions, cards, subjects, weekStart } = input
   const split = splitAttempts(results, cards, subjects)
-  const firsts = [...split.firsts, ...photoAttempts(answerChecks, subjects)]
+  const firsts = [
+    ...split.firsts,
+    ...photoAttempts(answerChecks, subjects),
+    ...serverAttempts(serverCounts, subjects),
+  ]
   const retries = split.retries
   const dates = weekDates(weekStart)
   const lastWeekDates = weekDates(moveDateKey(weekStart, -7))

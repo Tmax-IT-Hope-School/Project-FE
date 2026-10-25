@@ -41,6 +41,13 @@ export function getActiveGoals(goals: Goal[]): Goal[] {
   return goals.filter((goal) => goal.status === 'active')
 }
 
+/** 결과를 적고 마무리한 목표만, D-day 가 늦은 것부터 (카드 탭 '완료한 목표', #672) */
+export function getDoneGoals(goals: Goal[]): Goal[] {
+  return goals
+    .filter((goal) => goal.status === 'done')
+    .sort((a, b) => (a.dDay < b.dDay ? 1 : a.dDay > b.dDay ? -1 : 0))
+}
+
 /** 목표를 하나 더 만들 수 있는지 (진행 중 3개 미만) */
 export function canAddGoal(goals: Goal[]): boolean {
   return getActiveGoals(goals).length < MAX_ACTIVE_GOALS

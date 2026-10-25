@@ -1,9 +1,12 @@
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { AiAnalysisCard, AnalysisInsight } from '@/components/ui/AiAnalysisCard'
 import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { SubjectBadge } from '@/components/ui/SubjectBadge'
 import { TalkButton } from '@/components/ui/TalkButton'
 import { useCards } from '@/hooks/useCards'
@@ -40,6 +43,8 @@ import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
 import { dayReviewLines } from '@/lib/talkLines'
 import { formatHoursMinutes, getWeeklyStudy } from '@/lib/weeklyStudy'
+import { getMondayKey } from '@/lib/weeklyFacts'
+import { describeScoreChange, weeklyScoreGuides, weeklyScoreQuery } from '@/lib/weeklyScoreApi'
 import type { CheckIn, EmotionTag, StudyPlan, StudySession, Subject } from '@/types'
 
 const weekdayNames = ['일', '월', '화', '수', '목', '금', '토']
@@ -150,6 +155,12 @@ export function StatsPage() {
 
       {/* 오늘 푼 문제 사진 채점: [사진 올리기] → (PC) QR 창 → 폰으로 찍어 올리면 아래에 결과 카드 (2026-10-24) */}
       <AnswerCheckCard />
+
+      {/* 이번 주 점수 (BE #412 · #660): 정답률과 공부 달성률의 평균. 서버가 계산하고 본인만 봅니다.
+          못 받으면(테스트 로그인 · 서버 배포 전 · 연결 끊김) 카드를 그리지 않습니다. */}
+      <AsyncBoundary pendingFallback={<Skeleton className="h-40 w-full rounded-2xl" />}>
+        <WeeklyScoreCard weekStart={getMondayKey(new Date(now))} />
+      </AsyncBoundary>
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → AI 분석 (가장 자주 보는 것을 위로)
           내 숲 · 지난 통화 요약은 2026-10-24 에 뺐습니다. (lib/forest*.ts · lib/callSummary.ts 는 다른 곳이 써서 남김) */}
@@ -752,6 +763,76 @@ function FocusWeekCard({ now }: FocusWeekCardProps) {
           ))}
         </ul>
       )}
+    </Card>
+  )
+}
+
+interface WeeklyScoreCardProps {
+  /** 이번 주 월요일 'YYYY-MM-DD' (하루는 새벽 4시 기준, lib/weeklyFacts.ts) */
+  weekStart: string
+}
+
+/**
+ * 이번 주 점수 카드 (#660). 숫자는 서버(BE #412)가 준 그대로 보여 주고 다시 계산하지 않습니다.
+ * 점수가 없으면 0 을 그리지 않고 무엇이 더 필요한지 안내합니다. 순위 · 남과의 비교는 보여 주지 않습니다.
+ */
+function WeeklyScoreCard({ weekStart }: WeeklyScoreCardProps) {
+  const { data: score } = useSuspenseQuery(weeklyScoreQuery(weekStart))
+  if (score === null) return null
+
+  const guides = weeklyScoreGuides(score)
+  const change = describeScoreChange(score)
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* 옆에 "진행 중" 표시를 두려고 Card 의 title 대신 같은 모양의 제목을 직접 씁니다. */}
+        <h3 className="text-[17px] font-bold tracking-tight text-slate-900">이번 주 점수</h3>
+        {score.inProgress && (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+            진행 중 · 오늘까지
+          </span>
+        )}
+      </div>
+
+      {score.score !== null && (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="text-4xl font-bold text-slate-900 tabular-nums">
+            {score.score}
+            <span className="ml-0.5 text-base font-medium text-slate-500">점</span>
+          </p>
+          {change !== '' && <p className="text-sm text-slate-600">{change}</p>}
+        </div>
+      )}
+
+      {guides.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-1 rounded-xl bg-slate-50 p-3 text-sm break-keep text-slate-700">
+          {guides.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+
+      {/* 점수가 어떻게 나왔는지: 두 값. 모르는 값은 '—' (0 으로 쓰지 않기) */}
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <dt className="text-xs text-slate-500">정답률</dt>
+          <dd className="mt-0.5 font-semibold text-slate-900 tabular-nums">
+            {score.accuracy === null ? '—' : `${score.accuracy}%`}
+          </dd>
+          <dd className="text-xs text-slate-500 tabular-nums">
+            {score.totalCount}문제 중 {score.correctCount}개
+          </dd>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <dt className="text-xs text-slate-500">공부 달성률</dt>
+          <dd className="mt-0.5 font-semibold text-slate-900 tabular-nums">
+            {score.planRate === null ? '—' : `${score.planRate}%`}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs break-keep text-slate-500">
+        점수는 정답률과 공부 달성률의 평균이에요. 나만 볼 수 있어요.
+      </p>
     </Card>
   )
 }

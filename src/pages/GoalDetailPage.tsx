@@ -11,11 +11,16 @@ import { getTodayKey } from '@/lib/date'
 import { formatDday, getDaysUntil } from '@/lib/exams'
 import {
   CHECK_REASON_MAX_LENGTH,
+  GOAL_RESULT_MAX_LENGTH,
   changeGoalOnCheck,
+  finishGoal,
   getCompletionProgress,
+  getCompletionResultText,
   giveUpGoal,
   isCheckReasonValid,
   isGoalCheckDue,
+  isGoalResultDue,
+  isGoalResultValid,
   keepGoal,
   recordDoneAmount,
   type CompletionProgress,
@@ -51,6 +56,7 @@ function toCheckStep(value: string): CheckStep {
 /**
  * 목표 상세 화면입니다. (주소: /goals/:goalId, 기획서 「4.7 목표와 숲」, #403)
  * 유형별 진척(완주형: 페이스 / 점수형: 예상 성장 곡선)과 WOOP, 처음 목표값(이력), 2주 목표 점검을 보여 줍니다.
+ * D-day 가 되면 2주 점검 대신 결과를 적고 '완료' 로 보관합니다. (#672)
  * 점검 단계는 주소에 둡니다. (?check=open · change · giveUp) 뒤로 가기를 누르면 앞 단계로 갑니다.
  */
 export function GoalDetailPage() {
@@ -73,7 +79,9 @@ export function GoalDetailPage() {
   }
 
   const checkStep = goal.status === 'active' ? toCheckStep(checkParam) : ''
-  const isDue = isGoalCheckDue(goal, todayKey)
+  // D-day 가 됐으면 결과 적기가 먼저입니다. 이때는 2주 점검을 권하지 않습니다.
+  const isResultDue = isGoalResultDue(goal, todayKey)
+  const isDue = isGoalCheckDue(goal, todayKey) && !isResultDue
   const daysUntil = getDaysUntil(goal.dDay)
 
   function finishCheck(next: Goal, message: string) {
@@ -106,6 +114,25 @@ export function GoalDetailPage() {
         <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
           {savedMessage}
         </p>
+      )}
+
+      {isResultDue && checkStep === '' && (
+        <GoalResultCard
+          goal={goal}
+          todayKey={todayKey}
+          onFinish={(result) =>
+            finishCheck(
+              finishGoal(goal, result),
+              "목표를 마무리했어요. 카드 탭의 '완료한 목표'에 남아요.",
+            )
+          }
+        />
+      )}
+
+      {goal.status === 'done' && (
+        <Card title="결과">
+          <p className="text-sm break-keep text-slate-700">{goal.result || '—'}</p>
+        </Card>
       )}
 
       {/* 2주가 지났으면 점검을 권합니다. (통화의 조건부 모듈도 같은 함수 isGoalCheckDue 로 부릅니다) */}
@@ -166,7 +193,7 @@ export function GoalDetailPage() {
             </Card>
           )}
 
-          {goal.status === 'active' && !isDue && (
+          {goal.status === 'active' && !isDue && !isResultDue && (
             <Button
               variant="secondary"
               className="w-full sm:w-auto sm:self-start"
@@ -203,6 +230,63 @@ function WoopLine({ label, value }: WoopLineProps) {
       <dt className="text-xs font-medium text-slate-500">{label}</dt>
       <dd className="mt-0.5 text-slate-800">{value || '—'}</dd>
     </div>
+  )
+}
+
+interface GoalResultCardProps {
+  goal: Goal
+  todayKey: string
+  onFinish: (result: string) => void
+}
+
+/**
+ * D-day 가 되면 결과를 적고 목표를 마무리합니다. (#672)
+ * 점수형은 받은 점수·등급을 적고, 완주형은 적어 둔 분량으로 결과를 만들어서 따로 묻지 않습니다.
+ */
+function GoalResultCard({ goal, todayKey, onFinish }: GoalResultCardProps) {
+  const [scoreText, setScoreText] = useState('')
+  const result = goal.kind === 'score' ? scoreText : getCompletionResultText(goal, todayKey)
+  const canFinish = isGoalResultValid(result)
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // form 이 기본으로 하는 "페이지 새로고침" 을 막습니다.
+    event.preventDefault()
+    if (!canFinish) return
+    onFinish(result)
+  }
+
+  return (
+    <Card className="border-amber-300 bg-amber-50">
+      <p className="text-sm font-semibold text-amber-900">
+        {todayKey > goal.dDay ? 'D-day 가 지났어요' : '오늘이 D-day 예요'}
+      </p>
+      <p className="mt-1 text-sm break-keep text-amber-900">
+        결과를 적고 목표를 마무리해요. 마무리한 목표는 카드 탭의 '완료한 목표'에 남고, 진행 중 목표
+        칸이 하나 비어요.
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-3">
+        {goal.kind === 'score' ? (
+          <Input
+            id="goal-result"
+            label="받은 점수·등급"
+            value={scoreText}
+            maxLength={GOAL_RESULT_MAX_LENGTH}
+            placeholder={goal.currentScore ? `시작할 때 ${goal.currentScore}` : '예: 4등급, 78점'}
+            onChange={(event) => setScoreText(event.target.value)}
+            className="h-10 bg-white text-base"
+          />
+        ) : (
+          <p className="text-sm break-keep text-amber-900">
+            결과: <b>{result || '—'}</b>
+            <br />
+            분량을 덜 적었다면 아래 진척에서 먼저 고쳐 주세요.
+          </p>
+        )}
+        <Button type="submit" className="w-full sm:w-auto sm:self-start" disabled={!canFinish}>
+          마무리하기
+        </Button>
+      </form>
+    </Card>
   )
 }
 

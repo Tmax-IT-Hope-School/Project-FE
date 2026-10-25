@@ -7,6 +7,7 @@
  *   점검 — 2주마다 페이스를 보여 주고 유지 / 수정 / 포기를 고릅니다.
  *          수정·포기 때는 처음 적은 '이루면 좋은 점' 을 먼저 보여 주고 이유를 받아야 저장합니다.
  *          원래 목표값은 지우지 않고 이력(history)으로 남깁니다. (3번 · 7번 오류: 신 포도 · 목표 슬쩍 낮추기 대응)
+ *   결과 — D-day 가 되면 결과를 적고 '완료' 로 보관합니다. 지우지 않고 카드 탭 '완료한 목표' 에 남깁니다. (#672)
  */
 import { toDayKey } from '@/lib/date'
 import { changeGoalTarget } from '@/lib/goals'
@@ -150,4 +151,52 @@ export const CHECK_REASON_MAX_LENGTH = 100
 export function isCheckReasonValid(reason: string): boolean {
   const trimmed = reason.trim()
   return trimmed !== '' && trimmed.length <= CHECK_REASON_MAX_LENGTH
+}
+
+/** D-day 결과로 받는 글자 수 (서버 goals.result 도 100자까지) */
+export const GOAL_RESULT_MAX_LENGTH = 100
+
+/**
+ * D-day 결과를 적을 때가 됐는지. 진행 중인 목표만, D-day 당일부터 true 입니다. (#672)
+ * 시험은 D-day 에 보니까 그날부터 적을 수 있게 합니다.
+ * 'YYYY-MM-DD' 글자는 앞에서부터 비교하면 날짜 순서와 같아서 >= 로 비교합니다.
+ *
+ *   D-day 10/30, 오늘 10/29 -> false
+ *   D-day 10/30, 오늘 10/30 -> true
+ *   D-day 10/30, 오늘 11/02 -> true
+ *   이미 완료 · 포기한 목표   -> false
+ */
+export function isGoalResultDue(goal: Goal, todayKey: string): boolean {
+  return goal.status === 'active' && todayKey >= goal.dDay
+}
+
+/**
+ * 완주형 목표의 결과 한 줄을 적어 둔 분량으로 만듭니다. 따로 묻지 않습니다. 전체 분량이 없으면 ''
+ *
+ *   300쪽 중 300쪽 -> '300/300쪽 · 끝까지 했어요'
+ *   300쪽 중 240쪽 -> '240/300쪽 · 80%'
+ */
+export function getCompletionResultText(goal: Goal, todayKey: string): string {
+  const progress = getCompletionProgress(goal, todayKey)
+  if (progress === null) return ''
+  const amount = `${progress.done}/${progress.total}${goal.amountUnit ?? ''}`
+  if (progress.status === 'done') return `${amount} · 끝까지 했어요`
+  return `${amount} · ${Math.round((progress.done / progress.total) * 100)}%`
+}
+
+/** 결과가 저장할 수 있는 글인지 (빈칸만 적은 것은 안 됨) */
+export function isGoalResultValid(result: string): boolean {
+  const trimmed = result.trim()
+  return trimmed !== '' && trimmed.length <= GOAL_RESULT_MAX_LENGTH
+}
+
+/**
+ * 결과를 적고 목표를 '완료' 로 보관합니다. 지우지 않습니다. (#672)
+ * 진행 중 목표에서 빠지므로 진행 중 3칸 중 하나가 비어 새 목표를 만들 수 있습니다.
+ * 서버에는 useGoalSync 가 { status: 'done', result } 로 보냅니다. (lib/goalsApi.ts 의 toServerGoalBody)
+ *
+ *   finishGoal({ status: 'active', … }, ' 4등급 ') -> { status: 'done', result: '4등급', … }
+ */
+export function finishGoal(goal: Goal, result: string): Goal {
+  return { ...goal, status: 'done', result: result.trim() }
 }

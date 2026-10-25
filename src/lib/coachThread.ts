@@ -288,10 +288,15 @@ const OTHER_ROOM_MIN_TEXT_LENGTH = 4
  * 방마다 마지막 3줄, 모두 합쳐 최근 6줄까지, 한 줄은 방 이름을 넣어 80자까지. 보낼 때는 시간 순서입니다.
  * 빼는 말: 구분선 · 4자보다 짧은 말 · 칩을 눌러 붙은 말("이대로 할게" 처럼 그 방 칩 글자와 똑같은 말)
  *   칩 말이 섞이면 방마다 3줄 안에서 학생이 직접 쓴 말이 밀려나서 뺍니다. (2026-10-22 QA)
+ * room 이 null 이면 모든 방의 말을 모읍니다. 음성 통화는 어느 방도 아니라서 null 로 부릅니다. (#699)
  *
  *   상담 방에 오늘 "미적분 극한이 헷갈려" 를 썼고 지금 계획 방이면 -> ['상담: 미적분 극한이 헷갈려']
  */
-export function otherRoomLines(ownerId: string, room: ChatRoomId, todayKey: string): string[] {
+export function otherRoomLines(
+  ownerId: string,
+  room: ChatRoomId | null,
+  todayKey: string,
+): string[] {
   const lines: { at: number; text: string }[] = []
   for (const other of CHAT_ROOMS) {
     if (other.id === room) continue

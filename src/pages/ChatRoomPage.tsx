@@ -136,7 +136,7 @@ import { loadLocalCheckIn, saveLocalCheckIn, saveQuickCheckIn } from '@/lib/quic
 import { toggleReason } from '@/lib/reasons'
 import { loadRestDays } from '@/lib/restDays'
 import { gradeNumberOf } from '@/lib/schoolEvents'
-import { loadSchoolClass, schoolTodayOrNullQuery, type SchoolToday } from '@/lib/schoolToday'
+import { loadSchoolClass, schoolTodayOrNullQuery, todaySubjectsOf } from '@/lib/schoolToday'
 import { SHORTFALL_REASONS } from '@/lib/sessionTags'
 import { loadData, saveData } from '@/lib/storage'
 import {
@@ -444,19 +444,6 @@ function applyPlanReply(thread: CoachThread, result: PlanReply, request: PlanReq
   })
 }
 
-/**
- * 오늘 시간표의 과목 (겹치지 않게). AI 가 오늘 계획의 카드 글을 쓸 때 "오늘 배운 과목" 으로 참고합니다.
- * 주말에는 시간표가 다음 월요일 것이라 오늘 배운 과목이 아니어서 빈 목록입니다. (schoolDay, 2026-10-22)
- */
-function todaySubjectsOf(school: SchoolToday | null): string[] {
-  const subjects: string[] = []
-  if (school && school.schoolDay !== school.date) return subjects
-  for (const period of school?.timetable ?? []) {
-    if (!subjects.includes(period.subject)) subjects.push(period.subject)
-  }
-  return subjects
-}
-
 // ---- 문제 말풍선 (lib/studyQuiz.ts, 2026-10-18 확인 문제) ----
 
 /** 확인 문제 칸에 적는 것 */
@@ -498,11 +485,20 @@ function closeOpenQuizzes(thread: CoachThread): CoachThread {
   return { ...thread, bubbles }
 }
 
-/** 문제 말풍선을 대화방 끝에 붙입니다. (서버를 부르지 않는 "틀린 문제 다시" 도 이걸로) */
+/**
+ * 문제 말풍선을 대화방 끝에 붙입니다. (서버를 부르지 않는 "틀린 문제 다시" 도 이걸로)
+ * 단원(unit)은 AI 가 낸 문제에만 있습니다. 단원이 있는 결과만 서버에 저장됩니다. (lib/quizResultsApi.ts)
+ */
 function withNewQuiz(
   thread: CoachThread,
   text: string,
-  quiz: { topic: string; cardId: string | null; questions: QuizQuestion[]; isDemo: boolean },
+  quiz: {
+    topic: string
+    cardId: string | null
+    unit?: string | null
+    questions: QuizQuestion[]
+    isDemo: boolean
+  },
 ): CoachThread {
   const made = newQuiz({ ...quiz, now: Date.now() })
   return withBubble(closeOpenQuizzes(thread), { speaker: 'ai', text, quiz: made, typing: true })
@@ -534,6 +530,7 @@ function applyQuizReply(thread: CoachThread, result: QuizReply, input: QuizInput
   return withNewQuiz(thread, lines.join('\n'), {
     topic: input.topic,
     cardId: input.cardId,
+    unit: result.unit,
     questions: result.questions,
     isDemo: result.isDemo,
   })

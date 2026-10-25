@@ -112,9 +112,9 @@ export const DEFAULT_DAILY_MINUTES = 60
  * 학생이 카드 폼에서 직접 정하는 길이는 자유입니다. 이 값은 코치가 짜 주는 계획에만 씁니다.
  */
 const MIN_STUDY_MINUTES = 30
-/** 긴 계획의 하루 공부 시간 범위 (분). 서버도 30 ~ 300분을 받습니다. */
-const MIN_DAILY_MINUTES = MIN_STUDY_MINUTES
-const MAX_DAILY_MINUTES = 300
+/** 긴 계획의 하루 공부 시간 범위 (분). 서버도 30 ~ 300분을 받습니다. (통화 중 계획 도구도 씀, lib/callTools.ts) */
+export const MIN_DAILY_MINUTES = MIN_STUDY_MINUTES
+export const MAX_DAILY_MINUTES = 300
 /** 긴 계획은 오늘부터 이만큼(일) 뒤까지만 짤 수 있습니다. (서버도 같음) */
 export const MAX_LONG_PLAN_DAYS = 30
 /** 고치는 요청 · 목표 한 줄의 최대 글자 수 (서버도 100자) */

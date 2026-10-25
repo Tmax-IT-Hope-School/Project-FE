@@ -247,6 +247,20 @@ export function loadSchoolDay(dateKey: string): SchoolDay | null {
   return { date: dateKey, subjects: record.subjects, lastPeriod }
 }
 
+/**
+ * 오늘 시간표의 과목 (겹치지 않게). AI 가 오늘 계획의 카드 글을 쓸 때 "오늘 배운 과목" 으로 참고합니다.
+ * 주말에는 시간표가 다음 월요일 것이라 오늘 배운 과목이 아니어서 빈 목록입니다. (schoolDay, 2026-10-22)
+ * 채팅 계획 방(pages/ChatRoomPage.tsx)과 통화 중 계획(pages/CallActivePage.tsx, #699)이 같이 씁니다.
+ */
+export function todaySubjectsOf(school: SchoolToday | null): string[] {
+  const subjects: string[] = []
+  if (school && school.schoolDay !== school.date) return subjects
+  for (const period of school?.timetable ?? []) {
+    if (!subjects.includes(period.subject)) subjects.push(period.subject)
+  }
+  return subjects
+}
+
 /** 반을 고르는 칸에 처음 넣어 둘 학년. 온보딩에서 고른 학년(고1~고3)이 있으면 그 값, 없으면 2학년입니다. */
 export function getDefaultGrade(): number {
   return gradeNumberOf(loadOnboardingAnswers()?.grade) ?? 2

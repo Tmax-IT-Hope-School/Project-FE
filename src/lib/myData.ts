@@ -107,6 +107,9 @@ const RECORD_KEYS = [
   'session-away',
   // 확인 문제를 푼 결과 (틀린 문제를 다음 날 다시 내려고 남김, lib/studyQuiz.ts)
   'quiz-results',
+  // 확인 문제 결과 중 서버로 보낸 것 · 거절된 것 (#653, lib/quizResultsApi.ts)
+  // ⚠️ 서버에 이미 올라간 결과는 이 버튼으로 지워지지 않습니다. (서버에 지우는 주소가 없음, 탈퇴할 때 지워집니다)
+  'quiz-result-sync',
   // 내가 준비하는 것(lib/studyFocus.ts) · 내 일정(lib/myEvents.ts) · 내 학과 · 계열(lib/schoolTrack.ts)
   'focus',
   'my-events',

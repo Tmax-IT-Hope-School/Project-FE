@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button'
 import { PlanCard } from '@/components/ui/PlanCard'
+import { useAuth } from '@/hooks/useAuth'
 import { useCards } from '@/hooks/useCards'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { careThemes, pickGreeting, type CareLevel } from '@/lib/careTheme'
@@ -7,13 +8,14 @@ import { cn } from '@/lib/cn'
 import { loadCallCard } from '@/lib/callCard'
 import {
   buildCallTools,
+  callTalkLines,
   planOutputForAi,
+  readDayPlanArgs,
   readLongPlanArgs,
   readReviseArgs,
   type ToolCall,
 } from '@/lib/callTools'
 import {
-  DEFAULT_DAILY_MINUTES,
   makeDemoDayPlan,
   makeDemoLongPlan,
   planToCards,
@@ -28,12 +30,22 @@ import {
 } from '@/lib/coachPlan'
 import { getTodayKey, moveDateKey } from '@/lib/date'
 import { saveMyEvent } from '@/lib/myEvents'
-import { RealtimeCallError, startRealtimeCall, type RealtimeCall } from '@/lib/realtimeCall'
+import { loadLocalCheckIn } from '@/lib/quickCheckIn'
+import {
+  CALL_ENDING_NOTICE,
+  isCallEndingSoon,
+  RealtimeCallError,
+  startRealtimeCall,
+  type RealtimeCall,
+} from '@/lib/realtimeCall'
+import { loadSchoolClass, schoolTodayOrNullQuery, todaySubjectsOf } from '@/lib/schoolToday'
 import { FOCUS_NAME_MAX, loadStudyFocus } from '@/lib/studyFocus'
 import { COACH_PATH } from '@/lib/chatRooms'
+import { otherRoomLines } from '@/lib/coachThread'
 import { getCallTone, getTodayCareLevel, getTodayMaxHarshness } from '@/lib/todayCare'
 import { toCallLines, type CallResultState } from '@/lib/callReview'
 import { applyTranscript, type SubtitleMessage } from '@/lib/transcript'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
@@ -274,9 +286,15 @@ function formatCallTime(totalSeconds: number) {
 export function CallActivePage() {
   const navigate = useNavigate()
   const location = useLocation()
+  // 오늘 채팅 방들의 대화를 꺼낼 때 "누구의 대화방인지" 를 맞추려고 씁니다. (lib/coachThread.ts)
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [seconds, setSeconds] = useState(0)
-  // 서버가 정한 통화 한 번의 최대 길이(초). 연결된 뒤에 정해집니다. 서버가 안 알려 줬으면 null (제한 없음)
+  // 통화 한 번의 최대 길이(초). 연결된 뒤에 서버 값으로 정해집니다. (서버 값이 없거나 이상하면 180초, lib/realtimeCall.ts)
+  // 연결 전에는 null 입니다.
   const [maxCallSeconds, setMaxCallSeconds] = useState<number | null>(null)
+  // 끝나기 30초 전 "마무리해" 안내를 이번 통화에서 이미 AI 에게 보냈는지. (한 통화에 한 번만, 다시 시도하면 새 통화라 다시 보냄)
+  const hasSentEndingNoticeRef = useRef(false)
   const [isMuted, setIsMuted] = useState(false)
   // 오늘의 관리 강도입니다. 아직 진짜 값이 없어서 고정값이에요. (자세한 건 todayCare.ts)
   // 0~3 으로 바꿔 보면 색·표정·인사말이 달라집니다.
@@ -326,15 +344,34 @@ export function CallActivePage() {
   async function handleToolCall(call: ToolCall): Promise<string> {
     const todayKey = getTodayKey()
     const focus = loadStudyFocus()
+    // 통화에서 오간 말 최근 8줄 ('나: …' / '코치: …'). "2시간만 · 9시부터 · 수학 먼저" 같은 말이 계획에 들어가게 같이 보냅니다. (#699)
+    const planTalk = callTalkLines(messages)
     let result: PlanReply
     setIsPlanBusy(true)
     try {
       if (call.name === 'show_day_plan') {
-        const demo = () =>
-          makeDemoDayPlan({ todayKey, now: Date.now(), subjects: [], light: false })
+        // 채팅 계획 방과 같은 재료: 오늘 시간표 과목 · 오늘 체크인 컨디션 · 오늘 채팅 방들의 이야기 · 대화(planTalk)
+        // 시간표는 채팅 방이 이미 받아 둔 것이 있으면 그것을 쓰고(통화 중에 다시 기다리지 않게), 없으면 받아 옵니다.
+        // 못 받으면 null 이라 과목 없이 짭니다.
+        const school = await queryClient.ensureQueryData(
+          schoolTodayOrNullQuery(loadSchoolClass(), isServerData, todayKey),
+        )
+        const subjects = todaySubjectsOf(school)
+        const condition = loadLocalCheckIn(todayKey)?.condition ?? null
+        const demo = () => makeDemoDayPlan({ todayKey, now: Date.now(), subjects, light: false })
         result = isServerData
           ? await withDemoFallback(
-              () => requestDayPlan({ date: todayKey, focus, subjects: [], condition: null }),
+              () =>
+                requestDayPlan({
+                  date: todayKey,
+                  focus,
+                  subjects,
+                  condition,
+                  otherRooms: otherRoomLines(user?.id ?? 'unknown', null, todayKey),
+                  // AI 가 통화에서 들은 총 분 · 시작 시각 (없으면 보내지 않음)
+                  ask: readDayPlanArgs(call.args),
+                  planTalk,
+                }),
               demo,
             )
           : demo()
@@ -346,7 +383,8 @@ export function CallActivePage() {
         const input = {
           goal: args.goal,
           endDate: args.endDate,
-          dailyMinutes: DEFAULT_DAILY_MINUTES,
+          // 학생이 통화에서 말한 하루 분 (말하지 않았으면 60분)
+          dailyMinutes: args.dailyMinutes,
           image: null,
           focus,
           // 학생이 통화에서 말한 시험 · 대회 날이라 저장할 때 홈 일정에 넣습니다.
@@ -366,7 +404,7 @@ export function CallActivePage() {
             : await withDemoFallback(
                 () =>
                   current.kind === 'day'
-                    ? reviseDayPlan(current, request, { focus, subjects: [] })
+                    ? reviseDayPlan(current, request, { focus, subjects: [], planTalk })
                     : reviseLongPlan(current, request),
                 demo,
               )
@@ -425,6 +463,9 @@ export function CallActivePage() {
       tone: getCallTone(),
       // 내 기록을 숫자로 정리한 "학생 카드" 를 같이 보냅니다. AI 가 이걸 보고 묻는 것과 말투를 바꿉니다. (lib/callCard.ts)
       card: loadCallCard(),
+      // 오늘 채팅 방(계획 · 상담 · 과목 쌤)에서 한 말 몇 줄. 통화는 어느 방도 아니라서 모든 방의 말을 모읍니다. (#699)
+      // AI 가 채팅에서 이미 정한 것을 또 묻지 않게 합니다.
+      otherRooms: otherRoomLines(user?.id ?? 'unknown', null, getTodayKey()),
       // 대화 글자가 올 때마다 말풍선 목록에 반영합니다.
       onTranscript: (event) => setMessages((prev) => applyTranscript(prev, event)),
       // 통화 중 "계획 짜 줘" 를 위한 도구 (오늘 날짜를 알려 줘야 AI 가 날짜를 셀 수 있음)
@@ -519,6 +560,15 @@ export function CallActivePage() {
     navigate('/call/result', { replace: true, state: toResultState(callId, messages) })
   }
 
+  // 끝나기 30초 전에 AI 에게 "새 질문 말고 약속 하나로 마무리해" 를 한 번 알립니다. (#699)
+  // 말 중간에 갑자기 끊기지 않게, AI 가 미리 마무리하게 하려는 것입니다. 바로 말하게 하지는 않아서 학생 말을 끊지 않습니다.
+  useEffect(() => {
+    if (connection !== 'connected' || maxCallSeconds === null) return
+    if (hasSentEndingNoticeRef.current || !isCallEndingSoon(seconds, maxCallSeconds)) return
+    hasSentEndingNoticeRef.current = true
+    callRef.current?.sendAppNotice(CALL_ENDING_NOTICE)
+  }, [connection, maxCallSeconds, seconds])
+
   // 서버가 정한 최대 길이가 되면 통화를 끊고 결과 화면으로 갑니다. 음성 통화는 길수록 돈이 많이 들기 때문입니다.
   // (화면을 떠나면 위 useEffect 의 정리 코드가 연결과 마이크를 끕니다)
   useEffect(() => {
@@ -544,9 +594,10 @@ export function CallActivePage() {
   // 다시 시도: "연결 중"으로 돌려놓고 attempt 를 올리면 위 useEffect 가 새로 연결합니다.
   function handleRetry() {
     setConnection('connecting')
-    // 새 통화라서 통화 시간과 지난 대화 말풍선을 처음으로 돌립니다.
+    // 새 통화라서 통화 시간과 지난 대화 말풍선을 처음으로 돌립니다. (끝나기 전 안내도 새 통화에서 다시 보냄)
     setSeconds(0)
     setMessages([])
+    hasSentEndingNoticeRef.current = false
     setAttempt((prev) => prev + 1)
   }
 

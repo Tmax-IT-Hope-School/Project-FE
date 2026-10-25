@@ -19,21 +19,23 @@
 
 ## 2. 무엇이, 어떻게 가나요?
 
-| 데이터                         | 서버 주소 (BE `docs/API.md`)                 | 방향                   | 규칙 파일            | 보낼 목록 · 표시 (localStorage) |
-| ------------------------------ | -------------------------------------------- | ---------------------- | -------------------- | ------------------------------- |
-| 카드                           | `/api/v1/cards`                              | 보내기 + **받아 오기** | `lib/cardSync.ts`    | `study-card-sync-pending`       |
-| 목표                           | `/api/v1/goals`                              | 보내기 + **받아 오기** | `lib/goalSync.ts`    | `study-goal-sync-pending`       |
-| 공부 기록 (타이머 · 노는 기록) | `POST /api/v1/study-sessions`                | **보내기만**           | `lib/sessionSync.ts` | `study-session-sync`            |
-| 미루기 · 실패                  | `POST /api/v1/cards/{id}/postpone` · `/fail` | **보내기만**           | `lib/markSync.ts`    | `study-mark-sync`               |
-| 사후 입력                      | `POST /api/v1/cards/{id}/late-entry`         | **보내기만**           | `lib/markSync.ts`    | `study-mark-sync`               |
-| 휴식 처리                      | `POST /api/v1/rest-days/{date}`              | **보내기만**           | `lib/markSync.ts`    | `study-mark-sync`               |
+| 데이터                         | 서버 주소 (BE `docs/API.md`)                            | 방향                   | 규칙 파일               | 보낼 목록 · 표시 (localStorage) |
+| ------------------------------ | ------------------------------------------------------- | ---------------------- | ----------------------- | ------------------------------- |
+| 카드                           | `/api/v1/cards`                                         | 보내기 + **받아 오기** | `lib/cardSync.ts`       | `study-card-sync-pending`       |
+| 목표                           | `/api/v1/goals`                                         | 보내기 + **받아 오기** | `lib/goalSync.ts`       | `study-goal-sync-pending`       |
+| 공부 기록 (타이머 · 노는 기록) | `POST /api/v1/study-sessions`                           | **보내기만**           | `lib/sessionSync.ts`    | `study-session-sync`            |
+| 미루기 · 실패                  | `POST /api/v1/cards/{id}/postpone` · `/fail`            | **보내기만**           | `lib/markSync.ts`       | `study-mark-sync`               |
+| 사후 입력                      | `POST /api/v1/cards/{id}/late-entry`                    | **보내기만**           | `lib/markSync.ts`       | `study-mark-sync`               |
+| 휴식 처리                      | `POST /api/v1/rest-days/{date}`                         | **보내기만**           | `lib/markSync.ts`       | `study-mark-sync`               |
+| 확인 문제 결과 (#653)          | `POST /api/v1/quiz-results` · `GET /quiz-results/stats` | 보내기 + **통계 받기** | `lib/quizResultsApi.ts` | `study-quiz-result-sync`        |
 
 - **받아 오기**: 앱을 열 때 서버의 목록을 받아(TanStack Query `useQuery`), 다른 기기에서 만들거나 고치거나 지운 것을 이 기기에도 반영합니다.
 - **보내기만**: 서버에 "고치기" 주소가 없어서 받아 오지 않습니다. 받아 오면 "모든 기록 지우기" 로 지운 기록이 다른 기기에서 다시 들어올 수 있기 때문입니다.
 - 서버에 올라간 것에는 **서버 번호**(`serverId`)가 붙습니다. (`Card.serverId` · `Goal.serverId` · `FixedBlock.serverId`)
 - 다른 기기에서 만든 것은 id 가 `card-s7` · `goal-s4` · `fixed-s9` 처럼 됩니다. (s 뒤가 서버 번호)
+- **통계 받기**: 확인 문제 결과는 서버가 하나하나 돌려주지 않고 과목 · 단원 · 날짜별 맞은 수만 줍니다. 기록 탭 · 문제 풀이 리포트가 받을 때 이 기기에서 보낸 몫을 빼고 더합니다. 그날 푼 것만 보냅니다. ([HISTORY-REPORT.md](./HISTORY-REPORT.md))
 
-모든 맞추기는 `components/layout/Layout.tsx` 에서 훅 한 번씩으로 켭니다: `useCardSync` · `useGoalSync` · `useSessionSync` · `useMarkSync` · `useFixedBlockSync`.
+모든 맞추기는 `components/layout/Layout.tsx` 에서 훅 한 번씩으로 켭니다: `useCardSync` · `useGoalSync` · `useSessionSync` · `useMarkSync` · `useQuizResultSync` · `useFixedBlockSync`.
 
 ## 3. 흐름 (카드를 예로)
 
