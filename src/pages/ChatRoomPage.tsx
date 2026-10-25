@@ -135,6 +135,7 @@ import { shrinkPhoto } from '@/lib/photoCards'
 import { loadLocalCheckIn, saveLocalCheckIn, saveQuickCheckIn } from '@/lib/quickCheckIn'
 import { toggleReason } from '@/lib/reasons'
 import { loadRestDays } from '@/lib/restDays'
+import { hasCrisisText } from '@/lib/safetyBrake'
 import { gradeNumberOf } from '@/lib/schoolEvents'
 import { loadSchoolClass, schoolTodayOrNullQuery, todaySubjectsOf } from '@/lib/schoolToday'
 import { SHORTFALL_REASONS } from '@/lib/sessionTags'
@@ -616,11 +617,13 @@ function RoomChat({ room }: RoomChatProps) {
   // 매일 코치 방만 브리핑 · 미션 · 코치 알림 · 공부 끝 회고를 합니다.
   const isDailyCoach = roomInfo.isDailyCoach
   // 미션 알림을 누르고 들어오면 ?mission=morning 처럼 옵니다. 코치가 그 미션 이야기를 먼저 합니다.
-  const [missionParam, setMissionParam] = useQueryParam('mission', '')
+  // 아래 넷(?mission= · ?nudge= · ?talk= · ?plan=)은 한 번 읽고 지우는 값이라 replace 로 지웁니다.
+  // 지울 때 기록을 새로 쌓으면, 뒤로 가기가 지우기 전 주소로 돌아가서 또 지우고 쌓여 이 방에 갇힙니다. (#723)
+  const [missionParam, setMissionParam] = useQueryParam('mission', '', { replace: true })
   // 코치 알림을 누르고 들어오면 ?nudge=evening 처럼 옵니다. 코치의 첫 말이 그 알림 글입니다. (lib/coachNudges.ts)
-  const [nudgeParam, setNudgeParam] = useQueryParam('nudge', '')
+  const [nudgeParam, setNudgeParam] = useQueryParam('nudge', '', { replace: true })
   // 다른 화면의 [이야기하기] 로 들어오면 ?talk=SESSION_REVIEW 처럼 옵니다. 맡겨 둔 사실 줄로 그 주제의 새 대화를 엽니다.
-  const [talkParam, setTalkParam] = useQueryParam('talk', '')
+  const [talkParam, setTalkParam] = useQueryParam('talk', '', { replace: true })
   // 후기 · 못 한 카드 대화에서 AI 가 짐작한 이유를 확인받으면 그 공부 기록에 저장합니다. (lib/talkLines.ts)
   const { updateSession } = useStudySessions()
 
@@ -653,13 +656,14 @@ function RoomChat({ room }: RoomChatProps) {
   })
   const nowCard = todayCards.current ?? todayCards.next
   // 오늘 계획을 고칠 때 바꿀 수 있는 카드: 오늘 하루짜리이고 아직 시작 · 처리하지 않은 카드 (반복 카드는 건드리지 않음)
+  // 중간에 끝내고 이어서 할 수 있는 카드는 기록이 있어서 고치지 않습니다. (#709)
   const editableTodayCards = todayCards.items
-    .filter((item) => item.status === 'waiting' || item.status === 'current')
+    .filter((item) => (item.status === 'waiting' || item.status === 'current') && !item.isResumable)
     .map((item) => item.card)
     .filter((card) => card.date === todayKey && !(card.repeatDays && card.repeatDays.length > 0))
   const todaySubjects = todaySubjectsOf(school)
   // 홈의 [코치와 계획 짜기] 로 들어오면 ?plan=today 로 옵니다. 코치가 바로 오늘 계획을 짜 줍니다.
-  const [planParam, setPlanParam] = useQueryParam('plan', '')
+  const [planParam, setPlanParam] = useQueryParam('plan', '', { replace: true })
   // 긴 계획 칸 (목표 · 날짜 · 하루 시간 · 사진). null 이면 닫혀 있습니다.
   const [longForm, setLongForm] = useState<LongPlanForm | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
@@ -1235,8 +1239,11 @@ function RoomChat({ room }: RoomChatProps) {
     const typed = raw.trim().slice(0, MAX_CHAT_TEXT_LENGTH)
     const text = typed === '' && photo ? '이 사진 봐 줘' : typed
     if (text === '' || isBusy) return
+    // 위기 표현이 든 말은 계획 고치기 · 알림 · 문제 · 이름 저장으로 알아듣지 않고 보통 대화로 보냅니다.
+    // 그래야 서버 AI(테스트 로그인은 시연용 답)가 상담 전화 한 줄을 같이 보여 줍니다. (#705)
+    const isCrisis = hasCrisisText([text])
     // 사진을 붙인 말은 계획 · 문제 부탁으로 알아듣지 않고 바로 AI 에게 보냅니다.
-    if (focusStep === null && photo === null) {
+    if (focusStep === null && photo === null && !isCrisis) {
       // 계획 말풍선이 열려 있으면 학생이 쓴 말은 그 계획을 고치는 요청입니다. (계획 핑퐁)
       if (openPlanBubble?.plan) {
         revisePlan(openPlanBubble, text)
@@ -1317,7 +1324,11 @@ function RoomChat({ room }: RoomChatProps) {
       }
     }
     let focusReaction: CoachMessage | null = null
-    if (focusStep === 'name') {
+    if (isCrisis) {
+      // 준비하는 것의 이름 · 날짜를 묻던 중이면 그 말을 저장하지 않고 묻기를 끝냅니다. (#705)
+      setFocusStep(null)
+      setIsPickingDate(false)
+    } else if (focusStep === 'name') {
       // 대회 · 기타를 고른 뒤 쓴 첫 말은 그 이름으로 저장합니다. ([이름은 나중에] 를 누르면 이름 없이 둡니다)
       const focus = loadStudyFocus()
       const name = focus === null || text === SKIP_FOCUS_NAME_LABEL ? null : cleanFocusName(text)
@@ -1341,7 +1352,11 @@ function RoomChat({ room }: RoomChatProps) {
       focusReaction = focusReactionNow()
     }
     setAttachedPhoto(null)
-    let next = withBubble(thread, { speaker: 'me', text, ...(photo ? { hasPhoto: true } : {}) })
+    // 위기 표현이면 공부 이야기를 멈추므로, 열려 있던 계획 말풍선도 닫아서 계획 버튼을 치웁니다. (#705)
+    const base = isCrisis
+      ? withPlanStatus(thread, (bubble) => (bubble.plan?.status === 'open' ? 'closed' : null))
+      : thread
+    let next = withBubble(base, { speaker: 'me', text, ...(photo ? { hasPhoto: true } : {}) })
     if (!isServerData && focusReaction) {
       // 테스트 로그인: 준비하는 것에 대한 답이면 코드가 바뀐 미션으로 반응합니다.
       setThread(

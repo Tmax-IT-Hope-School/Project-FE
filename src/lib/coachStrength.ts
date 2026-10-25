@@ -57,7 +57,9 @@ export const STRENGTH_PRESETS: StrengthPreset[] = [
 
 /**
  * 지금 저장된 한도가 어느 세기인지. 관리 강도 최대 한도(가장 큰 손잡이)로 정합니다.
- *   0 · 1 → 약 / 2 → 보통 / 3 · 4 → 강
+ *   0 · 1 → 약 / 2 · 3 → 보통 / 4 → 강
+ * 3 은 기획서 기본값이라 온보딩이 "보통 세기로 시작할게요" 라고 안내합니다. (lib/settingsMapping.ts 의 proposeCareLimits)
+ * 그래서 3 도 보통으로 봅니다. 예전에는 3 을 강으로 보여서, 독촉 전화가 꺼져 있는데도 "하루 1번 독촉 전화" 라고 보였습니다. (2026-10-25 QA)
  * 온보딩 결과나 "자세히" 로 나머지 칸이 묶음과 달라도 세기는 하나 골라진 모양으로 보이고, isExact 가 false 입니다.
  * 올려 두고 아직 적용 전인 값(내일부터)이 있으면 그 값으로 봅니다. (고른 대로 보이게)
  *
@@ -69,7 +71,7 @@ export function getCoachStrength(limits: CareLimits): {
 } {
   const careLevel = limits.pendingMaxCareLevel ?? limits.maxCareLevel
   const harshness = limits.pendingMaxHarshness ?? limits.maxHarshness
-  const strength: CoachStrength = careLevel <= 1 ? 'soft' : careLevel === 2 ? 'normal' : 'strong'
+  const strength: CoachStrength = careLevel <= 1 ? 'soft' : careLevel <= 3 ? 'normal' : 'strong'
   const preset = STRENGTH_PRESETS.find((item) => item.strength === strength)
   const isExact =
     preset !== undefined &&

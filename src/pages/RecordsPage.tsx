@@ -661,9 +661,17 @@ interface PickFormProps {
 /** 보기 3개 중 하나 고르고 [이걸로 정하기]. 이미 고른 게 있으면 그것이 골라진 채로 보입니다. */
 function PickForm({ targetWeekStart, options, picks, onSavePick }: PickFormProps) {
   const saved = findWeeklyPick(picks, targetWeekStart)
-  const [selectedTitle, setSelectedTitle] = useState<string | null>(saved?.title ?? null)
+  // 눌렀지만 아직 저장하지 않은 보기. null 이면 저장된 것을 그대로 보여 줍니다.
+  // 저장된 값을 상태로 베껴 두지 않아야, 위의 [1주 더 해 보기] 처럼 다른 곳에서 저장해도 바로 따라갑니다. (2026-10-25 QA)
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
+  const selectedTitle = draftTitle ?? saved?.title ?? null
   const selected = options.find((option) => option.title === selectedTitle)
-  const isSaved = saved !== undefined && saved.title === selectedTitle
+  const isSaved = selected !== undefined && saved?.title === selected.title
+  // 저장된 것이 이 보기들에 없을 때 (예: 지난주에 고른 것을 [1주 더 해 보기] 로 이어 감)
+  const savedOutside =
+    saved !== undefined && !options.some((option) => option.title === saved.title)
+      ? saved
+      : undefined
 
   function handleSave() {
     if (!selected) return
@@ -673,17 +681,24 @@ function PickForm({ targetWeekStart, options, picks, onSavePick }: PickFormProps
       hint: selected.hint,
       skip: selected.skip,
     })
+    setDraftTitle(null)
   }
 
   return (
     <>
+      {savedOutside && (
+        <p className="mt-3 text-sm break-keep text-slate-600">
+          {/* 제목 끝 글자에 따라 을/를 이 달라져서, 조사가 필요 없는 모양으로 씁니다. */}
+          정해 둔 것: &ldquo;{savedOutside.title}&rdquo;. 바꾸려면 아래에서 하나 고르세요.
+        </p>
+      )}
       <div role="radiogroup" aria-label="해 볼 것" className="mt-3.5 flex flex-col gap-2">
         {options.map((option) => (
           <PickOptionButton
             key={option.title}
             option={option}
             isSelected={option.title === selectedTitle}
-            onSelect={() => setSelectedTitle(option.title)}
+            onSelect={() => setDraftTitle(option.title)}
           />
         ))}
       </div>

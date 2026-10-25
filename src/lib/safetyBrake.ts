@@ -133,7 +133,7 @@ function countDays(fromKey: string, toKey: string): number {
  *   예3) ['죽고싶다'], ['죽고 싶어'], ['사라지고 싶어'], ['자해했어'], ['극단적 선택'] -> 모두 true
  *   예4) ['오래오래 살고 싶다'] -> false ('살고싶' 만으로는 잡지 않습니다)
  */
-function hasCrisisText(texts: string[]): boolean {
+export function hasCrisisText(texts: string[]): boolean {
   return texts.some((text) => {
     // \s+ 는 띄어쓰기·줄바꿈·탭이 이어진 부분입니다. 전부 지워서 붙여 씁니다.
     const compactText = text.replace(/\s+/g, '')

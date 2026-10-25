@@ -14,7 +14,7 @@ import { getTodayKey } from '@/lib/date'
 import { YOUTH_HELP_LINE } from '@/lib/helpLines'
 import { shrinkPhoto } from '@/lib/photoCards'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 /** 주소의 ?mode= 값 → 서버에 보내는 값. 주소는 누구나 고칠 수 있어서, 이 두 값이 아니면 "아직 안 고름" 으로 봅니다. */
 const MODE_BY_PARAM: Record<string, AnswerCheckMode> = {
@@ -404,6 +404,7 @@ interface SendResultsProps {
  * 한 장이라도 위기 표현이 있었으면 상담 전화 안내를 맨 위에 먼저 보여 줍니다. (사진으로 카드 만들기와 같은 한 줄)
  */
 function SendResults({ photos, isDone, onRetake, onAnother }: SendResultsProps) {
+  const navigate = useNavigate()
   const finishedCount = photos.filter(
     (photo) => photo.status !== 'ready' && photo.status !== 'sending',
   ).length
@@ -424,7 +425,8 @@ function SendResults({ photos, isDone, onRetake, onAnother }: SendResultsProps) 
         </a>
       )}
 
-      {/* 전체 진행. 다 끝났고 한 장이라도 채점했으면 PC 를 보라고 알려 줍니다. */}
+      {/* 전체 진행. 다 끝났고 한 장이라도 채점했으면 결과가 있는 통계 탭으로 안내합니다.
+          폰에서 바로 시작한 사람도 있어서 "PC 를 보세요" 라고 하지 않습니다. (PC 통계 탭에도 같은 결과가 보입니다) */}
       <p
         role="status"
         className="rounded-2xl bg-white px-5 py-5 text-center text-[20px] font-bold break-keep text-slate-900"
@@ -438,7 +440,7 @@ function SendResults({ photos, isDone, onRetake, onAnother }: SendResultsProps) 
             <span className="mt-1 block text-sm font-normal text-slate-500">한 장에 최대 25초</span>
           </>
         ) : gradedCount > 0 ? (
-          '끝났어요. PC 화면을 보세요'
+          '끝났어요. 결과는 통계 탭에 있어요'
         ) : (
           '채점한 사진이 없어요'
         )}
@@ -493,9 +495,15 @@ function SendResults({ photos, isDone, onRetake, onAnother }: SendResultsProps) 
               다시 찍기
             </Button>
           ) : (
-            <Button variant="outline" size="lg" className="w-full" onClick={onAnother}>
-              다른 사진 올리기
-            </Button>
+            <>
+              {/* 결과는 통계 탭 맨 위 "오늘 채점 결과" 에 있습니다. (components/ui/AnswerCheckCard.tsx) */}
+              <Button size="lg" className="w-full" onClick={() => navigate('/stats')}>
+                결과 보기
+              </Button>
+              <Button variant="outline" size="lg" className="w-full" onClick={onAnother}>
+                다른 사진 올리기
+              </Button>
+            </>
           )}
         </StickyActionBar>
       )}

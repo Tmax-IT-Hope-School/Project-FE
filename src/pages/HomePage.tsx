@@ -260,6 +260,8 @@ const PLAN_STATUS_INFO: Record<TodayCardStatus, { icon: string; label: string }>
   waiting: { icon: '📖', label: '' },
   unhandled: { icon: '⏰', label: '시간 지남' },
   done: { icon: '✅', label: '끝' },
+  // [끝내기] 로 일찍 끝냈고 카드 시간도 끝난 카드 (카드 탭의 '중간에 끝냈어요' 와 같음, #709)
+  endedEarly: { icon: '⏸️', label: '중간에 끝냄' },
   // 미루기 · 실패로 처리했거나, 오늘을 쉰 날로 처리한 카드
   skipped: { icon: '⏭️', label: '넘김' },
 }
@@ -435,7 +437,11 @@ function HomeCalendarSection({
       <GoogleConnectRow connection={connection} />
 
       {/* 카드 탭이 아래 탭에서 빠져서(2026-10-18), 카드 · 목표 관리는 여기서 들어갑니다. */}
-      <div className="mt-1 flex justify-end">
+      {/* 타이머 탭도 빠져서(2026-10-24), 카드 없이 시작 · 미루기 · 폰 내고 시작은 여기서 타이머로 들어갑니다. (#717) */}
+      <div className="mt-1 flex flex-wrap justify-end gap-x-4">
+        <Link to="/timer" className={textLinkClass}>
+          타이머 · 카드 없이 시작 ›
+        </Link>
         <Link to="/cards" className={textLinkClass}>
           카드 · 목표 모두 보기 ›
         </Link>
@@ -786,6 +792,8 @@ function NowCardBlock({ state, heroCard, onStart, onPlanWithCoach, onPhoto }: No
   // 1) 지금 · 다음 카드가 있으면: 형광펜 표시 + 큰 제목 + 시각 + [▶ 시작]
   if (heroCard) {
     const isNow = heroCard === state.current
+    // 중간에 끝냈지만 카드 시간이 남은 카드면 이어서 하자고 씁니다. (#709)
+    const isResumable = state.items.some((item) => item.card === heroCard && item.isResumable)
     return (
       <section aria-label="지금 할 카드" className={blockClass}>
         <span className="bg-now inline-flex rounded-full px-2.5 py-0.5 text-[13px] font-bold text-slate-900">
@@ -803,7 +811,7 @@ function NowCardBlock({ state, heroCard, onStart, onPlanWithCoach, onPhoto }: No
           // 아래 오늘 계획 목록의 줄 버튼("○○ 시작")과 이름이 겹치지 않게 다르게 붙입니다.
           aria-label={`${heroCard.title} 바로 시작`}
         >
-          ▶ 시작
+          {isResumable ? '▶ 이어서 하기' : '▶ 시작'}
         </Button>
       </section>
     )
@@ -893,9 +901,16 @@ function PlanRow({ item, isHero, onStart }: PlanRowProps) {
   // 지금 할 카드와 아직 시간이 안 된 카드만 시작할 수 있습니다.
   const canStart = status === 'current' || status === 'waiting'
   // 끝냈거나 넘긴 카드는 흐리게 보여 줍니다.
-  const isFinished = status === 'done' || status === 'skipped'
+  const isFinished = status === 'done' || status === 'endedEarly' || status === 'skipped'
   // 위 묶음에 나온 카드는 '지금' · '다음' 을 형광펜으로, 나머지는 상태 글자(시간 지남 · 끝 · 넘김)를 그대로 씁니다.
-  const label = isHero ? (status === 'current' ? '지금' : '다음') : info.label
+  // 중간에 끝냈지만 카드 시간이 남은 카드는 '이어 하기' 로 알려 줍니다. (#709)
+  const label = isHero
+    ? status === 'current'
+      ? '지금'
+      : '다음'
+    : item.isResumable
+      ? '이어 하기'
+      : info.label
   return (
     <li className={cn('flex min-h-14 items-center gap-3 py-2', isFinished && 'opacity-60')}>
       <span aria-hidden className={rowIconClass}>

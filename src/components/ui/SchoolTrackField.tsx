@@ -2,6 +2,7 @@ import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { ChipButton } from '@/components/ui/ChipButton'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { cn } from '@/lib/cn'
 import {
   GENERAL_TRACKS,
   MAJOR_NAME_MAX,
@@ -20,6 +21,8 @@ interface SchoolTrackFieldProps {
   /** 고르거나(SchoolTrack) 취소했을 때(null) */
   onChange: (next: SchoolTrack | null) => void
   className?: string
+  /** "학과 이름" 입력칸에 더할 클래스. 흰 카드 없이 회색 바탕에 놓는 화면(가입)에서 칸을 흰색으로 바꿀 때 씁니다 */
+  inputClassName?: string
 }
 
 /**
@@ -36,6 +39,7 @@ export function SchoolTrackField({
   value,
   onChange,
   className,
+  inputClassName,
 }: SchoolTrackFieldProps) {
   return (
     <div className={className}>
@@ -50,7 +54,12 @@ export function SchoolTrackField({
         errorMessage="학교 정보를 불러오지 못했어요. 다시 시도하거나, 나중에 설정에서 골라도 돼요."
         resetKeys={[schoolCode]}
       >
-        <TrackChoices schoolCode={schoolCode} value={value} onChange={onChange} />
+        <TrackChoices
+          schoolCode={schoolCode}
+          value={value}
+          onChange={onChange}
+          inputClassName={inputClassName}
+        />
       </AsyncBoundary>
     </div>
   )
@@ -60,9 +69,10 @@ interface TrackChoicesProps {
   schoolCode: string
   value: SchoolTrack | null
   onChange: (next: SchoolTrack | null) => void
+  inputClassName?: string
 }
 
-function TrackChoices({ schoolCode, value, onChange }: TrackChoicesProps) {
+function TrackChoices({ schoolCode, value, onChange, inputClassName }: TrackChoicesProps) {
   const { data } = useSuspenseQuery(schoolMajorsQuery(schoolCode))
   // 목록에 없는 학과를 직접 쓰는 중인지. 저장된 학과가 목록에 없으면(예전에 직접 쓴 값) 처음부터 열어 둡니다.
   const [isTyping, setIsTyping] = useState(
@@ -149,7 +159,7 @@ function TrackChoices({ schoolCode, value, onChange }: TrackChoicesProps) {
             maxLength={MAJOR_NAME_MAX}
             onChange={(event) => handleType(event.target.value)}
             placeholder="예: 스마트전기과"
-            className="h-12 text-base"
+            className={cn('h-12 text-base', inputClassName)}
           />
         </div>
       )}

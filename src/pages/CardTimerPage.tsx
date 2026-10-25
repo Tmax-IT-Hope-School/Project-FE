@@ -25,6 +25,7 @@ import {
   type PhoneLiftSummary,
 } from '@/lib/liftAlerts'
 import { getTodayCareLevel } from '@/lib/todayCare'
+import { splitRecordedCards } from '@/lib/todayCards'
 import { formatClock } from '@/lib/away'
 import {
   LONG_PAUSE_MINUTES,
@@ -92,6 +93,7 @@ import {
   formatFocusEvidence,
   isLongAway,
   loadAwayTrack,
+  loadFocusScore,
   saveAwayTrack,
   saveFocusScore,
   scoreEndedSession,
@@ -156,8 +158,16 @@ export function CardTimerPage() {
   const { cards, getCards, addCard, updateCard } = useCards()
   const session = useCardSession()
   const { active, now, allSessions } = session
-  // 방금 끝낸 기록. 있으면 종료 팝업을 띄웁니다. (#398)
-  const [endedRecord, setEndedRecord] = useState<StudySession | null>(null)
+  // 방금 끝낸 기록의 번호. 있으면 종료 팝업을 띄웁니다. (#398)
+  // 주소(?ended=)에 두어서, 팝업이 떠 있을 때 새로고침해도 팝업이 다시 뜹니다. 기록은 끝낼 때 이미 저장돼 있습니다. (#714)
+  const [endedParam, setEndedParam] = useQueryParam('ended', '', { replace: true })
+  // 주소의 번호는 누구나 고칠 수 있어서, 이 기기에 있는 공부 기록일 때만 팝업을 띄웁니다.
+  const endedRecord =
+    allSessions.find((record) => record.id === endedParam && record.kind !== 'play') ?? null
+  // 이 화면에서 방금 끝낸 기록의 번호. 새로고침해서 다시 띄운 팝업이면 null 입니다.
+  // (새로고침하면 화면 밖 구간 · 폰 기록을 다시 받을 수 없어서, 집중도는 끝낼 때 저장해 둔 값을 보여 줍니다)
+  const [freshEndedId, setFreshEndedId] = useState<string | null>(null)
+  const isFreshEnded = endedRecord !== null && endedRecord.id === freshEndedId
   // 방금 끝난 세션의 폰 기록 (앱 안에서만 옴). 종료 팝업에 한 줄로 보여 줍니다.
   const [endedPhone, setEndedPhone] = useState<PhoneLiftSummary | null>(null)
   // 끝난 세션과 폰 기록이 둘 다 오면 세션 번호로 저장해 둡니다. (코치 채팅 · 분석이 "폰을 몇 번 들었어" 처럼 씀)
@@ -170,14 +180,28 @@ export function CardTimerPage() {
   // 방금 끝난 세션에서 타이머 화면이 안 보이던 구간들 (웹에서만. 앱 안이면 null)
   const [endedHidden, setEndedHidden] = useState<DistractionSpan[] | null>(null)
   // 집중도 점수 (lib/focusScore.ts). 앱은 폰 기록이 온 뒤, 웹은 끝나자마자 계산됩니다.
-  const endedFocus = endedRecord ? scoreEndedSession(endedRecord, endedPhone, endedHidden) : null
+  const endedFocus =
+    endedRecord === null
+      ? null
+      : isFreshEnded
+        ? scoreEndedSession(endedRecord, endedPhone, endedHidden)
+        : loadFocusScore(endedRecord.id)
   // 계산되면 세션 번호로 저장합니다. (코치의 "집중도 92%" · 기록 탭 카드가 씀)
   // 종료 팝업에서 답을 고를 때마다 기록이 바뀌어 다시 불리지만, 같은 세션 번호면 덮어써서 괜찮습니다.
+  // 새로고침해서 다시 띄운 팝업은 계산 재료가 없어서 저장하지 않습니다. (끝낼 때 저장한 값을 덮지 않게)
   useEffect(() => {
-    if (endedRecord === null) return
+    if (endedRecord === null || !isFreshEnded) return
     const focus = scoreEndedSession(endedRecord, endedPhone, endedHidden)
     if (focus !== null) saveFocusScore(focus)
-  }, [endedRecord, endedPhone, endedHidden])
+  }, [endedRecord, isFreshEnded, endedPhone, endedHidden])
+
+  /** 종료 팝업을 닫습니다. (주소의 ?ended= 도 지움) */
+  function closeEndPopup() {
+    setEndedParam('')
+    setFreshEndedId(null)
+    setEndedPhone(null)
+    setEndedHidden(null)
+  }
   const [cardParam, setCardParam] = useQueryParam('card', '', { replace: true })
   // 카드를 시작하기 전에 거치는 화면 — 카운트다운이 켜져 있으면 5초 카운트다운(#399) → (앱 안이면) 폰 엎기 → 세션
   // (4단계의 다짐 듣기는 다짐 녹음과 함께 2026-10-18 에 지웠습니다)
@@ -188,7 +212,7 @@ export function CardTimerPage() {
   const [pageSettings] = useState(loadAutoSettings)
 
   const todayKey = getTodayKey()
-  // 오늘 이미 세션을 한 카드 (반복 카드도 오늘 것만)
+  // 오늘 이미 세션을 한 카드 (반복 카드도 오늘 것만). 나중에 적기 · 4단계 카드 고르기에 씁니다.
   const doneTodayIds = new Set(
     allSessions
       .filter((record) => toDayKey(record.startedAt) === todayKey)
@@ -253,11 +277,18 @@ export function CardTimerPage() {
   const [isRecoveryCheckOpen, setIsRecoveryCheckOpen] = useState(false)
   const isTodayRest = restDays.some((day) => day.date === todayKey)
   const restLeft = getRestLeft(restDays, todayKey)
+  // 대기 목록에서 뺄 카드: 오늘 끝낸 카드. [끝내기] 로 일찍 끝냈고 카드 시간이 남은 카드는 이어서 하게 남깁니다. (#709)
+  const finishedTodayIds = splitRecordedCards(
+    todayCards,
+    allSessions,
+    todayKey,
+    listNow,
+  ).finishedIds
   const openCards = isTodayRest
     ? []
     : todayCards.filter(
         (card) =>
-          !doneTodayIds.has(card.id) &&
+          !finishedTodayIds.has(card.id) &&
           !isHandledOnDate(card, getCardDayMark(marks, card.id, todayKey), todayKey),
       )
   // 카드 시간이 끝났는데 시작도 처리도 안 한 카드 → [미루기] / [실패로 기록] 을 고르게 합니다.
@@ -359,9 +390,7 @@ export function CardTimerPage() {
   /** 종료 팝업의 [코치랑 후기 나누기] — 팝업을 닫고 상담 방에서 방금 공부 후기를 말로 나눕니다. (#582) */
   function handleReviewTalk(record: StudySession) {
     const phone = endedPhone
-    setEndedRecord(null)
-    setEndedPhone(null)
-    setEndedHidden(null)
+    closeEndPopup()
     navigate(
       startTalk({
         about: {
@@ -481,7 +510,8 @@ export function CardTimerPage() {
         onFinished={(record, hiddenSpans) => {
           setEndedPhone(null)
           setEndedHidden(hiddenSpans)
-          setEndedRecord(record)
+          setFreshEndedId(record.id)
+          setEndedParam(record.id)
         }}
         liftStrength={liftStrength}
         onPhoneSummary={setEndedPhone}
@@ -759,26 +789,17 @@ export function CardTimerPage() {
           card={endedCard}
           phone={endedPhone}
           focus={endedFocus}
-          onSave={(changes) => {
-            session.updateSession(endedRecord.id, changes)
-            setEndedRecord({ ...endedRecord, ...changes })
-          }}
+          onSave={(changes) => session.updateSession(endedRecord.id, changes)}
           onTalk={(changes) => {
             // 체크한 것까지 저장하고(이유는 대화에서 정함) 후기 대화로 갑니다.
             session.updateSession(endedRecord.id, changes)
             handleReviewTalk({ ...endedRecord, ...changes })
           }}
           onRenameCard={(changes) => endedCard && updateCard(endedCard.id, changes)}
-          onClose={() => {
-            setEndedRecord(null)
-            setEndedPhone(null)
-            setEndedHidden(null)
-          }}
+          onClose={closeEndPopup}
           onCall={() => {
             // 팝업을 닫고 통화 화면으로 갑니다. 통화 화면이 방금 기록을 서버로 먼저 보낸 뒤 묻습니다. (lib/checkCall.ts)
-            setEndedRecord(null)
-            setEndedPhone(null)
-            setEndedHidden(null)
+            closeEndPopup()
             navigate('/call')
           }}
           proofRequired={isStage4}

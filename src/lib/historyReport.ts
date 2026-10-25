@@ -320,6 +320,8 @@ export interface QuestionMark {
 /**
  * 채팅 확인 문제 결과를 문제 하나하나로 풉니다.
  * 과목은 그 문제를 낸 카드로 공부한 세션의 과목에서 찾고, 없으면 주제 글에 든 과목 이름, 그것도 없으면 '기타' 입니다.
+ * 다시 푼 문제('어제 틀린 문제' 처럼 주제에 과목이 없는 것)는 처음 풀 때의 과목으로 셉니다.
+ * (문제 풀이 리포트 lib/quizReport.ts 의 splitAttempts 와 같은 규칙)
  */
 export function quizMarks(
   results: QuizResult[],
@@ -328,13 +330,22 @@ export function quizMarks(
   subjectNames: string[],
 ): QuestionMark[] {
   const marks: QuestionMark[] = []
-  for (const result of results) {
-    if (!dateKeys.includes(result.date)) continue
+  // 문제 글 → 처음 풀 때의 과목. 처음 푼 날이 보는 날짜 밖일 수 있어서, 날짜와 상관없이 오래된 결과부터 모두 봅니다.
+  const firstSubjects = new Map<string, string>()
+  const sorted = [...results].sort((a, b) => a.at - b.at)
+  for (const result of sorted) {
     const subject = quizSubjectOf(result, input, subjectNames)
+    const isInRange = dateKeys.includes(result.date)
     result.questions.forEach((question, index) => {
       const answer = result.answers[index]
       if (!answer) return
-      marks.push({ subject, correct: answer.choiceIndex === question.answerIndex })
+      const firstSubject = firstSubjects.get(question.question)
+      if (firstSubject === undefined) firstSubjects.set(question.question, subject)
+      if (!isInRange) return
+      marks.push({
+        subject: firstSubject ?? subject,
+        correct: answer.choiceIndex === question.answerIndex,
+      })
     })
   }
   return marks

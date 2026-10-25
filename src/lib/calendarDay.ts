@@ -45,8 +45,8 @@ export const RECENT_RATE_DAYS = 28
 
 /**
  * 사람이 처리한 표시와 그때 고른 원인입니다.
- * 미루기·실패 기록(#400)과 휴식 처리(#407)가 저장하는 곳이 생기면, 그 값을 이 모양으로 바꿔 getMark 로 넘깁니다.
- * 지금은 저장하는 곳이 없어서 넘기지 않습니다. (그래서 지금은 '휴식' 칸이 생기지 않습니다)
+ * 쉬는 날 · 미루기 · 실패 표시(lib/restDays.ts 의 getCardDayMarkInfo)를 이 모양으로 바꿔 getMark 로 넘깁니다.
+ * 통계 탭(StatsPage)과 기록 탭(lib/historyReport.ts)이 같은 방식으로 넘깁니다.
  */
 export interface CardDayMarkRecord {
   mark: CardDayMark
@@ -92,7 +92,7 @@ export interface CalendarDayInput {
   cardIdByPlanId: Record<string, string>
   /** 지금 시각 (Date.now() 값) */
   now: number
-  /** 그 카드 · 그날에 사람이 처리한 표시 (#400 · #407 이 생기면 넘깁니다) */
+  /** 그 카드 · 그날에 사람이 처리한 표시 (쉬는 날 · 미루기 · 실패). 안 넘기면 표시가 없는 것으로 봅니다 */
   getMark?: (cardId: string, dateKey: string) => CardDayMarkRecord | undefined
 }
 

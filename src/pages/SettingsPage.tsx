@@ -1140,14 +1140,17 @@ function StudyFocusField({ className }: { className?: string }) {
       </div>
       {focus && needsFocusName(focus.kind) && (
         <form onSubmit={handleSaveName} className="mt-3 flex items-end gap-2">
-          <Input
-            label="이름"
-            value={name}
-            maxLength={FOCUS_NAME_MAX}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={focus.kind === 'CONTEST' ? '예: 정보올림피아드' : '예: 코딩 공부'}
-            className="min-w-0 flex-1"
-          />
+          {/* 늘어나는 것은 바깥 칸입니다. Input 의 className 은 입력칸 자체에 붙어서,
+              거기에 flex-1 을 주면 높이(h-12)가 줄어 19px 이 됩니다. (2026-10-25 QA) */}
+          <div className="min-w-0 flex-1">
+            <Input
+              label="이름"
+              value={name}
+              maxLength={FOCUS_NAME_MAX}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={focus.kind === 'CONTEST' ? '예: 정보올림피아드' : '예: 코딩 공부'}
+            />
+          </div>
           <Button type="submit" variant="secondary" className="shrink-0">
             이름 저장
           </Button>

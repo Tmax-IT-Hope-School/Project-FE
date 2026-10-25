@@ -526,15 +526,24 @@ export function CardsPage() {
         {/* 제목 줄: 왼쪽 "카드", 오른쪽 [오늘] (다른 날을 보고 있을 때 돌아오는 길) */}
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-[28px] leading-tight font-bold tracking-tight">카드</h1>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedDate(todayKey)}
-            disabled={isToday}
-            className="text-brand shrink-0 px-3"
-          >
-            오늘
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            {/* 하단 탭에서 타이머가 빠져서(2026-10-24), 카드 없이 시작 · 미루기 · 폰 내고 시작은 여기서 들어갑니다. (#717) */}
+            <Link
+              to="/timer"
+              className="text-brand inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold hover:bg-slate-100"
+            >
+              ⏱ 타이머
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedDate(todayKey)}
+              disabled={isToday}
+              className="text-brand shrink-0 px-3"
+            >
+              오늘
+            </Button>
+          </div>
         </div>
 
         {/* 날짜 이동: ‹ / 날짜(주 보기면 그 주) / › */}

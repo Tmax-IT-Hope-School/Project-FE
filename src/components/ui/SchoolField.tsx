@@ -2,6 +2,7 @@ import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { cn } from '@/lib/cn'
 import { getSchoolQueryError, schoolSearchQuery, type School } from '@/lib/schoolSearch'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, type KeyboardEvent } from 'react'
@@ -11,6 +12,8 @@ interface SchoolFieldProps {
   school: School | null
   /** 학교를 골랐을 때(School) 또는 고른 것을 취소했을 때(null) */
   onChange: (school: School | null) => void
+  /** 검색어 입력칸에 더할 클래스. 흰 카드 없이 회색 바탕에 놓는 화면(가입)에서 칸을 흰색으로 바꿀 때 씁니다 */
+  inputClassName?: string
 }
 
 /**
@@ -21,7 +24,7 @@ interface SchoolFieldProps {
  *
  * 결과를 받아오는 일은 아래의 SchoolResults 가 합니다. 이 컴포넌트는 "무엇을 찾을지" 만 정합니다.
  */
-export function SchoolField({ school, onChange }: SchoolFieldProps) {
+export function SchoolField({ school, onChange, inputClassName }: SchoolFieldProps) {
   // 입력 칸에 적고 있는 글자
   const [query, setQuery] = useState('')
   // "검색" 을 눌러 확정한 검색어. 이 값이 정해지면 SchoolResults 가 그 검색어로 받아옵니다. 아직 검색 전이면 null
@@ -84,7 +87,7 @@ export function SchoolField({ school, onChange }: SchoolFieldProps) {
           enterKeyHint="search"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
-          className="h-12 text-base"
+          className={cn('h-12 text-base', inputClassName)}
         />
         <Button variant="secondary" size="lg" className="shrink-0 px-4" onClick={handleSearch}>
           검색

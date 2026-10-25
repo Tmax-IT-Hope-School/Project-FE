@@ -31,6 +31,15 @@ const DIARY_KEYS = ['diary', 'reflection-entries', 'diary-draft']
  *   diary-enabled  일기 쓰기를 켰는지. 설정이라 남깁니다.
  *   ios-install-guide-dismissed  아이폰 "홈 화면에 추가" 안내를 닫았는지. 기록이 아니라서 남깁니다.
  *   auth        로그인 정보. 지우면 로그아웃되어 버립니다.
+ *   (2026-10-25 에 저장 키를 모두 견줘 보고 남기기로 한 것)
+ *   goals, goal-draft, goal-sync-pending, goal-sync-rejected  목표. 지울지 남길지 아직 정하지 않았습니다. (QA "확인 필요")
+ *   fixed-blocks  고정 일정(학교 · 학원 시간). 루틴처럼 내가 정한 틀이라 남깁니다.
+ *   auto-settings, coach-nudges-off, mission-alerts-off  설정 값과 알림 끄기. 설정이라 남깁니다.
+ *   school-class, school-day, school-exam-dates, school-replan-dismissed  우리 반 · 학교 일정(NEIS 에서 받은 것). 기록이 아니라 남깁니다.
+ *   google-calendar  구글 캘린더 연결. 계정 연결이라 남깁니다.
+ *   psych-test, thinking-test (+ -draft, -sent), onboarding-*, my-hypotheses, signup-done  온보딩 · 검사 답과 가입 표시. onboarding-answers 와 같은 이유로 남깁니다.
+ *   demo-manifest  시연 데이터로 무엇을 넣었는지 적은 표. 이 버튼이 남기는 온보딩 답 등에도 시연 값이 들어 있어서,
+ *                  설정의 [가상 데이터 지우기] 로 그것까지 뺄 수 있게 남깁니다. (lib/demoData.ts 의 removeDemoData)
  */
 const RECORD_KEYS = [
   'plans',
@@ -114,6 +123,33 @@ const RECORD_KEYS = [
   'focus',
   'my-events',
   'school-track',
+  // ---- 2026-10-25 QA 에서 "지운 뒤에도 남는다" 고 찾은 기록들 ----
+  // 쉬는 날 (lib/restDays.ts) · 카드 하루 표시: 성공 · 실패 · 미루기 (lib/cardMarks.ts) · 그 둘을 서버로 보낸 표시 (lib/markSync.ts)
+  'rest-days',
+  'card-day-marks',
+  'mark-sync',
+  // 날마다 정한 관리 단계 (lib/careStage.ts) · 4단계에서 고른 절대 카드 (lib/stage4.ts)
+  'care-stage-log',
+  'stage4-absolute',
+  // 자기 실험 (lib/experiments.ts) · 인사이트에 "틀렸어요" 를 누른 것 (lib/insightDisputes.ts)
+  'experiments',
+  'insight-disputes',
+  // 오늘의 미션을 몇 개 끝냈는지 · 코치가 결과를 먼저 물어본 공부 기록 번호 (pages/ChatRoomPage.tsx)
+  'coach-mission-progress',
+  'coach-recapped-session',
+  // 받아 둔 코치 알림 문장 (lib/coachNudges.ts). 알림을 끈 설정('coach-nudges-off')은 남깁니다.
+  'coach-nudge-texts',
+  // 통화 기록 (lib/callLog.ts) · 날짜별 평가 (lib/callSummary.ts)
+  'call-log',
+  'evaluations',
+  // AI 가 바꾼 설정의 기록 (lib/settingsMapping.ts). 바뀐 설정 값('auto-settings')은 남깁니다.
+  'auto-setting-changes',
+  // 진행 중인 카드 세션 ('timer' 와 같이 지움) · 보낸 카드 알림 · 체크리스트를 다 한 횟수
+  'card-session',
+  'card-alerts-sent',
+  'checklist-complete-count',
+  // 테스트 로그인에서 사진 채점을 해 본 시연 결과 (lib/answerChecksApi.ts)
+  'answer-checks-demo',
   ...DIARY_KEYS,
 ]
 

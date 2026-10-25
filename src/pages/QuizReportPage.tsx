@@ -30,6 +30,7 @@ import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { loadQuizResults } from '@/lib/studyQuiz'
 import { usePrefetchQuery, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 /** '2026-10-19' -> '10월 19일 (월)' */
 function dateLabel(dateKey: string, index: number): string {
@@ -58,8 +59,8 @@ function minutesText(minutes: number): string {
  */
 export function QuizReportPage() {
   const thisWeekStart = weekStartOf(getTodayKey())
-  const [weekParam, setWeekParam] = useQueryParam('week', thisWeekStart, { replace: true })
-  const [, setDayParam] = useQueryParam('day', '', { replace: true })
+  const [weekParam] = useQueryParam('week', thisWeekStart, { replace: true })
+  const [, setSearchParams] = useSearchParams()
 
   // 주소의 값은 누구나 고칠 수 있어서, 날짜가 아니거나 앞으로의 주면 이번 주로 봅니다.
   const weekStart =
@@ -67,8 +68,19 @@ export function QuizReportPage() {
   const dates = weekDates(weekStart)
 
   function handleMoveWeek(days: number) {
-    setWeekParam(moveDateKey(weekStart, days))
-    setDayParam('')
+    const nextWeek = moveDateKey(weekStart, days)
+    // 주(?week=)와 요일(?day=)을 한 번에 바꿉니다.
+    // useQueryParam 의 set 두 개를 연달아 부르면 뒤의 것이 앞에서 바꾼 주를 덮어서 주가 안 넘어갑니다.
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        if (nextWeek === thisWeekStart) next.delete('week')
+        else next.set('week', nextWeek)
+        next.delete('day')
+        return next
+      },
+      { replace: true },
+    )
   }
 
   return (

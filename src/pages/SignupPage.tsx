@@ -92,6 +92,10 @@ const collectedItems = [
   '설정 › 내 데이터에서 언제든 지울 수 있어요',
 ]
 
+// 가입 화면의 입력칸 모양. 이 화면은 흰 카드 없이 회색 바탕에 칸을 바로 놓아서, Input 의 기본색(연회색)이면
+// 칸이 바탕과 같은 색이 되어 안 보입니다. 시안(docs/design/screens/signup-mobile.png)처럼 흰 바탕 + 회색 테두리로 그립니다. (2026-10-25 QA)
+const FIELD_CLASS = 'h-12 border border-slate-200 bg-white text-base'
+
 // 가입의 세 단계입니다. 주소의 ?step=1 · 2 · 3 과 순서가 같습니다.
 const signupSteps = [
   { label: '계정 정보', title: '반가워요! 계정 정보를 알려주세요', description: '' },
@@ -394,7 +398,7 @@ export function SignupPage() {
                 onChange={(event) => setName(event.target.value)}
                 // 다 적고 칸을 떠났을 때부터 검사합니다. (적는 중에 빨간 글씨가 뜨지 않게)
                 onBlur={() => setIsNameTouched(true)}
-                className="h-12 text-base"
+                className={FIELD_CLASS}
               />
               <p className="text-[13px] text-slate-500">
                 실제 이름을 적어 주세요. ({NAME_MIN_LENGTH}~{NAME_MAX_LENGTH}자)
@@ -415,7 +419,7 @@ export function SignupPage() {
                   setIsNicknameTouched(true)
                 }}
                 onBlur={() => setIsNicknameTouched(true)}
-                className="h-12 text-base"
+                className={FIELD_CLASS}
               />
               <p className="text-[13px] text-slate-500">
                 앱에서 부르는 이름이에요. ({NICKNAME_MIN_LENGTH}~{NICKNAME_MAX_LENGTH}자)
@@ -436,9 +440,11 @@ export function SignupPage() {
               readOnly={googleSignup !== null}
               onChange={(event) => setEmail(event.target.value)}
               onBlur={() => setIsEmailTouched(true)}
+              // 고칠 수 없는 칸은 테두리를 빼고 회색으로 낮춰서, 적는 칸(흰색)과 다르게 보이게 합니다.
               className={cn(
-                'h-12 text-base',
-                googleSignup !== null && 'bg-slate-50 text-slate-500',
+                FIELD_CLASS,
+                googleSignup !== null &&
+                  'border-transparent bg-slate-200 text-slate-500 focus:bg-slate-200',
               )}
             />
           </>
@@ -447,13 +453,14 @@ export function SignupPage() {
         {/* ---------- 2단계: 학교 ---------- */}
         {step === 2 && (
           <>
-            <SchoolField school={school} onChange={setSchool} />
+            <SchoolField school={school} onChange={setSchool} inputClassName={FIELD_CLASS} />
             {/* 학교를 고르면 학교 종류에 따라 학과(특성화고 · 마이스터고) 또는 계열을 묻습니다. 선택입니다. */}
             {school !== null && (
               <SchoolTrackField
                 schoolCode={school.code}
                 value={currentTrack}
                 onChange={setSchoolTrack}
+                inputClassName={FIELD_CLASS}
               />
             )}
 

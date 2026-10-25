@@ -22,6 +22,7 @@ import {
   type RunRateSummary,
 } from '@/lib/calendarDay'
 import { loadCheckInsByDate } from '@/lib/callSummary'
+import { loadCardMarks } from '@/lib/cardMarks'
 import { CARD_RESULT_LABELS } from '@/lib/cardResult'
 import { cn } from '@/lib/cn'
 import {
@@ -38,6 +39,7 @@ import { loadFocusScores, summarizeFocusWeek } from '@/lib/focusScore'
 import { useSubjects } from '@/hooks/useSubjects'
 import { mockSubjects } from '@/lib/mock'
 import { EMOTION_OPTIONS, isEmotionTag } from '@/lib/quickCheckIn'
+import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { loadRoutines } from '@/lib/routines'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
@@ -127,6 +129,9 @@ export function StatsPage() {
     buildCardIdByPlanId(loadRecord<StudyPlan[]>('plans'), loadRoutines()),
   )
   const sessionsByDay = groupSessionsByDayKey(sessions)
+  // 쉬는 날 · 미루기 · 실패로 처리한 표시. 기록 탭(RecordsPage)과 같은 것을 읽어야 두 화면의 숫자가 같습니다.
+  const [restDays] = useState(loadRestDays)
+  const [marks] = useState(loadCardMarks)
 
   /** 그 날짜의 달력 하루 (카드마다 결과를 판정하고 칸의 상태를 정함) */
   function getCalendarDay(dateKey: string): CalendarDay {
@@ -136,6 +141,11 @@ export function StatsPage() {
       sessions: sessionsByDay.get(dateKey) ?? [],
       cardIdByPlanId,
       now,
+      // 쉬는 날로 정한 날의 카드는 '휴식' 이 되어 실행률에서 빠집니다. (lib/historyReport.ts 와 같은 방식)
+      getMark: (cardId, markDate) => {
+        const info = getCardDayMarkInfo(cardId, markDate, restDays, marks)
+        return info ? { mark: info.mark } : undefined
+      },
     })
   }
 
