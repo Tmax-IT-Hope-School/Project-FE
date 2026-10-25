@@ -19,7 +19,8 @@ export function isOneOffCard(card: Pick<Card, 'repeatDays'>): boolean {
  * 그 날짜에 하는 카드인지 알려 줍니다.
  *
  * - 1회성 카드: 카드 날짜와 같은 날만
- * - 반복 카드: 반복을 시작한 날짜부터, 그 요일이면
+ * - 반복 카드: 반복을 시작한 날짜부터 그만하는 날(endDate, 있으면)까지, 그 요일이면
+ * 서버의 Card.isOnDate 와 같은 규칙입니다. (#734)
  *
  *   (2026-10-12 는 월요일)
  *   isCardOnDate({ date: '2026-10-12' }, '2026-10-12')                       -> true
@@ -27,12 +28,18 @@ export function isOneOffCard(card: Pick<Card, 'repeatDays'>): boolean {
  *   isCardOnDate({ date: '2026-10-01', repeatDays: [1, 3] }, '2026-10-12')   -> true  (월요일)
  *   isCardOnDate({ date: '2026-10-01', repeatDays: [1, 3] }, '2026-10-13')   -> false (화요일)
  *   isCardOnDate({ date: '2026-10-20', repeatDays: [1, 3] }, '2026-10-12')   -> false (시작 전)
+ *   isCardOnDate({ date: '2026-10-01', repeatDays: [1, 3], endDate: '2026-10-12' }, '2026-10-12') -> true  (그날까지 함)
+ *   isCardOnDate({ date: '2026-10-01', repeatDays: [1, 3], endDate: '2026-10-12' }, '2026-10-14') -> false (그만한 뒤)
  */
-export function isCardOnDate(card: Pick<Card, 'date' | 'repeatDays'>, dateKey: string): boolean {
+export function isCardOnDate(
+  card: Pick<Card, 'date' | 'repeatDays' | 'endDate'>,
+  dateKey: string,
+): boolean {
   const repeatDays = card.repeatDays ?? []
   if (repeatDays.length === 0) return card.date === dateKey
   // 'YYYY-MM-DD' 는 글자로 비교해도 날짜 순서와 같습니다.
-  return dateKey >= card.date && repeatDays.includes(getWeekday(dateKey))
+  const isEnded = card.endDate !== undefined && dateKey > card.endDate
+  return dateKey >= card.date && !isEnded && repeatDays.includes(getWeekday(dateKey))
 }
 
 /** 그 날짜에 하는 카드를 시작 시각 순서로 돌려줍니다. 시작 시각이 없는 카드는 맨 뒤에 둡니다. */

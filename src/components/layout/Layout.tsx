@@ -15,6 +15,7 @@ import { useCardSync } from '@/hooks/useCardSync'
 import { useDemoAutoSeed } from '@/hooks/useDemoAutoSeed'
 import { useUnsentCheckInRetry } from '@/hooks/useCheckInSync'
 import { useFocusMode, useFocusModeAutoUnlock } from '@/hooks/useFocusMode'
+import { useGoalCardEnds } from '@/hooks/useGoalCardEnds'
 import { useGoalSync } from '@/hooks/useGoalSync'
 import { useMarkSync } from '@/hooks/useMarkSync'
 import { useOnboardingCompletionSync } from '@/hooks/useOnboardingCompletionSync'
@@ -49,6 +50,8 @@ export function Layout() {
   useCardCalendarSync()
   // 진짜 로그인이면 목표도 서버와 맞춥니다. (카드의 목표 번호가 서버에서도 맞게, #516)
   useGoalSync()
+  // 목표를 그만두거나 D-day 가 지나면 그 목표의 루틴 카드를 그날까지만 하게 합니다. (#734)
+  useGoalCardEnds()
   // 시연 계정(VITE_DEMO_SEED_USER_ID)으로 로그인하면 이 기기에 가상 28일을 넣습니다. 카드 · 목표를 받아 맞춘 뒤라서 이 자리입니다.
   useDemoAutoSeed()
   // 진짜 로그인이면 끝난 공부 기록을 서버로 보냅니다. (끝나고 10분 뒤, 받아 오지는 않습니다, #516)
