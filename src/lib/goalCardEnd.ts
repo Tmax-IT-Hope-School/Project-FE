@@ -15,15 +15,18 @@ function earlierKey(a: string, b: string): string {
 }
 
 /**
- * 목표가 끝난 날. 아직 진행 중이면 null 입니다. 그 목표의 반복 카드는 이 날까지만 합니다. (그날은 함)
+ * 목표가 끝난 날. null 이면 "아직 진행 중" 이거나 "끝났는데 끝난 날을 모름" 입니다. (status 로 구분)
+ * 그 목표의 반복 카드는 이 날까지만 합니다. (그날은 함)
  *
- * - 완료(done): D-day. 결과는 D-day 부터 적을 수 있어서(isGoalResultDue) D-day 까지는 한 것으로 봅니다.
+ * - 완료(done): D-day 가 지났거나 오늘이면 D-day. D-day 전에 완료한 목표는 완료한 날을 몰라서 null 입니다.
+ *   (결과 적기는 D-day 부터지만, 실제 데이터에 D-day 전에 완료된 목표가 있었습니다. 2026-10-25 진짜 로그인 확인)
  * - 그만둠(givenUp): 그만둔 날. 그만둘 때 giveUpGoal 이 lastCheckedAt 을 찍습니다. D-day 가 더 이르면 D-day.
- *   다른 기기에서 그만둬서 그만둔 날을 모르면(서버에 lastCheckedAt 칸이 없음) null 을 돌려주고, 카드 쪽에서 정합니다.
+ *   다른 기기에서 그만둬서 그만둔 날을 모르면(서버에 lastCheckedAt 칸이 없음) null 입니다.
  * - 진행 중(active): 오늘이 D-day 를 지났으면 D-day, 아니면 null (D-day 를 뒤로 미루면 다시 null 이 됩니다)
  *
  *   (D-day 10/30)
  *   goalEndDay({ status: 'done', … }, '2026-11-02')                                  -> '2026-10-30'
+ *   goalEndDay({ status: 'done', … }, '2026-10-25')                                  -> null  (D-day 전에 완료)
  *   goalEndDay({ status: 'givenUp', lastCheckedAt: 10/20 낮 }, '2026-10-25')         -> '2026-10-20'
  *   goalEndDay({ status: 'givenUp', lastCheckedAt: undefined }, '2026-10-25')        -> null
  *   goalEndDay({ status: 'active', … }, '2026-10-30')                                -> null  (D-day 당일은 아직)
@@ -33,7 +36,7 @@ export function goalEndDay(
   goal: Pick<Goal, 'status' | 'dDay' | 'lastCheckedAt'>,
   todayKey: string,
 ): string | null {
-  if (goal.status === 'done') return goal.dDay
+  if (goal.status === 'done') return todayKey >= goal.dDay ? goal.dDay : null
   if (goal.status === 'givenUp') {
     return goal.lastCheckedAt === undefined
       ? null
@@ -46,8 +49,8 @@ export function goalEndDay(
  * 카드 한 장이 가져야 할 그만하는 날. undefined 면 끝 없이 반복입니다.
  * 목표와 이어진 반복 카드만 봅니다. 1회성 카드 · 목표 없는 카드 · 목표를 못 찾은 카드는 지금 값을 그대로 둡니다.
  *
- * - 그만둔 날을 모르는 목표(위 null)는 이미 정해 둔 값이 있으면 그대로, 없으면 오늘과 D-day 중 이른 날로 정합니다.
- *   (오늘로 정해 두면 다음 날 다시 계산해도 바뀌지 않습니다)
+ * - 끝났는데 끝난 날을 모르는 목표(그만둠 · 완료인데 위 null)는 오늘 · D-day · 이미 정해 둔 날 중 가장 이른 날입니다.
+ *   (처음 맞출 때 오늘로 정해 두면 다음 날 다시 계산해도 바뀌지 않습니다. 오늘보다 뒤로 정해져 있던 날은 오늘로 당깁니다)
  * - 시작한 날보다 앞이 되면 시작한 날로 맞춥니다. (서버가 "시작한 날보다 앞" 을 400 으로 거절해서)
  */
 function wantedEndDate(card: Card, goals: Goal[], todayKey: string): string | undefined {
@@ -56,8 +59,8 @@ function wantedEndDate(card: Card, goals: Goal[], todayKey: string): string | un
   if (!goal) return card.endDate
 
   let end = goalEndDay(goal, todayKey)
-  if (goal.status === 'givenUp' && end === null) {
-    end = card.endDate ?? earlierKey(todayKey, goal.dDay)
+  if (goal.status !== 'active' && end === null) {
+    end = earlierKey(earlierKey(card.endDate ?? todayKey, todayKey), goal.dDay)
   }
   if (end === null) return undefined
   return end < card.date ? card.date : end
