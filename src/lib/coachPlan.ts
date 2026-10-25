@@ -433,9 +433,10 @@ export interface DayPlanInput {
 
 /**
  * 오늘 계획을 짜 달라고 합니다. (진짜 로그인일 때만)
- *   요청 { date, focus?, subjects?, condition?, otherRooms?, totalMinutes?, startTime?, planTalk? }
+ *   요청 { date, focus?, subjects?, condition?, otherRooms?, totalMinutes?, startTime?, planTalk?, firstTask? }
  *   응답 { drafts: [...], evidence: ['…'] } — drafts 가 비었으면 넣을 빈 시간이 없는 것 (이유는 evidence)
- * totalMinutes · startTime · planTalk 는 #695 부터입니다. 서버가 아직 모르면 무시하므로 먼저 보내도 괜찮습니다.
+ * totalMinutes · startTime · planTalk 는 #695 부터, firstTask(먼저 할 것 → 첫 칸 제목)는 BE #454 부터입니다.
+ * 서버가 아직 모르면 무시하므로 먼저 보내도 괜찮습니다.
  */
 export async function requestDayPlan(input: DayPlanInput): Promise<PlanReply> {
   const ask = input.ask ?? null
@@ -455,6 +456,8 @@ export async function requestDayPlan(input: DayPlanInput): Promise<PlanReply> {
         ...(ask && ask.totalMinutes !== null ? { totalMinutes: ask.totalMinutes } : {}),
         ...(ask && ask.startTime !== null ? { startTime: ask.startTime } : {}),
         ...(planTalk.length > 0 ? { planTalk } : {}),
+        // "수학 오답 먼저" 처럼 먼저 할 것을 정했으면 첫 칸 제목으로 씁니다. (안 보내면 첫 칸이 D-day 가까운 목표가 됨)
+        ...(ask && ask.firstTask ? { firstTask: ask.firstTask.slice(0, 30) } : {}),
       }),
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
     }),

@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { SchoolEventsCard } from '@/components/ui/SchoolEventsCard'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { StickyActionBar } from '@/components/ui/StickyActionBar'
 import { useCards } from '@/hooks/useCards'
@@ -595,9 +594,6 @@ export function CardsPage() {
 
       {/* 진행 중인 목표 (#391) · 완료한 목표 (#672) */}
       <GoalList goals={activeGoals} doneGoals={getDoneGoals(goals)} todayKey={todayKey} />
-
-      {/* 학교 학사일정 · 시험이 다가오면 계획 다시 짜기 (#508) */}
-      <SchoolEventsCard />
 
       {/* 1순위 [+ 카드 만들기] 는 모바일에서 하단 탭 바로 위(엄지 자리)에 붙여 둡니다. (피츠의 법칙) */}
       <StickyActionBar aboveTabBar className="flex-row gap-2">

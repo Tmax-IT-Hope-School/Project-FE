@@ -4,7 +4,7 @@ import { loadData, saveData } from '@/lib/storage'
 
 /**
  * 학교 학사일정(NEIS, BE#282)을 화면에 맞게 고르는 순수 함수들입니다. (FE#508)
- * 서버를 부르는 곳은 lib/schoolEventsApi.ts, 화면은 components/ui/SchoolEventsCard.tsx 입니다.
+ * 화면은 홈의 학교 정보 묶음([일정] 탭 · 시험 계획 제안, pages/HomePage.tsx) 입니다. 학사일정은 GET /school/today 로 같이 받습니다.
  */
 
 /** 학사일정 하나 (서버 응답 모양 그대로) */

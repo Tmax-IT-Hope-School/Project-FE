@@ -28,7 +28,17 @@ import { loadOnboardingAnswers } from '@/lib/onboardingSteps'
 import { toDayMinutes } from '@/lib/planConflict'
 import { loadRestDays } from '@/lib/restDays'
 import { getWeekday, getWeekdayName } from '@/lib/routines'
-import { filterForGrade, gradeNumberOf, groupEventPeriods } from '@/lib/schoolEvents'
+import {
+  daysUntilKey,
+  dismissReplan,
+  filterForGrade,
+  getNextExamPeriod,
+  gradeNumberOf,
+  groupEventPeriods,
+  loadDismissedReplans,
+  shouldSuggestReplan,
+  type SchoolEventPeriod,
+} from '@/lib/schoolEvents'
 import {
   isContestNotice,
   matchesFocusName,
@@ -44,7 +54,7 @@ import {
 } from '@/lib/settingChanges'
 import type { SettingChange } from '@/lib/settingsMapping'
 import { loadStudyFocus } from '@/lib/studyFocus'
-import { COACH_PATH, PLAN_CHAT_PATH } from '@/lib/chatRooms'
+import { COACH_PATH, PLAN_CHAT_PATH, handOffPlanChip } from '@/lib/chatRooms'
 import {
   getTodayCardsState,
   type TodayCardItem,
@@ -1127,6 +1137,8 @@ function SchoolTodayView({ todayKey, tab, isServerData, schoolClass }: SchoolTod
   const { data } = useSuspenseQuery(schoolTodayQuery(schoolClass, isServerData, todayKey))
   // 내 일정(대회 등, 코치 채팅에서 날짜를 알려 주면 생김 · lib/myEvents.ts)도 학교 일정과 같은 목록에 보여 줍니다.
   const [myEvents] = useState(() => getUpcomingMyEvents(todayKey, 60))
+  // [괜찮아요] 로 닫은 시험들. 닫은 시험은 그 시험 동안 다시 제안하지 않습니다. (lib/schoolEvents.ts)
+  const [dismissedReplans, setDismissedReplans] = useState(loadDismissedReplans)
   const myRows: UpcomingRow[] = myEvents.map((event) => ({
     key: `mine-${event.name}`,
     name: event.name,
@@ -1169,9 +1181,20 @@ function SchoolTodayView({ todayKey, tab, isServerData, schoolClass }: SchoolTod
   ]
     .sort((a, b) => a.dDay - b.dDay)
     .slice(0, 5)
+  // 다음 시험이 14일 안이면 시험 계획을 짜자고 제안합니다. 시험은 중요해서 어느 탭을 펼쳐도 위에 보여 줍니다.
+  // (카드 탭의 "학교 일정" 칸에 있던 것을 홈으로 옮겼습니다. 학사일정 목록은 이 묶음의 [일정] 탭에 이미 있습니다, #739)
+  const nextExam = getNextExamPeriod(periods, todayKey)
+  const showReplan = shouldSuggestReplan(nextExam, todayKey, dismissedReplans)
 
   return (
     <>
+      {showReplan && nextExam && (
+        <ExamPlanSuggestion
+          exam={nextExam}
+          todayKey={todayKey}
+          onDismiss={() => setDismissedReplans(dismissReplan(nextExam))}
+        />
+      )}
       {tab === 'timetable' &&
         (needsClass ? (
           <>
@@ -1276,6 +1299,48 @@ interface UpcomingListProps {
 }
 
 /** 다가오는 일정 목록. 시험 · 내 일정은 D-day 를 진한 글자로, 학교 행사는 회색으로 보여 줍니다. */
+interface ExamPlanSuggestionProps {
+  exam: SchoolEventPeriod
+  todayKey: string
+  /** [괜찮아요] 를 눌렀을 때 */
+  onDismiss: () => void
+}
+
+/** 시험이 14일 안일 때 "시험 계획 짜기" 제안. 누르면 계획 방이 시험 날까지의 긴 계획을 바로 짭니다. */
+function ExamPlanSuggestion({ exam, todayKey, onDismiss }: ExamPlanSuggestionProps) {
+  const navigate = useNavigate()
+  const daysLeft = Math.max(0, daysUntilKey(exam.start, todayKey))
+
+  function handlePlan() {
+    // 계획 방에 "시험 이름 · 시험 시작 날" 로 긴 계획 칩을 맡깁니다. (계획 방이 열리면서 대신 눌러 줌)
+    navigate(
+      handOffPlanChip({
+        kind: 'makePlan',
+        label: `📅 ${exam.name} 계획 짜 줘`,
+        goal: exam.name,
+        endDate: exam.start,
+      }),
+    )
+  }
+
+  return (
+    <div className="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+      <p className="text-sm break-keep text-amber-900">
+        {exam.name}까지 {daysLeft}일 남았어요. 시험 범위에 맞춰 계획을 짜 볼까요?
+      </p>
+      {/* 모바일은 버튼 두 개를 꽉 채워 나란히, sm 부터는 왼쪽에 모읍니다. */}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={handlePlan}>
+          📅 시험 계획 짜기
+        </Button>
+        <Button variant="ghost" size="sm" className="flex-1 sm:flex-none" onClick={onDismiss}>
+          괜찮아요
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function UpcomingList({ rows }: UpcomingListProps) {
   if (rows.length === 0) {
     return <p className="text-[15px] text-slate-500">30일 안에 일정이 없어요.</p>
