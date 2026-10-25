@@ -32,6 +32,8 @@ export interface PhotoCardDraft {
   durationMinutes: number
   title: string
   checklist: string[]
+  /** 서버가 고른 내 과목 번호 (하루 계획, BE #457). 없으면 카드도 과목 없이 만듭니다 */
+  subjectId?: string
 }
 
 export interface PhotoCardsResult {
@@ -90,6 +92,10 @@ export function toDraft(value: unknown): PhotoCardDraft | null {
     durationMinutes: Math.min(180, Math.round(minutes)),
     title: draft.title.trim().slice(0, 40),
     checklist: checklist.filter((item) => item !== '').slice(0, 8),
+    // 서버 과목 번호는 숫자 글자입니다. 모양이 틀리면 버립니다.
+    ...(isText(draft.subjectId) && /^\d{1,18}$/.test(draft.subjectId)
+      ? { subjectId: draft.subjectId }
+      : {}),
   }
 }
 
@@ -191,5 +197,7 @@ export function draftToCard(
     alert: { method: 'message', minutesBefore: 0 },
     planningMs: 0,
     createdAt: options.now,
+    // 과목이 있어야 이 카드로 한 공부가 통계에서 "삭제된 과목" 으로 뜨지 않습니다. (#746)
+    ...(draft.subjectId ? { subjectId: draft.subjectId } : {}),
   }
 }

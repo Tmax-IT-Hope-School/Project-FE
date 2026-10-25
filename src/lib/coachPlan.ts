@@ -17,6 +17,7 @@ import { api, ApiError } from '@/lib/api'
 import type { ChatAction } from '@/lib/chatApi'
 import { isDateKey, moveDateKey } from '@/lib/date'
 import { draftToCard, toDraft, type PhotoCardDraft } from '@/lib/photoCards'
+import { findSubjectInTitle, getSubjectsSnapshot } from '@/lib/subjects'
 import type { StudyFocus } from '@/lib/studyFocus'
 import type { Card } from '@/types'
 
@@ -244,6 +245,8 @@ export function planFromCards(cards: Card[]): CoachPlan {
       durationMinutes: card.durationMinutes,
       title: card.title,
       checklist: card.checklist.map((item) => item.text),
+      // 지금 카드를 고쳐서 다시 저장할 때 과목이 빠지지 않게 같이 둡니다. (#746)
+      ...(card.subjectId ? { subjectId: card.subjectId } : {}),
     })),
     spec: null,
     replaceCardIds: cards.map((card) => card.id),
@@ -256,14 +259,23 @@ export function planFromCards(cards: Card[]): CoachPlan {
   }
 }
 
-/** 계획을 저장할 카드로 바꿉니다. (카드 번호는 저장하는 순간의 시각으로 만듭니다) */
+/**
+ * 계획을 저장할 카드로 바꿉니다. (카드 번호는 저장하는 순간의 시각으로 만듭니다)
+ * 서버가 과목을 정해 주지 않은 초안은 제목에 든 내 과목 이름으로 과목을 채웁니다. (#746)
+ */
 export function planToCards(plan: CoachPlan, now: number): Card[] {
+  const subjects = getSubjectsSnapshot()
   return plan.drafts.map((draft, index) =>
-    draftToCard(draft, {
-      id: `card-${now}-${index}`,
-      now,
-      startTime: draft.startTime ?? DEFAULT_START_TIME,
-    }),
+    draftToCard(
+      draft.subjectId
+        ? draft
+        : { ...draft, subjectId: findSubjectInTitle(draft.title, subjects)?.id },
+      {
+        id: `card-${now}-${index}`,
+        now,
+        startTime: draft.startTime ?? DEFAULT_START_TIME,
+      },
+    ),
   )
 }
 

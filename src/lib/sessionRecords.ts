@@ -1,4 +1,5 @@
-import type { Routine, SessionPause, StudyPlan, StudySession } from '@/types'
+import { findSubjectInTitle } from '@/lib/subjects'
+import type { Card, Routine, SessionPause, StudyPlan, StudySession, Subject } from '@/types'
 
 /**
  * 카드 기준으로 넓힌 세션 기록(#380)을 읽고 쓸 때 쓰는 순수 함수들입니다.
@@ -58,4 +59,29 @@ export function getSessionCardId(
   if (session.cardId) return session.cardId
   if (session.planId) return cardIdByPlanId[session.planId] ?? session.planId
   return undefined
+}
+
+/**
+ * 과목 없이 저장된 공부 기록에 과목을 채웁니다. 화면에 보여 줄 때만 쓰고 저장하지는 않습니다. (#746)
+ * 과목을 안 정한 카드(예전 AI 계획 카드 등)로 공부하면 기록의 과목이 빈 글자라 "삭제된 과목" 으로 떴습니다.
+ *   1. 그 기록의 카드에 지금 과목이 있으면 그 과목
+ *   2. 카드 제목에 든 내 과목 이름 ('수학 오답' → 수학)
+ *   3. 둘 다 없으면 그대로('')
+ *
+ *   [{ subjectId: '', cardId: 'c1' }], 카드 c1 = { title: '수학 오답' }, 과목 [수학(16)] -> [{ subjectId: '16', … }]
+ */
+export function fillSessionSubjects(
+  sessions: StudySession[],
+  cards: Card[],
+  subjects: Subject[],
+): StudySession[] {
+  const cardsById = new Map(cards.map((card) => [card.id, card]))
+  return sessions.map((session) => {
+    if (session.subjectId !== '') return session
+    const cardId = getSessionCardId(session, {})
+    const card = cardId === undefined ? undefined : cardsById.get(cardId)
+    if (!card) return session
+    const subjectId = card.subjectId || findSubjectInTitle(card.title, subjects)?.id
+    return subjectId ? { ...session, subjectId } : session
+  })
 }

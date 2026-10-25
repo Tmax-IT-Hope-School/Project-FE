@@ -78,3 +78,16 @@ export function getSubjectsSnapshot(): Subject[] {
   if (isServerDataMode()) return queryClient.getQueryData<Subject[]>(['subjects']) ?? []
   return loadSubjects()
 }
+
+/**
+ * 카드 제목에 든 과목을 찾습니다. 과목을 못 받은 카드 · 기록에 과목을 채울 때 씁니다. (#746)
+ * 긴 이름부터 봐서 '수학Ⅱ' 를 '수학' 보다 먼저 찾습니다. 못 찾으면 undefined 입니다. (BE DayPlanRule.subjectInTitle 과 같은 규칙)
+ *
+ *   findSubjectInTitle('수학 오답', [국어, 영어, 수학])       -> 수학
+ *   findSubjectInTitle('기말 전 영단어장', [국어, 영어, 수학]) -> undefined
+ */
+export function findSubjectInTitle(title: string, subjects: Subject[]): Subject | undefined {
+  return [...subjects]
+    .sort((a, b) => b.name.length - a.name.length)
+    .find((subject) => subject.name.trim() !== '' && title.includes(subject.name.trim()))
+}
