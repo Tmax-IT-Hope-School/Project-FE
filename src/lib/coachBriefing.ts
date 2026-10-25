@@ -545,14 +545,46 @@ export function buildMissionProgress(missions: Mission[], nowCard: Card | undefi
 
 // ---- 서버 AI 가 준 빠른 답 · 행동 (lib/chatApi.ts 의 quickReplies · action) ----
 
+/** 시험 · 대회 · 내일처럼 "오늘 계획" 이 아닌 계획 이야기인지 볼 낱말 (그런 빠른 답은 말 칩 그대로 둡니다) */
+const NOT_TODAY_PLAN_WORDS = [...EXAM_TALK_WORDS, '내일', '30일', '한 달', '한달', '주말', '일주일']
+
+/**
+ * AI 가 고른 빠른 답이 "오늘 계획 짜 줘" 같은 말인지 봅니다. (#695)
+ * 말 칩으로 두면 누를 때 그 말이 채팅 AI 로 다시 가서 계획은 안 나오고 또 묻습니다. 그래서 진짜 계획 칩(PLAN_CHIP)으로 바꿉니다.
+ * '계획' 바로 뒤에 '짜 · 세워 · 만들어' 가 와야 합니다. 시험 · 대회 · 내일 계획은 다른 칩이 맡아서 그대로 둡니다.
+ *
+ *   isDayPlanQuickReply('오늘 계획 짜 줘') -> true    isDayPlanQuickReply('계획 짜줘') -> true
+ *   isDayPlanQuickReply('계획 좀 세워 줘') -> true    isDayPlanQuickReply('시험 계획 짜 줘') -> false
+ *   isDayPlanQuickReply('내일 계획 짜 줘') -> false   isDayPlanQuickReply('좋아') -> false
+ */
+export function isDayPlanQuickReply(text: string): boolean {
+  if (!/(계획|플랜|플래너|스케줄)\s*(좀|을|를)?\s*(짜|세워|만들어)/.test(text)) return false
+  return !NOT_TODAY_PLAN_WORDS.some((word) => text.includes(word))
+}
+
+/** 같은 칩(종류 · 글자가 같음)은 앞의 것 하나만 남깁니다. (화면이 종류 · 글자로 칩을 구분해서 겹치면 안 됨) */
+function uniqueChips(chips: CoachChip[]): CoachChip[] {
+  const seen = new Set<string>()
+  return chips.filter((chip) => {
+    const key = `${chip.kind}-${chip.label}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /**
  * AI 가 고른 빠른 답과 행동을 칩으로 바꿉니다. 둘 다 없으면 빈 목록 — 그때는 화면이 코드 칩(핑계 협상)을 씁니다.
- * 행동 칩이 먼저, 빠른 답이 그 뒤입니다. 행동은 누를 때만 실행합니다.
+ * 행동 칩이 먼저, 빠른 답이 그 뒤입니다. 행동은 누를 때만 실행합니다. 같은 칩은 하나만 남깁니다.
+ * ("오늘 계획 짜 줘" 같은 빠른 답은 말 칩이 아니라 계획 칩입니다. isDayPlanQuickReply)
  *
- *   chipsFromServer({ quickReplies: ['응 할게'], action: { type: 'shrink_today', minutes: 10, title: null, date: null } }, undefined)
+ *   chipsFromServer({ quickReplies: ['응 할게'], action: { type: 'shrink_today', minutes: 10, … } }, undefined)
  *   -> [▷ 오늘 계획 가볍게 고치기, 응 할게]
+ *   quickReplies: ['오늘 계획 짜 줘', '1시간만'], action: null                 -> [▷ 오늘 계획 짜 줘, 1시간만]
  *   action: { type: 'make_plan', title: '중간고사 미적분', date: '2026-11-02' }  -> [📅 계획 짜기]
  *   action: { type: 'start_quiz', title: '수열의 극한' }                         -> [📝 문제 풀기]
+ *   action: { type: 'day_plan', minutes: 120, … }                               -> [▷ 오늘 계획 짜 줘]
+ *     (계획 방은 day_plan 이 오면 칩을 기다리지 않고 바로 짭니다. 다른 방에서는 누르면 계획 방으로 넘어갑니다)
  */
 export function chipsFromServer(
   reply: Pick<ChatReply, 'quickReplies' | 'action'>,
@@ -560,7 +592,9 @@ export function chipsFromServer(
 ): CoachChip[] {
   const chips: CoachChip[] = []
   const action = reply.action
-  if (action?.type === 'shrink_today') {
+  if (action?.type === 'day_plan') {
+    chips.push(PLAN_CHIP)
+  } else if (action?.type === 'shrink_today') {
     // "오늘 목표를 줄이자" 는 코드가 분을 정해 주지 않고, 코치가 가볍게 다시 짠 계획을 같이 고칩니다. (계획 핑퐁)
     chips.push(LIGHT_PLAN_CHIP)
   } else if (action?.type === 'start_timer') {
@@ -594,9 +628,33 @@ export function chipsFromServer(
     chips.push({ kind: 'quiz', label: '📝 문제 풀기', topic: action.title })
   }
   for (const text of reply.quickReplies) {
-    chips.push({ kind: 'say', label: text })
+    chips.push(isDayPlanQuickReply(text) ? PLAN_CHIP : { kind: 'say', label: text })
   }
-  return chips
+  return uniqueChips(chips)
+}
+
+/**
+ * 채팅 답(AI 코치의 말) 아래에 붙일 칩을 정합니다. (pages/ChatRoomPage.tsx 의 말 보내기 · 주제 대화가 같이 씀)
+ *   - 위기 표현이 감지됐으면(showHelp) 칩을 붙이지 않습니다. 공부 이야기는 멈추고 도움 안내만 보여 줍니다.
+ *   - AI 가 고른 칩이 있으면 그것을, 없으면 학생이 쓴 말을 보고 코드가 칩(핑계 협상 · 계획 · 시험)을 붙입니다.
+ *   - 계획 방이면 AI 가 칩을 골랐어도 진짜 계획 칩(▷ 오늘 계획 짜 줘)을 늘 붙입니다. (#695, 겹치면 하나만)
+ *
+ *   replyChipsFor({ reply: { quickReplies: ['좋아'], action: null, showHelp: false }, studentText: '2시간 할래', isPlanner: true, nowCard })
+ *   -> [좋아, ▷ 오늘 계획 짜 줘]
+ *   replyChipsFor({ reply: { quickReplies: [], action: null, showHelp: false }, studentText: '오늘 너무 피곤해', isPlanner: false, nowCard })
+ *   -> [▷ 오늘 계획 가볍게 고치기, 그래도 다 할래]
+ */
+export function replyChipsFor(input: {
+  reply: Pick<ChatReply, 'quickReplies' | 'action' | 'showHelp'>
+  /** 방금 학생이 쓴 말. 주제 대화처럼 학생 말 없이 AI 가 먼저 말했으면 '' */
+  studentText: string
+  isPlanner: boolean
+  nowCard: Card | undefined
+}): CoachChip[] {
+  if (input.reply.showHelp) return []
+  const serverChips = chipsFromServer(input.reply, input.nowCard)
+  const chips = serverChips.length > 0 ? serverChips : codeChipsFor(input.studentText)
+  return uniqueChips(input.isPlanner ? [...chips, PLAN_CHIP] : chips)
 }
 
 // ---- 내가 준비하는 것 (lib/studyFocus.ts) ----

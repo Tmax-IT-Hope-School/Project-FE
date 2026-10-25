@@ -30,7 +30,13 @@ import {
   type TalkTarget,
 } from '@/lib/chatRooms'
 import type { CoachChip } from '@/lib/coachBriefing'
-import { planLineForAi, toCoachPlan, type CoachPlan } from '@/lib/coachPlan'
+import {
+  MAX_PLAN_TALK_LINE_LENGTH,
+  MAX_PLAN_TALK_LINES,
+  planLineForAi,
+  toCoachPlan,
+  type CoachPlan,
+} from '@/lib/coachPlan'
 import { toDayKey } from '@/lib/date'
 import { loadData, saveData } from '@/lib/storage'
 import { quizLineForAi, toCoachQuiz, type CoachQuiz } from '@/lib/studyQuiz'
@@ -316,6 +322,39 @@ export function otherRoomLines(ownerId: string, room: ChatRoomId, todayKey: stri
     .sort((a, b) => a.at - b.at)
     .slice(-OTHER_ROOM_MAX_LINES)
     .map((line) => line.text)
+}
+
+/**
+ * 계획 방에서 오늘 나눈 말을 하루 계획 · 고치기 요청에 같이 보낼 줄로 만듭니다. (#695, 서버의 planTalk)
+ * 채팅에서 정한 "2시간만 · 9시부터 · 수학 먼저" 가 계획 초안에 들어가게 하려고 보냅니다.
+ * - 오늘(새벽 4시 기준) 말 중 마지막 [새 대화] 구분선 뒤의 말만 씁니다. (지금 대화)
+ * - 빼는 것: 구분선 · 빈 말 · 방의 첫 인사(코드가 쓴 정해진 말) · 시연용 말과 시연용 계획 말풍선 · '[계획 초안] …' 줄
+ * - 한 줄은 '나: …' / '코치: …' 모양이고 200자까지, 최근 8줄을 시간 순서로 돌려줍니다.
+ *
+ *   [나 '오늘 2시간만 할래' · 코치 '좋아, 몇 시부터 할까?' · 나 '9시부터 수학 먼저']
+ *   -> ['나: 오늘 2시간만 할래', '코치: 좋아, 몇 시부터 할까?', '나: 9시부터 수학 먼저']
+ *   [어제 말 · 구분선 · 시연용 답] -> []
+ */
+export function planTalkLines(bubbles: ThreadBubble[], todayKey: string): string[] {
+  const lastDivider = bubbles.findLastIndex((bubble) => bubble.isDivider)
+  // 방마다 하루를 여는 정해진 인사 (lib/chatRooms.ts). 계획에 쓸 내용이 없어서 뺍니다.
+  const greetings = new Set(CHAT_ROOMS.map((chatRoom) => chatRoom.greeting.text))
+  const lines: string[] = []
+  for (const bubble of bubbles.slice(lastDivider + 1)) {
+    if (bubble.isDemo || bubble.plan?.isDemo || toDayKey(bubble.at) !== todayKey) continue
+    if (bubble.speaker === 'ai' && greetings.has(bubble.text)) continue
+    const text = bubble.text
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('[계획 초안]'))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text === '') continue
+    const line = `${bubble.speaker === 'me' ? '나' : '코치'}: ${text}`
+    // 이모지가 반으로 잘리지 않게 글자(코드 포인트) 단위로 자릅니다.
+    lines.push(Array.from(line).slice(0, MAX_PLAN_TALK_LINE_LENGTH).join(''))
+  }
+  return lines.slice(-MAX_PLAN_TALK_LINES)
 }
 
 /** 다음 말풍선 번호 */

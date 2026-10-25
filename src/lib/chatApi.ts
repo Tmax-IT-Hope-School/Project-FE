@@ -25,6 +25,7 @@
  *   서버는 숫자를 서버의 기록으로 다시 계산하고, 서버에 기록이 없을 때만 이 카드를 씁니다.
  * - showHelp 가 true 면 학생의 말에서 위기 표현이 감지된 것입니다. reply 는 서버가 정해 둔 안내입니다. (BE #307 부터 채팅은 이어 갑니다)
  * - quickReplies · action 은 AI 가 고른 빠른 답 · 행동입니다(BE #309, #327). 없거나 모양이 틀리면 빈 값으로 봅니다.
+ *   action 의 day_plan · startTime 은 계획 방 고도화(FE #695 · BE #431)부터입니다. 서버가 아직 안 주면 그냥 안 옵니다.
  *
  * ⚠️ 대화는 학생의 마음 이야기입니다. **서버에는 저장하지 않습니다.** 서버는 답을 받는 데만 쓰고, 정리할 때 요약만 남깁니다.
  *    대신 **이 기기에는** 남깁니다. (lib/coachThread.ts, 2026-10-18 사용자 결정: "멘토와 연속적인 대화를 한다는 느낌으로")
@@ -58,15 +59,19 @@ export interface ChatHelpLine {
  *   start_timer  — 지금 공부 시작 · shrink_today — 오늘 목표를 줄여서 시작 · create_card — 그 제목의 카드로 시작
  *   make_plan    — 시험 · 대회 날까지의 긴 계획 짜기 (title = 목표 한 줄, date = 그 날. BE #327, 2026-10-18)
  *   start_quiz   — 그 주제로 확인 문제 풀기 (title = 주제)
+ *   day_plan     — 학생과 정한 대로 오늘 계획 짜기 (minutes = 오늘 총 공부 분, title = 먼저 할 것, startTime = 시작 시각. #695)
+ *                  이것만은 칩을 기다리지 않고 계획 방이 바로 계획을 짭니다. (pages/ChatRoomPage.tsx)
  */
 export interface ChatAction {
-  type: 'start_timer' | 'shrink_today' | 'create_card' | 'make_plan' | 'start_quiz'
-  /** 분 (5 ~ 120). 모르면 null */
+  type: 'start_timer' | 'shrink_today' | 'create_card' | 'make_plan' | 'start_quiz' | 'day_plan'
+  /** 분. day_plan 은 오늘 총 공부 분(20 ~ 600), 나머지는 카드 하나의 분(5 ~ 120). 모르면 null */
   minutes: number | null
-  /** create_card 의 카드 제목 · make_plan 의 목표 · start_quiz 의 주제 (30자까지). 모르면 null */
+  /** create_card 의 카드 제목 · make_plan 의 목표 · start_quiz 의 주제 · day_plan 의 먼저 할 것 (30자까지). 모르면 null */
   title: string | null
   /** make_plan 의 시험 · 대회 날 'YYYY-MM-DD'. 모르거나 서버가 범위(내일 ~ 30일 뒤) 밖이라고 비웠으면 null */
   date: string | null
+  /** day_plan 의 시작 시각 'HH:mm'. 모르거나 모양이 틀리면 null. 다른 행동은 늘 null */
+  startTime: string | null
 }
 
 /** AI 코치의 말 하나 */
@@ -98,10 +103,16 @@ const ACTION_TYPES: ChatAction['type'][] = [
   'create_card',
   'make_plan',
   'start_quiz',
+  'day_plan',
 ]
 
 // 날짜 모양 'YYYY-MM-DD'
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+// 시각 모양 'HH:mm' (00:00 ~ 23:59)
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+/** day_plan 의 오늘 총 공부 분 범위 (서버와 같음) */
+const DAY_PLAN_MIN_MINUTES = 20
+const DAY_PLAN_MAX_MINUTES = 600
 
 /** 서버가 준 빠른 답을 확인합니다. 글자만, 빈 것은 빼고, 3개 · 한 개 20자까지 */
 function readQuickReplies(value: unknown): string[] {
@@ -151,22 +162,42 @@ export function readChatSources(value: unknown): ChatSource[] {
   return sources
 }
 
-/** 서버가 준 행동을 확인합니다. 모양이 틀리면 null */
+/**
+ * day_plan 의 오늘 총 공부 분을 확인합니다. 정수이고 20 ~ 600 이면 그대로, 아니면 null
+ * (카드 하나의 분처럼 범위 안으로 당기지 않습니다. 틀린 값으로 계획을 짜는 것보다 모르는 채로 짜는 게 낫습니다)
+ *   readDayPlanMinutes(120) -> 120   readDayPlanMinutes(5) -> null   readDayPlanMinutes('120') -> null
+ */
+function readDayPlanMinutes(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null
+  return value >= DAY_PLAN_MIN_MINUTES && value <= DAY_PLAN_MAX_MINUTES ? value : null
+}
+
+/** 서버가 준 행동을 확인합니다. 모양이 틀리면 null. 모르는 칸은 읽지 않고 넘어갑니다. */
 function readAction(value: unknown): ChatAction | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
   if (!ACTION_TYPES.includes(record.type as ChatAction['type'])) return null
+  const type = record.type as ChatAction['type']
   const minutes =
-    typeof record.minutes === 'number' && Number.isInteger(record.minutes)
-      ? Math.min(120, Math.max(5, record.minutes))
-      : null
+    type === 'day_plan'
+      ? readDayPlanMinutes(record.minutes)
+      : typeof record.minutes === 'number' && Number.isInteger(record.minutes)
+        ? Math.min(120, Math.max(5, record.minutes))
+        : null
   const title =
     typeof record.title === 'string' && record.title.trim() !== ''
       ? record.title.trim().slice(0, 30)
       : null
   const date =
     typeof record.date === 'string' && DATE_PATTERN.test(record.date) ? record.date : null
-  return { type: record.type as ChatAction['type'], minutes, title, date }
+  // 시작 시각은 day_plan 에만 씁니다. 'HH:mm' 모양이 아니면 null
+  const startTime =
+    type === 'day_plan' &&
+    typeof record.startTime === 'string' &&
+    TIME_PATTERN.test(record.startTime)
+      ? record.startTime
+      : null
+  return { type, minutes, title, date, startTime }
 }
 
 /** 서버가 준 값이 약속한 모양이 맞는지 확인합니다. (서버 응답도 그대로 믿지 않고 확인합니다) 빠른 답 · 행동은 따로 읽습니다. */

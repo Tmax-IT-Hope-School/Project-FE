@@ -14,6 +14,7 @@
  * ⚠️ 사진은 서버에 보내기만 하고 어디에도 저장하지 않습니다. (lib/photoCards.ts 와 같음)
  */
 import { api, ApiError } from '@/lib/api'
+import type { ChatAction } from '@/lib/chatApi'
 import { isDateKey, moveDateKey } from '@/lib/date'
 import { draftToCard, toDraft, type PhotoCardDraft } from '@/lib/photoCards'
 import type { StudyFocus } from '@/lib/studyFocus'
@@ -92,6 +93,12 @@ export interface PlanReply {
   cleared: boolean
   /** true 면 코치의 한 줄도 시연용입니다. */
   isDemo: boolean
+  /**
+   * 고치기 전 계획. 있으면 화면이 이 계획을 먼저 계획 말풍선으로 보여 주고, 그 아래에 고친 계획(plan)을 붙입니다.
+   * AI 가 정한 값(day_plan)으로 지금 오늘 카드를 바로 고칠 때만 있습니다. (#695)
+   * 못 고쳤으면(plan 이 null) 이 계획을 열어 둬서 학생이 이어서 고칠 수 있습니다.
+   */
+  before?: CoachPlan
 }
 
 /** 시작 시각을 모를 때 쓰는 시각 */
@@ -112,6 +119,9 @@ const MAX_DAILY_MINUTES = 300
 export const MAX_LONG_PLAN_DAYS = 30
 /** 고치는 요청 · 목표 한 줄의 최대 글자 수 (서버도 100자) */
 export const MAX_PLAN_TEXT_LENGTH = 100
+/** 하루 계획 · 고치기에 같이 보내는 계획 방 대화(planTalk)의 줄 수 · 한 줄 글자 수 (서버도 8줄 · 200자, #695) */
+export const MAX_PLAN_TALK_LINES = 8
+export const MAX_PLAN_TALK_LINE_LENGTH = 200
 /** 오늘 계획을 가볍게 고칠 때 서버에 보내는 요청 */
 export const LIGHTER_REQUEST = '오늘 컨디션이 안 좋아서 가볍게 줄여 줘'
 
@@ -345,6 +355,63 @@ function textReply(reply: string, isDemo = false): PlanReply {
   return { showHelp: false, reply, plan: null, cleared: false, isDemo }
 }
 
+// ---- AI 가 채팅에서 학생과 정한 오늘 계획 (#695) ----
+
+/**
+ * AI 코치가 계획 방 채팅에서 학생과 정한 오늘 계획의 값입니다. (채팅 답의 action 'day_plan', lib/chatApi.ts)
+ * 이 값이 오면 "몇 분 할래?" 처럼 다시 묻지 않고 바로 오늘 계획을 짭니다.
+ * (2026-10-25 사용자: "깊게 대화가 안 되고 계속 물어봐서")
+ */
+export interface DayPlanAsk {
+  /** 오늘 총 공부 시간 (분, 20 ~ 600). 모르면 null */
+  totalMinutes: number | null
+  /** 시작 시각 'HH:mm'. 모르면 null */
+  startTime: string | null
+  /** 먼저 할 것 한 줄 (30자까지). 모르면 null */
+  firstTask: string | null
+}
+
+/**
+ * 채팅 답의 행동이 day_plan 이면 그 값을, 아니면 null 을 돌려줍니다. (값은 lib/chatApi.ts 가 이미 확인함)
+ *   dayPlanAskOf({ type: 'day_plan', minutes: 120, title: '수학', startTime: '21:00', date: null })
+ *   -> { totalMinutes: 120, startTime: '21:00', firstTask: '수학' }
+ *   dayPlanAskOf({ type: 'start_timer', … }) -> null
+ */
+export function dayPlanAskOf(action: ChatAction | null): DayPlanAsk | null {
+  if (action?.type !== 'day_plan') return null
+  return { totalMinutes: action.minutes, startTime: action.startTime, firstTask: action.title }
+}
+
+/** AI 가 정한 값이 하나도 없을 때의 고치는 요청 글 (서버가 같이 받은 계획 방 대화를 보고 고칩니다) */
+const ASK_TALK_REQUEST = '채팅에서 이야기한 대로 고쳐 줘'
+
+/**
+ * AI 가 정한 값으로 지금 오늘 카드를 고칠 때 보내는 요청 글. 코드가 만듭니다.
+ *   dayPlanAskText({ totalMinutes: 120, startTime: '21:00', firstTask: '수학' }) -> '총 120분, 21:00부터, 수학 먼저'
+ *   dayPlanAskText({ totalMinutes: null, startTime: '20:30', firstTask: null })  -> '20:30부터'
+ *   dayPlanAskText({ totalMinutes: null, startTime: null, firstTask: null })     -> '채팅에서 이야기한 대로 고쳐 줘'
+ */
+export function dayPlanAskText(ask: DayPlanAsk): string {
+  const parts: string[] = []
+  if (ask.totalMinutes !== null) parts.push(`총 ${ask.totalMinutes}분`)
+  if (ask.startTime !== null) parts.push(`${ask.startTime}부터`)
+  if (ask.firstTask !== null) parts.push(`${ask.firstTask} 먼저`)
+  if (parts.length === 0) return ASK_TALK_REQUEST
+  return parts.join(', ').slice(0, MAX_PLAN_TEXT_LENGTH)
+}
+
+/**
+ * 서버에 보낼 계획 방 대화(planTalk). 먼저 할 것이 있으면 맨 끝에 '나: 먼저 할 것 — …' 한 줄로 붙입니다.
+ * 최근 8줄만, 한 줄은 200자까지. (서버 한도. 이모지가 반으로 잘리지 않게 글자 단위로 자름)
+ *   planTalkBody(['나: 오늘 2시간만 할래'], '수학') -> ['나: 오늘 2시간만 할래', '나: 먼저 할 것 — 수학']
+ */
+function planTalkBody(planTalk: string[], firstTask: string | null = null): string[] {
+  const lines = firstTask ? [...planTalk, `나: 먼저 할 것 — ${firstTask}`] : planTalk
+  return lines
+    .slice(-MAX_PLAN_TALK_LINES)
+    .map((line) => Array.from(line).slice(0, MAX_PLAN_TALK_LINE_LENGTH).join(''))
+}
+
 export interface DayPlanInput {
   /** 계획을 짤 날 (오늘) */
   date: string
@@ -358,14 +425,21 @@ export interface DayPlanInput {
    * 서버가 목표 없는 칸에 그 공부(예: 미적분 극한)를 넣습니다. 안 주면 보내지 않습니다.
    */
   otherRooms?: string[]
+  /** AI 가 채팅에서 학생과 정한 값 (day_plan). 총 분 · 시작 시각은 그대로, 먼저 할 것은 planTalk 끝 줄로 보냅니다. */
+  ask?: DayPlanAsk | null
+  /** 계획 방에서 오늘 나눈 말 (lib/coachThread.ts 의 planTalkLines, #695). 안 주면 보내지 않습니다. */
+  planTalk?: string[]
 }
 
 /**
  * 오늘 계획을 짜 달라고 합니다. (진짜 로그인일 때만)
- *   요청 { date, focus?, subjects?, condition?, otherRooms? }
+ *   요청 { date, focus?, subjects?, condition?, otherRooms?, totalMinutes?, startTime?, planTalk? }
  *   응답 { drafts: [...], evidence: ['…'] } — drafts 가 비었으면 넣을 빈 시간이 없는 것 (이유는 evidence)
+ * totalMinutes · startTime · planTalk 는 #695 부터입니다. 서버가 아직 모르면 무시하므로 먼저 보내도 괜찮습니다.
  */
 export async function requestDayPlan(input: DayPlanInput): Promise<PlanReply> {
+  const ask = input.ask ?? null
+  const planTalk = planTalkBody(input.planTalk ?? [], ask?.firstTask ?? null)
   const record = asRecord(
     await api<unknown>('/ai/day-plan', {
       method: 'POST',
@@ -377,6 +451,10 @@ export async function requestDayPlan(input: DayPlanInput): Promise<PlanReply> {
         ...(input.otherRooms && input.otherRooms.length > 0
           ? { otherRooms: input.otherRooms }
           : {}),
+        // 채팅에서 정한 총 분 · 시작 시각 · 계획 방 대화 (없으면 보내지 않음)
+        ...(ask && ask.totalMinutes !== null ? { totalMinutes: ask.totalMinutes } : {}),
+        ...(ask && ask.startTime !== null ? { startTime: ask.startTime } : {}),
+        ...(planTalk.length > 0 ? { planTalk } : {}),
       }),
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
     }),
@@ -408,14 +486,16 @@ export async function requestDayPlan(input: DayPlanInput): Promise<PlanReply> {
 
 /**
  * 오늘 계획을 학생의 요청대로 고쳐 달라고 합니다. (진짜 로그인일 때만)
- *   요청 { drafts, request, focus?, subjects? }
+ *   요청 { drafts, request, focus?, subjects?, planTalk? }
  *   응답 { showHelp, reply, drafts } — drafts 가 null 이면 못 고친 것 (지금 계획을 그대로 둠)
+ * planTalk(계획 방에서 오늘 나눈 말)는 #695 부터입니다. 서버가 아직 모르면 무시합니다.
  */
 export async function reviseDayPlan(
   plan: CoachPlan,
   request: string,
-  extra: { focus: StudyFocus | null; subjects: string[] },
+  extra: { focus: StudyFocus | null; subjects: string[]; planTalk?: string[] },
 ): Promise<PlanReply> {
+  const planTalk = planTalkBody(extra.planTalk ?? [])
   const record = asRecord(
     await api<unknown>('/ai/day-plan/revise', {
       method: 'POST',
@@ -424,6 +504,7 @@ export async function reviseDayPlan(
         request: request.slice(0, MAX_PLAN_TEXT_LENGTH),
         focus: focusBody(extra.focus),
         subjects: subjectsBody(extra.subjects),
+        ...(planTalk.length > 0 ? { planTalk } : {}),
       }),
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
     }),
