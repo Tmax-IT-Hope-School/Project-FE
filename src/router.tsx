@@ -99,6 +99,9 @@ const ConsentPage = lazy(() =>
 const CardTimerPage = lazy(() =>
   import('@/pages/CardTimerPage').then((m) => ({ default: m.CardTimerPage })),
 )
+const VariantPage = lazy(() =>
+  import('@/pages/VariantPage').then((m) => ({ default: m.VariantPage })),
+)
 
 /**
  * 페이지(주소)를 추가하려면 위의 lazy 목록에 한 줄, children 배열에 한 줄 추가하면 됩니다.
@@ -162,6 +165,8 @@ export const router = createBrowserRouter([
       { path: 'records/manual', element: <ManualPage /> },
       // 사진 채점의 옛 주소(통계 탭으로 옮기기 전). 이미 띄워 둔 QR 로 열어도 같은 화면이 나오게 넘겨 줍니다.
       { path: 'records/answer-check', element: <RedirectWithQuery to="/stats/answer-check" /> },
+      // 수학 변형 문제 (틀린 문제를 매일 변형해서 다시 풀기 · 주간 심화 · 오답노트). 통계 탭에서 들어옵니다. (BE docs/VARIANT-SPEC.md)
+      { path: 'variants', element: <VariantPage /> },
       // v2 체크인(/check)은 #417 에서 지웠습니다. 옛 링크 · 즐겨찾기로 오면 홈으로 보냅니다. (그날 컨디션은 코치가 채팅에서 묻습니다)
       { path: 'check', element: <Navigate to="/" replace /> },
       // 일기 · 성찰일기는 최종 기획서 MVP 밖이라 #417 에서 지웠습니다. 옛 링크는 홈으로 보냅니다.
