@@ -7,7 +7,7 @@ import { useGoals } from '@/hooks/useGoals'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { cn } from '@/lib/cn'
 import { loadAllSessions } from '@/lib/dailyRecords'
-import { getTodayKey } from '@/lib/date'
+import { getTodayKey, moveDateKey } from '@/lib/date'
 import { formatDday, getDaysUntil } from '@/lib/exams'
 import {
   CHECK_REASON_MAX_LENGTH,
@@ -566,6 +566,11 @@ function GoalCheck({ goal, step, todayKey, onStep, onKeep, onChange, onGiveUp }:
   const [dDay, setDDay] = useState(goal.dDay)
   const [totalText, setTotalText] = useState(goal.totalAmount?.toString() ?? '')
   const [reason, setReason] = useState('')
+  // 서버는 바꾼 D-day 를 내일 이후만 받습니다. (BE GoalService.checkDDay, 새 목표 만들기와 같은 규칙)
+  // D-day 를 그대로 두면(이미 지났어도) 검사하지 않습니다.
+  const minDDay = moveDateKey(todayKey, 1)
+  const dDayError =
+    dDay !== '' && dDay !== goal.dDay && dDay < minDDay ? 'D-day 는 내일 이후로 골라 주세요' : null
 
   const total = Number(totalText)
   const changes: Partial<Pick<Goal, 'title' | 'dDay' | 'totalAmount'>> = {}
@@ -646,7 +651,9 @@ function GoalCheck({ goal, step, todayKey, onStep, onKeep, onChange, onGiveUp }:
                 id="goal-dday"
                 label="D-day"
                 type="date"
+                min={minDDay}
                 value={dDay}
+                error={dDayError ?? undefined}
                 onChange={(event) => setDDay(event.target.value)}
               />
               {goal.kind === 'completion' && (
@@ -685,7 +692,7 @@ function GoalCheck({ goal, step, todayKey, onStep, onKeep, onChange, onGiveUp }:
             {step === 'change' ? (
               <Button
                 className="w-full sm:w-auto"
-                disabled={!hasChange || !isReasonOk}
+                disabled={!hasChange || !isReasonOk || dDayError !== null}
                 onClick={() => onChange(changes, reason)}
               >
                 이렇게 바꿀게요

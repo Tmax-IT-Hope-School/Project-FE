@@ -416,6 +416,8 @@ export function CardTimerPage() {
   const isCountdownToday = isCountdownOn(
     pageSettings.countdown.value,
     loadLocalCheckIn(todayKey)?.emotions,
+    // 설정 화면에서 직접 켜거나 껐으면 그 값을 따릅니다.
+    pageSettings.countdown.source === 'user',
   )
   // 관리 4단계(#408): 미루기 잠금 · 다음 반복 카드 1장 절대 · 증빙 필수
   const isStage4 = isStage4Now(todayKey)

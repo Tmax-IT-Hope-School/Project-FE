@@ -121,13 +121,17 @@ const COUNTDOWN_EMOTIONS: EmotionTag[] = ['STUCK', 'ANXIOUS']
 
 /**
  * 5초 카운트다운을 켤지 — 설정이 켜져 있거나 그날 감정 태그에 막막함 · 불안함이 있으면
+ * 단, 설정 화면에서 사용자가 직접 고른 값(isUserChoice)이면 감정과 상관없이 그 값을 따릅니다.
  *
- *   isCountdownOn(false, ['CALM']) -> false   isCountdownOn(false, ['STUCK']) -> true   isCountdownOn(true, []) -> true
+ *   isCountdownOn(false, ['CALM'], false) -> false   isCountdownOn(false, ['STUCK'], false) -> true
+ *   isCountdownOn(true, [], false) -> true          isCountdownOn(false, ['STUCK'], true) -> false (직접 끔)
  */
 export function isCountdownOn(
   settingOn: boolean,
   todayEmotions: EmotionTag[] | undefined,
+  isUserChoice: boolean,
 ): boolean {
+  if (isUserChoice) return settingOn
   return settingOn || (todayEmotions ?? []).some((tag) => COUNTDOWN_EMOTIONS.includes(tag))
 }
 

@@ -77,6 +77,7 @@ import {
 } from '@/lib/webPush'
 import { loadSchoolClass, saveSchoolClass, type SchoolClass } from '@/lib/schoolToday'
 import { loadSchoolTrack, saveSchoolTrack, type SchoolTrack } from '@/lib/schoolTrack'
+import { loadAutoSettings, saveAutoSettings, setByUser } from '@/lib/settingsMapping'
 import { loadSignupProfile } from '@/lib/signup'
 import { deleteServerSessions } from '@/lib/sessionsApi'
 import { loadData, removeData, saveData } from '@/lib/storage'
@@ -215,6 +216,16 @@ export function SettingsPage() {
 
   function handleToggleNudge(kind: NudgeKind, isOn: boolean) {
     setNudgeSettings(setNudgeOn(kind, isOn))
+  }
+
+  // 카드를 시작할 때 5초 카운트다운 「이것만 먼저 해요」 (lib/settingsMapping.ts 의 countdown)
+  const [autoSettings, setAutoSettings] = useState(loadAutoSettings)
+
+  function handleToggleCountdown(isOn: boolean) {
+    // 직접 고른 값은 잠겨서, 심리검사 · 그날 감정이 다시 바꾸지 않습니다. (setByUser)
+    const next = setByUser(autoSettings, 'countdown', isOn)
+    saveAutoSettings(next)
+    setAutoSettings(next)
   }
   const [messageSettings, setMessageSettings] = useState(getMessageSettings)
   // 온보딩 마지막에 세운 처음 계획. 아직 안 세웠으면 null 입니다. (#240)
@@ -480,6 +491,27 @@ export function SettingsPage() {
               </label>
             </div>
           </details>
+
+          {/* 줄 전체가 label 이라 어디를 눌러도 바뀝니다. (min-h-12 = 48px) */}
+          <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-between gap-3">
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[15px] font-semibold text-slate-900">
+                카드 시작 5초 카운트다운
+              </span>
+              <span className="text-[13px] break-keep text-slate-500">
+                {autoSettings.countdown.source === 'user'
+                  ? '카드를 시작하면 5초 동안 첫 행동 하나를 보여 줘요.'
+                  : '직접 정하기 전에는 막막하거나 불안한 날에 저절로 켜져요.'}
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={autoSettings.countdown.value}
+              onChange={(event) => handleToggleCountdown(event.target.checked)}
+              aria-label="카드 시작 5초 카운트다운"
+              className="switch shrink-0"
+            />
+          </label>
         </Card>
 
         {/* ③ 알림: 코치 알림(종류별) · 전화 받을 시간 · 하루 메시지 횟수와 연락 금지 시간 */}
