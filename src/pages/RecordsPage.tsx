@@ -4,11 +4,10 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useCards } from '@/hooks/useCards'
 import { useIsServerData } from '@/hooks/useIsServerData'
-import { loadManualItems, useManualItems } from '@/hooks/useManualItems'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useSubjects } from '@/hooks/useSubjects'
 import { useWeeklyPicks } from '@/hooks/useWeeklyPicks'
-import { answerChecksBetweenQuery, answerChecksQuery } from '@/lib/answerChecksApi'
+import { answerChecksBetweenQuery } from '@/lib/answerChecksApi'
 import { loadCheckInsByDate } from '@/lib/callSummary'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { cn } from '@/lib/cn'
@@ -27,7 +26,6 @@ import {
   getDayReport,
   getFirstRecordDay,
   getPickResult,
-  getPlanPercent,
   getWeekDateKeys,
   getWeekStart,
   isRestWeek,
@@ -56,7 +54,7 @@ import { loadSessionSyncState } from '@/lib/sessionSync'
 import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
 import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
-import { CHAT_PATH, MANUAL_PATH, QUIZ_REPORT_PATH } from '@/lib/tabMenu'
+import { CHAT_PATH, QUIZ_REPORT_PATH } from '@/lib/tabMenu'
 import { findWeeklyPick, type WeeklyPick, type WeeklyPickInput } from '@/lib/weeklyPicks'
 import { getPicksRange, weeklyPicksQuery } from '@/lib/weeklyPicksApi'
 import type { Card as CardData, Goal, StudyPlan, StudySession, Subject } from '@/types'
@@ -69,8 +67,9 @@ import { Link } from 'react-router-dom'
  *
  *   [일간 리포트 | 주간 리포트]   ← ?view=weekly (주소에 둡니다. 새로고침 · 뒤로 가기에도 그대로)
  *   ‹ 10월 3주 ›  월 ~ 일         ← ?date=2026-10-17 (일간은 그날, 주간은 그 날짜가 든 주)
- *   일간: 하루 한 줄 · 잘한 것(공부 시간 · 확인 문제 정답률) · 계획 완료 · 이번 주에 고른 것
- *   주간: 이번 주 한 줄 · 잘한 것 · 계획을 끝까지 해낸 날 · 고른 것의 결과 · 다음 주에 하나만 해 볼까요?
+ *   일간: 하루 한 줄 · 계획 완료 · 이번 주에 고른 것
+ *   주간: 이번 주 한 줄 · 계획을 끝까지 해낸 날 · 고른 것의 결과 · 다음 주에 하나만 해 볼까요?
+ *   "잘한 것"(공부 시간 · 확인 문제 정답률) 묶음과 나 사용설명서 입구는 2026-10-26 에 뺐습니다. (시연 피드백)
  *         다 지난 주에 공부한 날이 2일 이하면 "쉬어 간 주" 로 숫자 비교 없이 작은 한 걸음만 보여 줍니다.
  *   기록한 날이 14일이 안 되면 리포트 대신 카운트다운을 보여 줍니다.
  *
@@ -79,7 +78,7 @@ import { Link } from 'react-router-dom'
  *   묶음 사이 28px(gap-7) · 흰 묶음은 연한 테두리 + 옅은 그림자 · 큰 숫자는 28px 굵게(800)
  * 진짜 로그인이면 서버의 공부 기록(최근 6개월)도 받아서 이 기기 기록과 합쳐 봅니다. (lib/historySessions.ts, #659)
  * 예전 기록 탭의 그래프 · AI 분석은 통계 탭(pages/StatsPage.tsx)으로 옮겼습니다.
- * 옛 주소 /report 는 여기로, /manual 은 나 사용설명서(/records/manual, pages/ManualPage.tsx)로 옵니다. (router.tsx)
+ * 옛 주소 /report 는 여기로 옵니다. (router.tsx)
  */
 
 /**
@@ -183,8 +182,6 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
   )
   // 이번 주에 고른 것. 이 기기 것 + 서버 것을 합쳐 보고, 고르면 이 기기에 저장한 뒤 서버로도 보냅니다. (#654)
   const { picks, savePick } = useWeeklyPicks({ serverPicks, todayKey })
-  // 아래 "나 사용설명서" 줄에 보일 항목 수 (주간 리포트에서 넣으면 다음에 열 때 늘어납니다)
-  const [manualCount] = useState(() => loadManualItems().length)
   const [goals] = useState(loadGoals)
   const { cards } = useCards()
   const subjects = useSubjects()
@@ -270,15 +267,12 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
             day={getDayReport(reports, selectedDate)}
             isToday={selectedDate === todayKey}
             completeDays={countCompleteDaysUntil(reports, selectedDate)}
-            input={input}
-            quizResults={quizResults}
-            subjectNames={subjects.map((subject) => subject.name)}
             pick={findWeeklyPick(picks, weekStart)}
           />
         )}
       </div>
 
-      {/* 시안에는 없지만 기록 탭에서 들어가는 입구 두 개. 위 묶음들과 같은 테두리로 둡니다. */}
+      {/* 시안에는 없지만 기록 탭에서 들어가는 입구. 위 묶음들과 같은 테두리로 둡니다. */}
       <div className="mt-7 flex flex-col gap-3">
         {/* 문제 풀이 주간 리포트(과목별 점수 그래프 · 주간 정리표)로 가는 입구 (2026-10-24, pages/QuizReportPage.tsx)
             통계 화면에 있던 것을, 주소(/records/quiz)대로 기록 탭으로 옮겼습니다. */}
@@ -297,20 +291,6 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
           </span>
           <span aria-hidden className="shrink-0 text-slate-400">
             ›
-          </span>
-        </Link>
-
-        {/* 나 사용설명서로 가는 길. 주간 리포트에서 [사용설명서에 넣기] 한 것이 여기에 쌓입니다. */}
-        <Link
-          to={MANUAL_PATH}
-          className={cn(
-            CARD_CLASS,
-            'flex min-h-14 items-center justify-between gap-3 py-4 hover:bg-slate-50',
-          )}
-        >
-          <span className="text-[15px] font-semibold text-slate-900">나 사용설명서</span>
-          <span className="flex shrink-0 items-center gap-1 text-sm text-slate-500">
-            확인된 것 {manualCount}개<span aria-hidden>›</span>
           </span>
         </Link>
       </div>
@@ -547,10 +527,6 @@ function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
 const CARD_CLASS =
   'rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
 
-/** 큰 숫자(1시간 50분 · 80%) 글자 모양 */
-const BIG_NUMBER_CLASS =
-  'text-[28px] leading-[34px] font-extrabold tracking-[-0.02em] text-slate-900 tabular-nums'
-
 /** 묶음 안의 큰 문장(오늘 계획을 끝까지 해냈어요 · 이번 주 4일 완료했어요) 글자 모양 */
 const BIG_SENTENCE_CLASS = 'mt-2 text-lg leading-[26px] font-bold break-keep text-slate-900'
 
@@ -734,66 +710,14 @@ interface DailyReportProps {
   isToday: boolean
   /** 그날까지 계획을 끝까지 해낸 날 수 */
   completeDays: number
-  input: HistoryInput
-  quizResults: QuizResult[]
-  subjectNames: string[]
   /** 그 주에 고른 것 */
   pick: WeeklyPick | undefined
 }
 
-function DailyReport({
-  day,
-  isToday,
-  completeDays,
-  input,
-  quizResults,
-  subjectNames,
-  pick,
-}: DailyReportProps) {
-  const percent = getPlanPercent(day)
-
+function DailyReport({ day, isToday, completeDays, pick }: DailyReportProps) {
   return (
     <>
       <HeadlineCard label="하루 한 줄" text={dayHeadline(day, completeDays, isToday)} />
-
-      <ReportCard title="잘한 것">
-        <p className="mt-4 text-sm text-slate-500">공부 시간</p>
-        <div className="mt-2 flex items-baseline justify-between gap-3">
-          <p className={BIG_NUMBER_CLASS}>{formatDuration(day.studyMinutes)}</p>
-          {percent !== null && (
-            <p className="text-brand shrink-0 text-sm font-medium">계획의 {percent}%</p>
-          )}
-        </div>
-        {percent !== null && <ProgressBar value={percent} className="mt-2" />}
-        {day.bySubject.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1.5 text-sm">
-            {day.bySubject.map((item) => (
-              <li key={item.subject} className="flex justify-between gap-3">
-                <span className="min-w-0 truncate text-slate-700">{item.subject}</span>
-                <span className="shrink-0 text-slate-600 tabular-nums">
-                  {formatDuration(item.minutes)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <hr className="my-5 border-slate-100" />
-
-        <p className="text-sm text-slate-500">확인 문제 정답률</p>
-        {/* 사진 채점 결과는 서버에서 받아옵니다. 받는 동안 이 칸만 자리 표시를 보여 줍니다. */}
-        <AsyncBoundary
-          pendingFallback={<Skeleton className="mt-2 h-16 w-full" />}
-          errorMessage="사진 채점 결과를 불러오지 못했어요."
-        >
-          <DailyAccuracy
-            dateKey={day.dateKey}
-            input={input}
-            quizResults={quizResults}
-            subjectNames={subjectNames}
-          />
-        </AsyncBoundary>
-      </ReportCard>
 
       <ReportCard title="계획 완료">
         <p className={BIG_SENTENCE_CLASS}>
@@ -833,57 +757,6 @@ function PickDayStatus({ day, isToday }: { day: DayReport; isToday: boolean }) {
     return <span className="shrink-0 text-sm font-semibold text-slate-500">못 채움</span>
   }
   return <span className="shrink-0 text-sm font-semibold text-slate-400">쉰 날</span>
-}
-
-interface DailyAccuracyProps {
-  dateKey: string
-  input: HistoryInput
-  quizResults: QuizResult[]
-  subjectNames: string[]
-}
-
-/** 그날의 확인 문제(채팅, 이 기기 + 서버에만 있는 것) + 사진 채점 정답률 */
-function DailyAccuracy({ dateKey, input, quizResults, subjectNames }: DailyAccuracyProps) {
-  // 사진 채점과 서버의 확인 문제 결과를 같이 받습니다. 확인 문제는 주간 리포트와 같은 14일치라 한 번 받으면 같이 씁니다.
-  // 서버의 확인 문제 결과는 못 받아도 에러 대신 null 이라서, 이 기기의 결과만으로 셉니다. (lib/quizResultsApi.ts)
-  const [{ data: checks }, { data: serverCounts }] = useSuspenseQueries({
-    queries: [answerChecksQuery(dateKey), serverQuizCountsQuery(getWeekStart(dateKey))],
-  })
-  const accuracy = summarizeAccuracy([
-    ...quizMarks(quizResults, [dateKey], input, subjectNames),
-    ...serverQuizMarks(serverCounts ?? [], [dateKey]),
-    ...photoMarks(checks, [dateKey]),
-  ])
-
-  if (accuracy.percent === null) {
-    return (
-      <p className="mt-2 text-sm break-keep text-slate-500">
-        이날 푼 확인 문제가 없어요. 채팅에서 확인 문제를 풀거나 통계 탭에서 사진 채점을 하면 여기에
-        모여요.
-      </p>
-    )
-  }
-
-  return (
-    <>
-      <div className="mt-2 flex items-baseline justify-between gap-3">
-        <p className={BIG_NUMBER_CLASS}>{accuracy.percent}%</p>
-        <p className="shrink-0 text-sm text-slate-600">
-          {accuracy.total}문제 중 {accuracy.correct}문제
-        </p>
-      </div>
-      <ul className="mt-3 flex flex-col gap-1.5 text-sm">
-        {accuracy.bySubject.map((item) => (
-          <li key={item.subject} className="flex justify-between gap-3">
-            <span className="min-w-0 truncate text-slate-700">{item.subject}</span>
-            <span className="shrink-0 text-slate-600 tabular-nums">
-              {item.total}문제 중 {item.correct}개
-            </span>
-          </li>
-        ))}
-      </ul>
-    </>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -971,72 +844,6 @@ function WeeklyReport({
         text={weekHeadline({ week, lastWeek, accuracyDiff, completeDaysTotal })}
       />
 
-      <ReportCard title="이번 주 잘한 것">
-        <p className="mt-4 text-sm text-slate-500">공부 시간</p>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div>
-            <p className={BIG_NUMBER_CLASS}>{formatDuration(week.totalMinutes)}</p>
-            <p className="text-[13px] leading-5 text-slate-500">
-              하루 평균 {formatDuration(week.averageMinutes)}
-            </p>
-          </div>
-          {lastWeek.totalMinutes > 0 && (
-            <DiffBadge
-              diff={week.totalMinutes - lastWeek.totalMinutes}
-              text={formatDuration(Math.abs(week.totalMinutes - lastWeek.totalMinutes))}
-            />
-          )}
-        </div>
-        <WeekBars week={week} todayKey={todayKey} />
-        {week.bestDay && (
-          <p className="mt-2.5 text-sm break-keep text-slate-700">
-            가장 오래 한 날은{' '}
-            <strong className="font-bold text-slate-900">
-              {weekdayNameOf(week.bestDay.dateKey)}요일 {formatDuration(week.bestDay.studyMinutes)}
-            </strong>
-            이에요.
-          </p>
-        )}
-
-        <hr className="my-5 border-slate-100" />
-
-        <p className="text-sm text-slate-500">확인 문제 정답률</p>
-        {accuracy.percent === null ? (
-          <p className="mt-2 text-sm break-keep text-slate-500">
-            이번 주에 푼 확인 문제가 없어요. 채팅에서 확인 문제를 풀거나 통계 탭에서 사진 채점을
-            하면 여기에 모여요.
-          </p>
-        ) : (
-          <>
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <div>
-                <p className={BIG_NUMBER_CLASS}>{accuracy.percent}%</p>
-                <p className="text-[13px] leading-5 text-slate-500">
-                  {accuracy.total}문제 중 {accuracy.correct}문제 맞힘
-                </p>
-              </div>
-              {accuracyDiff !== null && (
-                <DiffBadge diff={accuracyDiff} text={`${Math.abs(accuracyDiff)}%p`} />
-              )}
-            </div>
-            <ul className="mt-3.5 flex flex-col gap-2.5">
-              {accuracy.bySubject.map((item) => (
-                <li key={item.subject}>
-                  <div className="flex justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-slate-700">{item.subject}</span>
-                    <span className="shrink-0 text-slate-600 tabular-nums">
-                      {item.total}문제 중 {item.correct}개 ·{' '}
-                      <strong className="font-bold text-slate-900">{item.percent}%</strong>
-                    </span>
-                  </div>
-                  <ProgressBar value={item.percent} className="mt-1.5" />
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </ReportCard>
-
       <ReportCard title="계획을 끝까지 해낸 날">
         <p className={BIG_SENTENCE_CLASS}>
           {week.isCurrent ? '이번 주 지금까지 ' : '이번 주 '}
@@ -1053,7 +860,6 @@ function WeeklyReport({
         <PickResultCard
           pick={pick}
           week={week}
-          lastWeek={lastWeek}
           canRepeat={canPickNext}
           nextWeekStart={nextWeekStart}
           picks={picks}
@@ -1086,79 +892,6 @@ function WeeklyReport({
         </ReportCard>
       )}
     </>
-  )
-}
-
-/** ▲ 지난주보다 1시간 38분 / ▼ 지난주보다 7%p */
-function DiffBadge({ diff, text }: { diff: number; text: string }) {
-  if (diff === 0) return <p className="shrink-0 text-sm text-slate-500">지난주와 같아요</p>
-  const isUp = diff > 0
-  return (
-    <p
-      className={cn(
-        'shrink-0 text-right text-sm leading-5 font-semibold',
-        isUp ? 'text-brand' : 'text-slate-500',
-      )}
-    >
-      {isUp ? '▲' : '▼'} 지난주보다
-      <br />
-      {text}
-    </p>
-  )
-}
-
-/** 가장 긴 막대의 높이(px). 그 위에 '최고'(16px) + 간격(4px)이 올라가서 그래프 칸은 110px 입니다. */
-const BAR_MAX_HEIGHT = 90
-
-/** 요일별 공부 시간 막대 (가장 오래 한 날은 진한 보라 + '최고'). 요일 글자는 막대 아래 따로 한 줄. */
-function WeekBars({ week, todayKey }: { week: WeekReport; todayKey: string }) {
-  const max = Math.max(...week.days.map((day) => day.studyMinutes), 1)
-
-  return (
-    <div className="mt-4">
-      <ul className="grid h-[110px] grid-cols-7 items-end gap-1.5" aria-label="요일별 공부 시간">
-        {week.days.map((day) => {
-          const isBest = week.bestDay?.dateKey === day.dateKey
-          // 막대 높이는 그 주에서 가장 긴 날을 90px 로 봅니다. (너무 낮아 안 보이지 않게 최소 6px)
-          const height = Math.max(6, Math.round((day.studyMinutes / max) * BAR_MAX_HEIGHT))
-          return (
-            <li key={day.dateKey} className="flex flex-col items-center gap-1">
-              {isBest && <span className="text-brand text-[11px] leading-4 font-bold">최고</span>}
-              <span className="sr-only">
-                {weekdayNameOf(day.dateKey)} {formatDuration(day.studyMinutes)}
-              </span>
-              {day.studyMinutes === 0 ? (
-                // 0분인 날은 바닥에 얇은 회색 선만 둡니다.
-                <span aria-hidden className="h-1 w-full rounded-full bg-slate-200" />
-              ) : (
-                <span
-                  aria-hidden
-                  className={cn(
-                    'w-full rounded-t-lg rounded-b',
-                    isBest ? 'bg-brand' : 'bg-indigo-200',
-                  )}
-                  // 높이가 공부 시간에 따라 계속 바뀌어서 Tailwind 클래스로 만들 수 없어 인라인 style 을 씁니다.
-                  style={{ height: `${height}px` }}
-                />
-              )}
-            </li>
-          )
-        })}
-      </ul>
-      <div aria-hidden className="mt-2 grid grid-cols-7 gap-1.5 text-center text-xs text-slate-500">
-        {week.days.map((day) => (
-          <span
-            key={day.dateKey}
-            className={cn(
-              week.bestDay?.dateKey === day.dateKey && 'text-brand font-bold',
-              day.dateKey > todayKey && 'text-slate-300',
-            )}
-          >
-            {weekdayNameOf(day.dateKey)}
-          </span>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -1211,7 +944,6 @@ function WeekDayChips({ week, onlyStudied = false }: { week: WeekReport; onlyStu
 interface PickResultCardProps {
   pick: WeeklyPick
   week: WeekReport
-  lastWeek: WeekReport
   /** [1주 더 해 보기] 를 보여 줄지 (다음 주가 이미 지난 주면 안 보임) */
   canRepeat: boolean
   nextWeekStart: string
@@ -1219,45 +951,22 @@ interface PickResultCardProps {
   onSavePick: (input: WeeklyPickInput) => void
 }
 
-/** 이번 주에 고른 것의 결과 + [1주 더 해 보기] [사용설명서에 넣기] */
+/** 이번 주에 고른 것의 결과 + [1주 더 해 보기] ([사용설명서에 넣기] 는 2026-10-26 에 뺐습니다) */
 function PickResultCard({
   pick,
   week,
-  lastWeek,
   canRepeat,
   nextWeekStart,
   picks,
   onSavePick,
 }: PickResultCardProps) {
-  const { items, addItem } = useManualItems()
   const result = getPickResult(pick, week)
   if (result === null) return null
 
-  const manualId = `manual-pick-${week.weekStart}`
-  const isInManual = items.some((item) => item.id === manualId)
   const isRepeated = findWeeklyPick(picks, nextWeekStart)?.title === pick.title
-  const minutesGain = week.totalMinutes - lastWeek.totalMinutes
 
   function handleRepeat() {
     onSavePick({ weekStart: nextWeekStart, title: pick.title, hint: pick.hint, skip: false })
-  }
-
-  function handleAddToManual() {
-    if (result === null) return
-    // 확인한 날은 그 주의 일요일. 이번 주라 아직 일요일이 안 왔으면 오늘입니다.
-    const weekEnd = moveDateKey(week.weekStart, 6)
-    const todayKey = getTodayKey()
-    addItem({
-      id: manualId,
-      category: 'effectiveMethod',
-      title: pick.title,
-      confirmedDate: weekEnd < todayKey ? weekEnd : todayKey,
-      evidence:
-        minutesGain > 0
-          ? `공부한 ${result.studyDays}일 중 ${result.completeDays}일 해냈고, 그 주 공부 시간이 ${formatDuration(minutesGain)} 늘었어요.`
-          : `공부한 ${result.studyDays}일 중 ${result.completeDays}일 해냈어요.`,
-      note: '주간 리포트에서 넣음',
-    })
   }
 
   return (
@@ -1272,33 +981,15 @@ function PickResultCard({
           </>
         )}
       </p>
-      {/* 버튼 두 개는 시안대로 44px · 14px 굵게 (Button 기본보다 조금 작게) */}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {canRepeat && (
-          <Button
-            onClick={handleRepeat}
-            disabled={isRepeated}
-            className="h-11 px-2 text-sm font-bold"
-          >
-            {isRepeated ? '1주 더 해요' : '1주 더 해 보기'}
-          </Button>
-        )}
+      {/* 버튼은 시안대로 44px · 14px 굵게 (Button 기본보다 조금 작게) */}
+      {canRepeat && (
         <Button
-          variant="secondary"
-          onClick={handleAddToManual}
-          disabled={isInManual}
-          className={cn('h-11 px-2 text-sm font-bold', !canRepeat && 'col-span-2')}
+          onClick={handleRepeat}
+          disabled={isRepeated}
+          className="mt-3 h-11 w-full px-2 text-sm font-bold"
         >
-          {isInManual ? '사용설명서에 넣었어요' : '사용설명서에 넣기'}
+          {isRepeated ? '1주 더 해요' : '1주 더 해 보기'}
         </Button>
-      </div>
-      {isInManual && (
-        <Link
-          to={MANUAL_PATH}
-          className="text-brand mt-3 inline-flex h-10 items-center text-sm font-semibold hover:underline"
-        >
-          사용설명서 보기 ›
-        </Link>
       )}
     </ReportCard>
   )
