@@ -6,6 +6,9 @@
  *          moreQuestionsNeeded, planNeeded, lastWeekScore, scoreChange }
  *
  * 점수 = (정답률 + 공부 달성률) ÷ 2 이고, 계산은 서버가 합니다.
+ *   정답률: 확인 문제(quiz_results) + 사진 채점(애매 뺌). 기록 탭의 정답률과 같은 원천 · 같은 규칙입니다.
+ *   공부 달성률: 그 주 카드 길이 합 대비 실제 공부 시간 (쉬는 날 뺌). 기록 탭의 "계획 대비 %" 와 같은 규칙입니다.
+ *   (2026-10-26 BE 에서 옛 study_plans · 확인 문제만 쓰던 것을 바꿨습니다. STARFLOW E4)
  * 이 파일은 받은 값의 모양만 확인하고 다시 계산하지 않습니다. (두 곳에서 계산하면 숫자가 어긋나기 쉬움)
  */
 import { queryOptions } from '@tanstack/react-query'
@@ -149,9 +152,12 @@ export function weeklyScoreGuides(
   score: Pick<WeeklyScore, 'moreQuestionsNeeded' | 'planNeeded'>,
 ): string[] {
   const lines: string[] = []
+  // 정답률은 확인 문제와 사진 채점을 합쳐 세고, 달성률의 계획은 카드입니다. (BE STARFLOW E4, 기록 탭과 같은 원천)
   if (score.moreQuestionsNeeded > 0) {
-    lines.push(`퀴즈 ${score.moreQuestionsNeeded}문제 더 풀면 이번 주 점수가 나와요`)
+    lines.push(
+      `확인 문제나 사진 채점으로 ${score.moreQuestionsNeeded}문제 더 풀면 이번 주 점수가 나와요`,
+    )
   }
-  if (score.planNeeded) lines.push('이번 주 계획을 세우면 점수가 나와요')
+  if (score.planNeeded) lines.push('이번 주 카드를 만들면 점수가 나와요')
   return lines
 }

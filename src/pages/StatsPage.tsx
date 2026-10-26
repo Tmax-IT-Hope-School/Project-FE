@@ -855,7 +855,8 @@ function WeeklyScoreCard({ weekStart }: WeeklyScoreCardProps) {
         </div>
       </dl>
       <p className="mt-3 text-xs break-keep text-slate-500">
-        점수는 정답률과 공부 달성률의 평균이에요. 나만 볼 수 있어요.
+        점수는 정답률(확인 문제 + 사진 채점)과 공부 달성률(카드 계획 대비)의 평균이에요. 나만 볼 수
+        있어요.
       </p>
     </Card>
   )
