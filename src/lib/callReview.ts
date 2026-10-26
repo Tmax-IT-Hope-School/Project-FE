@@ -89,11 +89,12 @@ export function readCallResultState(state: unknown): CallResultState | null {
   return { callId: record.callId, lines }
 }
 
-function isStringOrNull(value: unknown): value is string | null {
+export function isStringOrNull(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
 }
 
-function isThinkingHabit(value: unknown): value is ThinkingHabit {
+/** 서버가 준 생각 습관이 약속한 모양인지 확인합니다. (지난 통화 목록 lib/callHistoryApi.ts 도 씁니다) */
+export function isThinkingHabit(value: unknown): value is ThinkingHabit {
   if (typeof value !== 'object' || value === null) return false
   const habit = value as Record<string, unknown>
   return (

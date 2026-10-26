@@ -13,6 +13,7 @@ import {
   makeSplitCard,
   type CallCardAction,
 } from '@/lib/callCardActions'
+import { pastCallsQuery } from '@/lib/callHistoryApi'
 import { recordFinishedCall } from '@/lib/callLog'
 import {
   finishCall,
@@ -33,7 +34,7 @@ import { YOUTH_HELP_LINE } from '@/lib/helpLines'
 import { loadAutoSettings } from '@/lib/settingsMapping'
 import { getTodayCareLevel } from '@/lib/todayCare'
 import type { Card as CardModel, ChecklistItem } from '@/types'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -61,6 +62,7 @@ export function CallResultPage() {
   // 카드 목록은 이 화면에서 한 번만 들고 아래 칸들에 넘깁니다. (칸마다 따로 들면 서로의 저장을 덮어씁니다)
   const { addCard, updateCard } = useCards()
 
+  const queryClient = useQueryClient()
   // useMutation: 서버에 "통화를 마무리해 줘" 라고 보내는 요청입니다. 보내는 중·실패를 대신 관리해 줍니다. (docs/DATA-FETCHING.md 5장)
   const mutation = useMutation({
     mutationFn: async (state: CallResultState) => {
@@ -71,6 +73,8 @@ export function CallResultPage() {
       return { conclusion }
     },
     onSuccess: () => {
+      // 지난 통화 목록(/call/history)에 방금 통화가 보이도록, 보관해 둔 목록을 "낡았다" 고 표시합니다.
+      void queryClient.invalidateQueries({ queryKey: pastCallsQuery().queryKey })
       // 정리가 끝났으면 방문 기록에 남아 있는 자막을 지웁니다. (화면에 보이는 결론은 그대로입니다)
       navigate(location.pathname, { replace: true, state: null })
     },
@@ -139,6 +143,14 @@ export function CallResultPage() {
           onClick={() => navigate('/records')}
         >
           내 기록 보기
+        </Button>
+        <Button
+          size="lg"
+          variant="ghost"
+          className="w-full sm:w-auto"
+          onClick={() => navigate('/call/history')}
+        >
+          지난 통화 보기
         </Button>
         <Button
           size="lg"

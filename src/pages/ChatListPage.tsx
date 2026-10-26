@@ -87,6 +87,16 @@ export function ChatListPage() {
         </Link>
       )}
 
+      {/* 지난 통화 정리를 다시 보는 곳 (STARFLOW D19). 통화 카드 바로 아래에 작게 둡니다. h-10: 누르기 쉬운 높이 */}
+      {CALL_ENTRY && (
+        <Link
+          to="/call/history"
+          className="-mt-2 inline-flex h-10 items-center self-end px-1 text-sm font-medium text-slate-600 hover:underline"
+        >
+          지난 통화 보기 <span aria-hidden>›</span>
+        </Link>
+      )}
+
       <ul className="flex flex-col divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white">
         {CHAT_ROOMS.map((room, index) => {
           const last = threads[index]

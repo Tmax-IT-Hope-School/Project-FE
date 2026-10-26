@@ -44,6 +44,9 @@ const ChatListPage = lazy(() =>
 const ChatRoomPage = lazy(() =>
   import('@/pages/ChatRoomPage').then((m) => ({ default: m.ChatRoomPage })),
 )
+const CallHistoryPage = lazy(() =>
+  import('@/pages/CallHistoryPage').then((m) => ({ default: m.CallHistoryPage })),
+)
 const CallResultPage = lazy(() =>
   import('@/pages/CallResultPage').then((m) => ({ default: m.CallResultPage })),
 )
@@ -174,6 +177,8 @@ export const router = createBrowserRouter([
       // 휴대폰 집중 모드 안내(/phone-focus)는 #417 에서 지웠습니다. (OS 앱 잠금은 다음 버전)
       { path: 'phone-focus', element: <Navigate to="/settings" replace /> },
       { path: 'call/result', element: <CallResultPage /> },
+      // 지난 통화 목록 (STARFLOW D19). 채팅 탭 · 통화 정리 화면에서 들어옵니다.
+      { path: 'call/history', element: <CallHistoryPage /> },
       // 만약-그러면 처방 카드(/suggestions)는 #417 에서 지웠습니다. 옛 링크는 기록 탭으로 보냅니다. (가설·실험 탭도 2026-10-18 에 지움)
       { path: 'suggestions', element: <Navigate to={RECORDS_PATH} replace /> },
       { path: 'settings', element: <SettingsPage /> },
