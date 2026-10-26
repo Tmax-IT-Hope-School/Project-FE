@@ -56,9 +56,16 @@ import { loadSessionSyncState } from '@/lib/sessionSync'
 import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
 import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
-import { CHAT_PATH, MANUAL_PATH, QUIZ_REPORT_PATH } from '@/lib/tabMenu'
+import {
+  CHAT_PATH,
+  MANUAL_PATH,
+  QUIZ_REPORT_PATH,
+  WRONG_NOTE_PATH,
+  WRONG_TEST_PATH,
+} from '@/lib/tabMenu'
 import { findWeeklyPick, type WeeklyPick, type WeeklyPickInput } from '@/lib/weeklyPicks'
 import { getPicksRange, weeklyPicksQuery } from '@/lib/weeklyPicksApi'
+import { buildWrongItems, testableWrongItems } from '@/lib/wrongNote'
 import type { Card as CardData, Goal, StudyPlan, StudySession, Subject } from '@/types'
 import { usePrefetchQuery, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
@@ -276,6 +283,23 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
             pick={findWeeklyPick(picks, weekStart)}
           />
         )}
+
+        {/* 이번 주 오답 테스트 입구 (2026-10-26). 첫 리포트 전(카운트다운)에도 보이게 위 갈래 밖에 둡니다. */}
+        {isWeekly && (
+          <AsyncBoundary
+            pendingFallback={<Skeleton className="h-36 w-full rounded-2xl" />}
+            errorMessage="틀린 문제를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+            resetKeys={[weekStart]}
+          >
+            <WrongTestCard
+              weekStart={weekStart}
+              todayKey={todayKey}
+              quizResults={quizResults}
+              cards={cards}
+              subjects={subjects}
+            />
+          </AsyncBoundary>
+        )}
       </div>
 
       {/* 시안에는 없지만 기록 탭에서 들어가는 입구 두 개. 위 묶음들과 같은 테두리로 둡니다. */}
@@ -293,6 +317,25 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
             <span className="block text-[15px] font-semibold text-slate-900">문제 풀이 리포트</span>
             <span className="mt-0.5 block text-sm text-slate-500">
               과목별 점수 변화 · 취약 단원 · 주간 정리표
+            </span>
+          </span>
+          <span aria-hidden className="shrink-0 text-slate-400">
+            ›
+          </span>
+        </Link>
+
+        {/* 오답노트로 가는 입구 (2026-10-26, pages/WrongNotePage.tsx). 최근 4주 동안 틀린 문제를 모아 봅니다. */}
+        <Link
+          to={WRONG_NOTE_PATH}
+          className={cn(
+            CARD_CLASS,
+            'flex min-h-14 items-center justify-between gap-3 py-4 hover:bg-slate-50',
+          )}
+        >
+          <span className="min-w-0">
+            <span className="block text-[15px] font-semibold text-slate-900">오답노트</span>
+            <span className="mt-0.5 block text-sm text-slate-500">
+              최근 4주 동안 틀린 문제 · 정답과 해설
             </span>
           </span>
           <span aria-hidden className="shrink-0 text-slate-400">
@@ -1086,6 +1129,81 @@ function WeeklyReport({
         </ReportCard>
       )}
     </>
+  )
+}
+
+interface WrongTestCardProps {
+  /** 보고 있는 주의 월요일 */
+  weekStart: string
+  todayKey: string
+  quizResults: QuizResult[]
+  cards: CardData[]
+  subjects: Subject[]
+}
+
+/**
+ * 「이번 주 오답 테스트」 묶음. 그 주에 틀린 문제(문제 글이 있는 것)로 시험지를 만들어 [테스트 풀기] 로 보냅니다. (2026-10-26)
+ * 틀린 문제를 고르는 규칙은 lib/wrongNote.ts, 테스트 화면은 pages/WrongTestPage.tsx 입니다.
+ * 사진 채점은 주간 리포트와 같은 범위(지난주 ~ 이번 주)로 받아서, 이미 받아 둔 결과를 다시 씁니다.
+ */
+function WrongTestCard({ weekStart, todayKey, quizResults, cards, subjects }: WrongTestCardProps) {
+  const isServerData = useIsServerData()
+  const weekEnd = moveDateKey(weekStart, 6)
+  const { data: checks } = useSuspenseQuery(
+    answerChecksBetweenQuery(moveDateKey(weekStart, -7), weekEnd),
+  )
+  const count = testableWrongItems(
+    buildWrongItems({
+      checks,
+      quizResults,
+      cards,
+      subjects,
+      from: weekStart,
+      to: weekEnd,
+      todayKey,
+      includeDemo: !isServerData,
+    }),
+  ).length
+
+  return (
+    <ReportCard title="이번 주 오답 테스트">
+      {count > 0 ? (
+        <>
+          <p className="mt-2 text-[15px] leading-[22px] break-keep text-slate-700">
+            이번 주 틀린 문제 <span className="text-brand font-bold">{count}개</span>로 시험지를
+            만들었어요. 다시 풀어 보면 내 것이 돼요.
+          </p>
+          {/* 주간 리포트의 채운 버튼은 [이걸로 정하기] 하나라서, 여기는 회색 버튼으로 둡니다. (Button 의 secondary 모양) */}
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Link
+              to={`${WRONG_TEST_PATH}?week=${weekStart}`}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100 px-2 text-sm font-bold text-slate-900 hover:bg-slate-200"
+            >
+              테스트 풀기
+            </Link>
+            <Link
+              to={WRONG_NOTE_PATH}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+            >
+              오답노트 보기
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm break-keep text-slate-500">
+            이번 주에는 다시 풀 틀린 문제가 아직 없어요. 확인 문제나 사진 채점에서 틀린 문제가
+            생기면 여기서 시험지로 만들어 드려요.
+          </p>
+          <Link
+            to={WRONG_NOTE_PATH}
+            className="mt-3 inline-flex h-10 items-center text-sm font-semibold text-slate-700 hover:underline"
+          >
+            오답노트 보기 ›
+          </Link>
+        </>
+      )}
+    </ReportCard>
   )
 }
 

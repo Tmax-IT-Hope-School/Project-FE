@@ -68,7 +68,7 @@ export function BottomTabNav() {
     <nav
       aria-label="하단 메뉴"
       // pb: 아이폰 아래 홈 막대만큼 띄웁니다. (안전 영역이 없는 화면에서는 0)
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden"
     >
       {/* 탭 5개를 같은 너비로 나눕니다. (375px 에서 한 칸 75px) */}
       <ul className="grid grid-cols-5">

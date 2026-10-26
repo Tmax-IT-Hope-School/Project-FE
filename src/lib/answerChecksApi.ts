@@ -42,6 +42,13 @@ export interface AnswerCheckItem {
   id: string
   /** 문제 번호 (예: '1', '3-2') */
   number: string
+  /**
+   * AI 가 사진에서 읽은 문제 글 (200자까지). 사진은 저장하지 않고 이 글만 남깁니다. (BE #401, 2026-10-26)
+   * 못 읽었거나 그 전에 올린 기록이면 null
+   */
+  questionText: string | null
+  /** 문제의 단원 = 교육과정 영역 (예: '다항식', '문학'). 못 정했으면 null */
+  unit: string | null
   /** 내가 적은 답. 못 읽었으면 null */
   myAnswer: string | null
   /** AI 가 푼 답 (UNMARKED 만). 없으면 null */
@@ -120,6 +127,8 @@ function toItem(value: unknown): AnswerCheckItem | null {
   return {
     id,
     number,
+    questionText: asText(record.questionText),
+    unit: asText(record.unit),
     myAnswer: asText(record.myAnswer),
     aiAnswer: asText(record.aiAnswer),
     markRead: record.markRead === 'O' || record.markRead === 'X' ? record.markRead : null,
@@ -200,10 +209,34 @@ function makeDemoCheck(mode: AnswerCheckMode, date: string): AnswerCheck {
   const items: AnswerCheckItem[] =
     mode === 'MARKED'
       ? [
-          { number: '1', markRead: 'O' as const, result: 'CORRECT' as const },
-          { number: '2', markRead: 'O' as const, result: 'CORRECT' as const },
-          { number: '3', markRead: 'X' as const, result: 'WRONG' as const },
-          { number: '4', markRead: null, result: 'UNSURE' as const },
+          {
+            number: '1',
+            questionText: '2x - 4 = 0 일 때 x 의 값은?',
+            unit: '방정식과 부등식',
+            markRead: 'O' as const,
+            result: 'CORRECT' as const,
+          },
+          {
+            number: '2',
+            questionText: 'x^2 - 9 를 인수분해하시오.',
+            unit: '다항식',
+            markRead: 'O' as const,
+            result: 'CORRECT' as const,
+          },
+          {
+            number: '3',
+            questionText: '(x + 2)(x - 3) 을 전개하시오.',
+            unit: '다항식',
+            markRead: 'X' as const,
+            result: 'WRONG' as const,
+          },
+          {
+            number: '4',
+            questionText: null,
+            unit: null,
+            markRead: null,
+            result: 'UNSURE' as const,
+          },
         ].map((item, index) => ({
           ...item,
           id: `${id}-${index}`,
@@ -213,10 +246,38 @@ function makeDemoCheck(mode: AnswerCheckMode, date: string): AnswerCheck {
           editedByUser: false,
         }))
       : [
-          { number: '1', myAnswer: 'x = 5', aiAnswer: 'x = 5', result: 'CORRECT' as const },
-          { number: '2', myAnswer: 'x = 6', aiAnswer: 'x = 7', result: 'WRONG' as const },
-          { number: '3', myAnswer: '12', aiAnswer: '12', result: 'CORRECT' as const },
-          { number: '4', myAnswer: '-3', aiAnswer: null, result: 'UNSURE' as const },
+          {
+            number: '1',
+            questionText: 'x + 3 = 8 일 때 x 의 값은?',
+            unit: '방정식과 부등식',
+            myAnswer: 'x = 5',
+            aiAnswer: 'x = 5',
+            result: 'CORRECT' as const,
+          },
+          {
+            number: '2',
+            questionText: '3x - 5 = 16 일 때 x 의 값은?',
+            unit: '방정식과 부등식',
+            myAnswer: 'x = 6',
+            aiAnswer: 'x = 7',
+            result: 'WRONG' as const,
+          },
+          {
+            number: '3',
+            questionText: '(x + 1)^2 에서 x = 2 일 때의 값에 3 을 더한 값은?',
+            unit: '다항식',
+            myAnswer: '12',
+            aiAnswer: '12',
+            result: 'CORRECT' as const,
+          },
+          {
+            number: '4',
+            questionText: null,
+            unit: null,
+            myAnswer: '-3',
+            aiAnswer: null,
+            result: 'UNSURE' as const,
+          },
         ].map((item, index) => ({
           ...item,
           id: `${id}-${index}`,

@@ -37,8 +37,14 @@ export const QUIZ_REPORT_PATH = '/records/quiz'
 /** 나 사용설명서 (2026-10-24, pages/ManualPage.tsx). 화면 안에 "‹ 기록" 링크가 따로 있습니다. */
 export const MANUAL_PATH = `${RECORDS_PATH}/manual`
 
+/** 오답노트 — 최근 4주 동안 틀린 문제 (2026-10-26, pages/WrongNotePage.tsx) */
+export const WRONG_NOTE_PATH = `${RECORDS_PATH}/wrong-note`
+
+/** 주간 오답 테스트 — 그 주에 틀린 문제로 만든 시험지 (?week=월요일, pages/WrongTestPage.tsx) */
+export const WRONG_TEST_PATH = `${RECORDS_PATH}/wrong-test`
+
 /** 기록 탭 아래에 묶인 화면. 위에 "‹ 기록" 돌아가기 링크가 나옵니다. (시험은 2026-10-18 에 지웠습니다) */
-const recordsChildPaths: string[] = [QUIZ_REPORT_PATH]
+const recordsChildPaths: string[] = [QUIZ_REPORT_PATH, WRONG_NOTE_PATH, WRONG_TEST_PATH]
 
 /** 카드 탭 아래에 묶인 화면. 목표는 카드 목록에서, 타이머는 카드의 [시작] 에서 들어갑니다. */
 const cardsChildPaths = ['/goals', '/timer']

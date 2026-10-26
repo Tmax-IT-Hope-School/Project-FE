@@ -354,6 +354,17 @@ function ResultCard({ check, todayKey }: ResultCardProps) {
                   {item.number}번
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  {/* AI 가 사진에서 읽은 문제 글과 단원 (BE #401). 예전 기록이나 못 읽은 문제는 없습니다. */}
+                  {(item.questionText !== null || item.unit !== null) && (
+                    <p className="text-sm break-words text-slate-900">
+                      {item.unit !== null && (
+                        <span className="mr-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-sky-700">
+                          {item.unit}
+                        </span>
+                      )}
+                      {item.questionText}
+                    </p>
+                  )}
                   {/* 조각마다 한 덩어리(flex 칸)라서 조각 사이에서만 줄이 바뀝니다. 아주 긴 답은 break-words 로 칸 안에서 접힙니다. */}
                   <p className="flex flex-wrap gap-x-1.5 text-sm text-slate-700">
                     {describeItem(item, isUnmarked).map((part, index) => (
