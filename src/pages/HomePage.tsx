@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ChipButton } from '@/components/ui/ChipButton'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
-import { MissionBar } from '@/components/ui/MissionBar'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useCalendarAlarmSync } from '@/hooks/useCalendarAlarmSync'
 import { useCalendarConnect, type CalendarConnection } from '@/hooks/useCalendarConnect'
@@ -15,10 +14,8 @@ import { useQueryParam } from '@/hooks/useQueryParam'
 import { isInApp } from '@/lib/appBridge'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { getCardsOnDate } from '@/lib/cards'
-import { localCheckCall, type StudiedInfo } from '@/lib/checkCall'
 import { cn } from '@/lib/cn'
 import { runDailyCareStage } from '@/lib/dailyCareRun'
-import { loadDailyMissions } from '@/lib/dailyMission'
 import { loadAllSessions } from '@/lib/dailyRecords'
 import { getTodayKey, isDateKey, moveDateKey, toDayDate } from '@/lib/date'
 import { formatDday, getDaysUntil } from '@/lib/exams'
@@ -92,7 +89,7 @@ const textLinkClass =
  * 홈 탭(첫 화면 "/")입니다. (2026-10-18 '오늘' 탭(/today)에서 이름 · 주소를 바꿔 첫 탭으로 올림)
  * 사용자: "일단 홈 정도도 필요하지 않나", "달력 위치도 좀 바꾸거나", "홈 화면 수정도 좀 하자"
  *
- *   ① 인사 + 오늘의 미션 한 줄 (누르면 코치 화면으로)
+ *   ① 인사
  *   ② 지금 할 카드 + 달력: 이번 주 7일 줄과 고른 날의 카드 · 구글 캘린더 일정 (2026-10-24, 주소 ?day=)
  *      오늘을 고르면 예전 "오늘 계획" 목록 그대로 [시작] 이 붙습니다. 카드가 없으면 [코치와 오늘 계획 짜기] · [사진으로 만들기]
  *   ③ 학교 정보 한 묶음: 위 탭 [시간표 | 급식 | 일정 | 공지] 중 하나만 펼침 (2026-10-22, 주소 ?school=)
@@ -100,6 +97,8 @@ const textLinkClass =
  *   맨 아래: AI 가 바꾼 설정 알림
  *
  * 숲(2026-10-24 에 뺌) · 오늘 한 줄 · 관리 모드 띠(2026-10-25 에 뺌)는 빠졌습니다. 알림 · 통화는 코치 화면 머리에, 설정은 헤더(PC 메뉴 · 모바일 오른쪽 위 톱니)에 있습니다.
+ * 오늘의 미션 · AI 통화 입구 · [타이머 · 카드 없이 시작] · [카드 · 목표 모두 보기] 도 2026-10-26 에 뺐습니다. (시연 피드백)
+ * 미션은 코치 채팅에, 통화는 코치 화면 머리에, 카드 · 목표는 아래 탭 [카드] 에 그대로 있습니다.
  */
 export function HomePage() {
   const { search } = useLocation()
@@ -118,8 +117,6 @@ function HomeView() {
   // 홈에 보여 주던 관리 모드 띠는 2026-10-25 에 뺐지만, 판정은 남깁니다. 통화 · 채팅의 말투와
   // 안전 브레이크(위기 표현 · 기분 저하 때 0단계)가 이 값을 씁니다. 오늘 이미 판정했으면 그대로 둡니다.
   useState(() => runDailyCareStage(todayKey, now))
-  // 오늘의 미션 (컨디션 · 오늘 계획 · 첫 공부). 이미 있는 기록으로 끝났는지 봅니다. (lib/dailyMission.ts)
-  const [missions] = useState(() => loadDailyMissions(todayKey))
 
   const { cards } = useCards()
   const { activeGoals } = useGoals()
@@ -135,9 +132,6 @@ function HomeView() {
     todayKey,
     now,
   })
-
-  // 오늘 끝낸 공부가 있으면 통화 입구를 확인 통화로 보여 줍니다. (이 기기 기록으로 봄 — 통화 화면이 서버에 다시 확인, lib/checkCall.ts)
-  const checkCall = localCheckCall(allSessions, cards, todayKey)
 
   // AI 가 바꾼 설정 기록 (#385). [되돌리기] · [확인] 을 누르면 줄어듭니다. (lib/settingChanges.ts)
   const [settingChanges, setSettingChanges] = useState(loadSettingChanges)
@@ -168,33 +162,16 @@ function HomeView() {
         </h1>
       </div>
 
-      {/* 모바일은 위아래로 쌓고, PC(sm 이상)는 왼쪽에 계획(넓게) · 오른쪽에 미션 · 통화(좁게)를 나란히 놓습니다. */}
-      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-[3fr_2fr] sm:gap-6">
-        <div className="flex min-w-0 flex-col gap-4">
-          {/* ② 지금 할 카드 → 오늘 계획. 홈에서 가장 먼저 · 가장 크게 보이는 것은 "지금 할 카드" 하나입니다. */}
-          <TodayPlanSection
-            state={todayCards}
-            cards={cards}
-            todayKey={todayKey}
-            onStart={(card) => navigate(`/timer?card=${encodeURIComponent(card.id)}`)}
-            // ?plan=today: 코치 화면이 열리자마자 오늘 계획을 짜 줍니다. (계획 핑퐁)
-            onPlanWithCoach={() => navigate(`${PLAN_CHAT_PATH}?plan=today`)}
-            onPhoto={() => navigate('/cards/photo')}
-          />
-        </div>
-
-        {/* 오늘의 미션 + AI 통화 입구: 둘 다 "코치와 하는 일" 이라 한 흰 묶음 안에 선으로 나눠 둡니다. (근접성) */}
-        <div className="flex min-w-0 flex-col divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white">
-          {/* 미션은 코치가 채팅에서 같이 해 줘서, 누르면 코치 화면으로 갑니다. 묶음 안이라 MissionBar 의 흰 바탕 · 모서리를 뺍니다. */}
-          <MissionBar
-            missions={missions}
-            onOpen={() => navigate(COACH_PATH)}
-            className="rounded-none bg-transparent"
-          />
-          {/* AI 통화 입구. 언제든 직접 걸 수 있고, 오늘 공부를 끝냈으면 말로 설명하는 확인 통화로 보여 줍니다. (2026-10-22) */}
-          <CallEntry studied={checkCall.studied} />
-        </div>
-      </div>
+      {/* ② 지금 할 카드 → 오늘 계획. 홈에서 가장 먼저 · 가장 크게 보이는 것은 "지금 할 카드" 하나입니다. */}
+      <TodayPlanSection
+        state={todayCards}
+        cards={cards}
+        todayKey={todayKey}
+        onStart={(card) => navigate(`/timer?card=${encodeURIComponent(card.id)}`)}
+        // ?plan=today: 코치 화면이 열리자마자 오늘 계획을 짜 줍니다. (계획 핑퐁)
+        onPlanWithCoach={() => navigate(`${PLAN_CHAT_PATH}?plan=today`)}
+        onPhoto={() => navigate('/cards/photo')}
+      />
 
       {/* ③ 학교 정보 한 묶음: [시간표 | 급식 | 일정 | 공지] 중 하나만 펼칩니다. (BE GET /school/today · /school/notices) */}
       <SchoolInfoSection todayKey={todayKey} />
@@ -215,47 +192,6 @@ function HomeView() {
 const sectionCardClass = 'rounded-2xl bg-white p-5'
 // 학교 정보(시간표 · 급식 · 일정 · 공지)는 "보고 지나가는" 정보라 여백을 한 단계 줄여 조용하게 둡니다.
 const quietCardClass = 'rounded-2xl bg-white p-4'
-
-interface CallEntryProps {
-  /** 오늘 가장 최근에 끝낸 공부. 없으면 null (그러면 보통 통화 입구) */
-  studied: StudiedInfo | null
-}
-
-/**
- * AI 통화 입구 한 줄. 누르면 통화 화면(/call)이 오늘 끝낸 공부를 서버에 확인하고 전화를 받게 합니다.
- * 공부를 안 했어도 직접 걸 수 있습니다. (2026-10-22 사용자 "수동 통화도 가능하게")
- */
-function CallEntry({ studied }: CallEntryProps) {
-  return (
-    // 미션과 같은 흰 묶음 안의 한 줄이라, 따로 바탕 · 모서리를 두지 않습니다.
-    <Link to="/call" className="flex min-h-14 items-center gap-3 px-4 py-3 active:bg-slate-50">
-      <span aria-hidden className={rowIconClass}>
-        📞
-      </span>
-      {studied ? (
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-bold text-slate-900">
-            코치한테 3분 설명해 볼래?
-          </span>
-          <span className="block text-sm break-keep text-slate-500">
-            방금 한 {studied.title ? `'${studied.title}'` : '공부'}({studied.minutes}분)을 말로
-            설명하면 코치가 확인해 줘
-          </span>
-        </span>
-      ) : (
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-bold text-slate-900">AI 선생님한테 전화하기</span>
-          <span className="block text-sm break-keep text-slate-500">
-            3분 동안 오늘 공부 이야기를 나눠 봐
-          </span>
-        </span>
-      )}
-      <span aria-hidden className="shrink-0 text-slate-400">
-        ›
-      </span>
-    </Link>
-  )
-}
 
 // 동그란 배경의 이모지 자리 (목록 줄 왼쪽)
 const rowIconClass =
@@ -445,17 +381,6 @@ function HomeCalendarSection({
       )}
 
       <GoogleConnectRow connection={connection} />
-
-      {/* 카드 탭이 아래 탭에서 빠져서(2026-10-18), 카드 · 목표 관리는 여기서 들어갑니다. */}
-      {/* 타이머 탭도 빠져서(2026-10-24), 카드 없이 시작 · 미루기 · 폰 내고 시작은 여기서 타이머로 들어갑니다. (#717) */}
-      <div className="mt-1 flex flex-wrap justify-end gap-x-4">
-        <Link to="/timer" className={textLinkClass}>
-          타이머 · 카드 없이 시작 ›
-        </Link>
-        <Link to="/cards" className={textLinkClass}>
-          카드 · 목표 모두 보기 ›
-        </Link>
-      </div>
     </section>
   )
 }
@@ -845,14 +770,6 @@ function NowCardBlock({ state, heroCard, onStart, onPlanWithCoach, onPhoto }: No
         >
           📸 사진으로 만들기
         </button>
-        <div className="mt-1 flex justify-center">
-          <Link
-            to="/cards"
-            className="inline-flex h-10 items-center text-sm font-medium text-indigo-100 underline underline-offset-4"
-          >
-            카드 · 목표 모두 보기 ›
-          </Link>
-        </div>
       </section>
     )
   }

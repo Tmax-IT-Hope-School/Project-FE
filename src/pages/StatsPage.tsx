@@ -7,7 +7,6 @@ import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { SubjectBadge } from '@/components/ui/SubjectBadge'
 import { TalkButton } from '@/components/ui/TalkButton'
 import { useCards } from '@/hooks/useCards'
 import {
@@ -27,27 +26,22 @@ import { CARD_RESULT_LABELS } from '@/lib/cardResult'
 import { cn } from '@/lib/cn'
 import {
   type DailyRecord,
-  formatClock,
   formatMinutes,
   groupSessionsByDate,
   isStudySession,
-  sessionMinutes,
   toDateKey,
 } from '@/lib/dailyRecords'
 import { getTodayKey, isDateKey, isMonthKey, toDayDate, toDayKey } from '@/lib/date'
-import { loadFocusScores, summarizeFocusWeek } from '@/lib/focusScore'
-import { useSubjects } from '@/hooks/useSubjects'
-import { mockSubjects } from '@/lib/mock'
 import { EMOTION_OPTIONS, isEmotionTag } from '@/lib/quickCheckIn'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { loadRoutines } from '@/lib/routines'
-import { buildCardIdByPlanId, fillSessionSubjects } from '@/lib/sessionRecords'
+import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
 import { dayReviewLines } from '@/lib/talkLines'
 import { formatHoursMinutes, getWeeklyStudy } from '@/lib/weeklyStudy'
 import { getMondayKey } from '@/lib/weeklyFacts'
 import { describeScoreChange, weeklyScoreGuides, weeklyScoreQuery } from '@/lib/weeklyScoreApi'
-import type { CheckIn, EmotionTag, StudyPlan, StudySession, Subject } from '@/types'
+import type { CheckIn, EmotionTag, StudyPlan, StudySession } from '@/types'
 
 const weekdayNames = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -77,49 +71,14 @@ function loadSessions(): StudySession[] {
   return sessions.filter((session) => session.kind !== 'play')
 }
 
-interface SubjectTagProps {
-  subject: Subject | undefined
-  /** 기록에 적힌 과목 id. 빈 글자('')면 처음부터 과목 없이 한 공부입니다 (과목을 안 고른 카드 · 카드 없이 시작) */
-  subjectId: string
-}
-
-/**
- * 기록의 과목을 찾습니다. 내 과목에 없으면 예시 과목(국어 · 수학 …, lib/mock.ts)에서 한 번 더 찾습니다.
- * 시연용 가상 기록(lib/demoPersona.ts)은 예시 과목 id('math' 등)로 저장되는데,
- * 진짜 로그인(시연 코드 로그인 포함)의 과목 id 는 서버 번호라서 그대로는 못 찾기 때문입니다.
- */
-function findSubject(subjects: Subject[], subjectId: string): Subject | undefined {
-  return (
-    subjects.find((item) => item.id === subjectId) ??
-    mockSubjects.find((item) => item.id === subjectId)
-  )
-}
-
-/**
- * 과목 태그.
- *   - 과목 없이 한 공부(subjectId '')면 "과목 없음"
- *   - 과목 id 는 있는데 찾을 수 없으면(과목을 지움) "삭제된 과목"
- * 둘을 한데 "삭제된 과목" 으로 보여 줘서, 과목을 지운 적이 없는데도 떴습니다. (#746)
- */
-function SubjectTag({ subject, subjectId }: SubjectTagProps) {
-  if (!subject) {
-    return (
-      <span className="inline-block max-w-full truncate rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-        {subjectId === '' ? '과목 없음' : '삭제된 과목'}
-      </span>
-    )
-  }
-  return <SubjectBadge name={subject.name} color={subject.color} />
-}
-
 /**
  * 통계 탭 화면(/stats)입니다. (2026-10-24)
  * 2026-10-24 까지 기록 탭(/records)이던 화면을 그대로 옮겼습니다. 기록 탭은 일간 · 주간 리포트(History)가 됩니다.
+ * 날짜별 기록 목록 · 최근 7일 집중도 카드는 2026-10-26 에 뺐습니다. (시연 피드백. 날짜마다 보기는 달력이 합니다)
  */
 export function StatsPage() {
-  // 공부 기록은 타이머가 저장해 둔 것을 읽기만 합니다. 과목은 계획 화면에서 저장한 목록을 씁니다.
+  // 공부 기록은 타이머가 저장해 둔 것을 읽기만 합니다.
   const [sessions] = useState<StudySession[]>(loadSessions)
-  const subjects = useSubjects()
 
   // 달력의 그날 감정 표시에 체크인을 씁니다.
   const [checkIns] = useState(loadCheckInsByDate)
@@ -127,9 +86,8 @@ export function StatsPage() {
   // 달력과 4주 실행률은 카드 결과(실행 · 지연 · 미실행 · 휴식)로 정합니다. (#410, lib/calendarDay.ts)
   const { cards } = useCards()
 
-  // 최근 날짜가 맨 앞에 오도록 날짜별로 묶습니다.
-  // 과목 없이 저장된 기록은 그 카드의 과목 → 카드 제목에 든 과목 이름으로 채워서 보여 줍니다. (#746)
-  const days = groupSessionsByDate(fillSessionSubjects(sessions, cards, subjects))
+  // 날짜별로 묶습니다. 달력에서 누른 날의 순공 시간을 보여 줄 때 씁니다.
+  const days = groupSessionsByDate(sessions)
   // 지금 시각은 화면을 처음 그릴 때 한 번만 읽습니다. (다시 그릴 때마다 바뀌면 결과가 흔들립니다)
   const [now] = useState(Date.now)
   // 옛 계획으로 잰 기록도 그 카드의 기록으로 보려고 "옛 계획 id → 카드 id" 표를 만듭니다. (lib/sessionRecords.ts)
@@ -160,13 +118,6 @@ export function StatsPage() {
   // 최근 4주(오늘 포함 28일)의 실행률. 연속 기록(스트릭) 카드 대신 보여줍니다.
   const recentRunRate = summarizeRunRate(getRecentDateKeys(toDayKey(now)).map(getCalendarDay))
 
-  // 지금 펼쳐 둔 날짜. null 이면 전부 접혀 있습니다. 같은 날짜를 다시 누르면 접힙니다.
-  const [openDate, setOpenDate] = useState<string | null>(null)
-
-  function handleToggle(date: string) {
-    setOpenDate((current) => (current === date ? null : date))
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-[28px] leading-tight font-bold tracking-tight">통계</h1>
@@ -182,12 +133,11 @@ export function StatsPage() {
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → AI 분석 (가장 자주 보는 것을 위로)
           내 숲 · 지난 통화 요약은 2026-10-24 에 뺐습니다. (lib/forest*.ts · lib/callSummary.ts 는 다른 곳이 써서 남김) */}
-      {/* 최근 4주 실행률 · 최근 7일 막대그래프 · 7일 집중도. 모바일은 한 줄에 하나, PC 는 두 칸으로 카드를 놓습니다. */}
+      {/* 최근 4주 실행률 · 최근 7일 막대그래프. 모바일은 한 줄에 하나, PC 는 두 칸으로 카드를 놓습니다. */}
       {/* items-start: 높이가 다른 카드를 억지로 같은 높이로 늘리지 않습니다. (시안처럼) */}
       <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
         <RunRateCard summary={recentRunRate} />
         <WeeklyBarCard sessions={sessions} />
-        <FocusWeekCard now={now} />
       </div>
 
       {/* AI 분석: 최근 28일 기록을 숫자로 묶고(코드), 서버의 AI 가 말로 풀어 줍니다. (#419) */}
@@ -200,108 +150,9 @@ export function StatsPage() {
         <AnalysisInsight sessions={sessions} className="mt-3" />
       </section>
 
-      {/* 시안처럼 PC(lg)에서는 두 칸으로 나눕니다. 다른 기록 카드가 생기면 이 안에 이어서 넣으면 됩니다. */}
+      {/* PC(lg)에서는 달력을 반 폭으로 둡니다. 칸이 정사각형이라 전체 폭이면 달력이 너무 커집니다. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         <StudyCalendar getDay={getCalendarDay} records={days} checkIns={checkIns} />
-
-        <Card title="날짜별 기록">
-          {days.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
-              아직 공부 기록이 없어요. 타이머로 공부하면 여기에 쌓여요.
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {days.map((day) => {
-                const isOpen = openDate === day.date
-                const panelId = `records-${day.date}`
-
-                return (
-                  <li key={day.date}>
-                    {/* 날짜 줄 전체가 버튼입니다. min-h-12(48px)라서 손가락으로 누르기 편합니다. */}
-                    <button
-                      type="button"
-                      aria-expanded={isOpen}
-                      aria-controls={panelId}
-                      onClick={() => handleToggle(day.date)}
-                      className="flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 py-3 text-left"
-                    >
-                      {/* min-w-0: 과목이 많아도 줄이 가로로 튀어나가지 않게 합니다. */}
-                      <span className="flex min-w-0 flex-col gap-1.5">
-                        <span className="text-[15px] font-semibold text-slate-900">
-                          {formatDateLabel(day.date)}
-                        </span>
-                        {/* 접혀 있을 때도 과목별 시간이 보입니다. */}
-                        <span className="flex flex-wrap gap-x-3 gap-y-1">
-                          {day.subjects.map((record) => (
-                            // max-w-full: 과목 이름이 아주 길어도 화면 폭을 넘지 않게 해서, 태그의 '...' 줄임이 작동하게 합니다.
-                            <span
-                              key={record.subjectId}
-                              className="inline-flex max-w-full items-center gap-1"
-                            >
-                              <SubjectTag
-                                subject={findSubject(subjects, record.subjectId)}
-                                subjectId={record.subjectId}
-                              />
-                              <span className="shrink-0 text-xs text-slate-500 tabular-nums">
-                                {formatMinutes(record.minutes)}
-                              </span>
-                            </span>
-                          ))}
-                        </span>
-                      </span>
-
-                      <span className="flex shrink-0 items-center gap-2">
-                        <span className="text-[17px] font-bold text-slate-900 tabular-nums">
-                          {formatMinutes(day.totalMinutes)}
-                        </span>
-                        <span aria-hidden className="text-xs text-slate-400">
-                          {isOpen ? '▲' : '▼'}
-                        </span>
-                      </span>
-                    </button>
-
-                    {/* 펼치면 그날의 과목별 기록(몇 시부터 몇 시까지, 몇 분)이 나옵니다. */}
-                    {isOpen && (
-                      <div
-                        id={panelId}
-                        className="mb-3 flex flex-col gap-3 rounded-xl bg-slate-50 p-3"
-                      >
-                        {day.subjects.map((record) => (
-                          <div key={record.subjectId}>
-                            <div className="flex items-center justify-between gap-3">
-                              <SubjectTag
-                                subject={findSubject(subjects, record.subjectId)}
-                                subjectId={record.subjectId}
-                              />
-                              <span className="shrink-0 text-sm font-semibold text-slate-900 tabular-nums">
-                                {formatMinutes(record.minutes)}
-                              </span>
-                            </div>
-                            <ul className="mt-2 flex flex-col gap-1">
-                              {record.sessions.map((session) => (
-                                <li
-                                  // id 에 시작 시각을 붙입니다. 저장된 기록의 id 가 겹쳐도 화면이 경고 없이 둘 다 보여줍니다.
-                                  key={`${session.id}-${session.startedAt}`}
-                                  className="flex items-center justify-between gap-3 text-sm text-slate-600 tabular-nums"
-                                >
-                                  <span>
-                                    {formatClock(session.startedAt)} ~{' '}
-                                    {formatClock(session.endedAt)}
-                                  </span>
-                                  <span>{formatMinutes(sessionMinutes(session))}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Card>
       </div>
     </div>
   )
@@ -744,50 +595,6 @@ function CalendarDayDetail({ day, studyMinutes, emotions }: CalendarDayDetailPro
         />
       )}
     </div>
-  )
-}
-
-interface FocusWeekCardProps {
-  now: number
-}
-
-/**
- * 최근 7일 집중도 카드 — 평균 한 줄과 시간대(오전 · 오후 · 저녁 · 밤)별 집중도. (lib/focusScore.ts)
- * 집중도 = 공부한 시간 중 폰을 들거나 다른 탭에 가 있지 않은 비율. 묻지 않고 타이머가 잰 숫자만 씁니다.
- */
-function FocusWeekCard({ now }: FocusWeekCardProps) {
-  const [records] = useState(loadFocusScores)
-  const summary = summarizeFocusWeek(records, now)
-
-  return (
-    <Card>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="text-[17px] font-bold tracking-tight text-slate-900">최근 7일 집중도</h3>
-        {summary.average !== null && (
-          <p className="text-3xl font-bold tracking-tight text-slate-900 tabular-nums">
-            {summary.average}
-            <span className="ml-0.5 text-lg font-semibold text-slate-500">%</span>
-          </p>
-        )}
-      </div>
-      {summary.average === null ? (
-        <p className="mt-2 text-sm break-keep text-slate-500">
-          타이머로 1분 넘게 공부하면, 폰을 들거나 다른 탭에 간 시간을 빼고 집중도를 보여 줘요.
-        </p>
-      ) : (
-        // 시간대별 집중도. 한 묶음 안을 세로 선으로 나눕니다. (근접성) grid-cols-4: 375px 에서도 한 줄
-        <ul className="mt-3 grid grid-cols-4 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3">
-          {summary.bands.map((band) => (
-            <li key={band.key} className="flex min-w-0 flex-col items-center gap-1 px-1">
-              <span className="text-lg font-bold text-slate-900 tabular-nums">
-                {band.average === null ? '–' : `${band.average}%`}
-              </span>
-              <span className="text-xs font-medium text-slate-500">{band.label}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
   )
 }
 
