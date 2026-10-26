@@ -38,7 +38,7 @@ import {
 import { cn } from '@/lib/cn'
 import { formatMinutes } from '@/lib/dailyRecords'
 import { getTodayKey, moveDateKey, toDayKey } from '@/lib/date'
-import { getChatRoom, startTalk, TALK_ROOM_OF } from '@/lib/chatRooms'
+import { COACH_PATH, getChatRoom, startTalk, TALK_ROOM_OF } from '@/lib/chatRooms'
 import { countsForCheckCall } from '@/lib/checkCall'
 import { cardFailLines, sessionReviewLines } from '@/lib/talkLines'
 import {
@@ -802,6 +802,15 @@ export function CardTimerPage() {
             closeEndPopup()
             navigate('/call')
           }}
+          onQuiz={
+            endedCard && !isUntitledInstantCard(endedCard)
+              ? () => {
+                  // 팝업을 닫고 코치 방으로 갑니다. 코치 방이 ?quiz= 를 보고 이 카드로 문제를 냅니다. (pages/ChatRoomPage.tsx)
+                  closeEndPopup()
+                  navigate(`${COACH_PATH}?quiz=${encodeURIComponent(endedCard.id)}`)
+                }
+              : null
+          }
           proofRequired={isStage4}
           onProofSaved={() => {
             // 4단계에서 증빙이 있는 실행을 했으면 4단계를 풉니다. (「5.4」 해제 조건)
@@ -1436,6 +1445,11 @@ interface EndPopupProps {
   onClose: () => void
   /** [📞 확인 통화 받기] — 팝업을 닫고 통화 화면으로 갑니다. 10분 넘게 공부했을 때만 보입니다. (통화 수정 7) */
   onCall: () => void
+  /**
+   * [📝 확인 문제 풀어 볼래?] — 팝업을 닫고 코치 방에서 이 카드로 확인 문제를 바로 냅니다. (#650)
+   * 제목이 없는 즉석 카드처럼 문제를 낼 주제가 없으면 null 이고, 버튼을 보이지 않습니다.
+   */
+  onQuiz: (() => void) | null
   /** 관리 4단계라 증빙이 꼭 필요한지 — 없으면 실행으로 인정하지 않습니다 (#408) */
   proofRequired: boolean
   /** 증빙을 남겼을 때 */
@@ -1462,6 +1476,7 @@ function EndPopup({
   onRenameCard,
   onClose,
   onCall,
+  onQuiz,
   proofRequired,
   onProofSaved,
   phone,
@@ -1887,6 +1902,12 @@ function EndPopup({
             >
               💬 {talkRoom.name} 방에서 후기 나누기
             </Button>
+            {/* 방금 공부한 카드로 확인 문제를 권합니다. 맞힌 · 틀린 문제는 변형 문제로 다시 나옵니다. (#650) */}
+            {onQuiz && (
+              <Button variant="outline" onClick={onQuiz} className="sm:col-span-2">
+                📝 확인 문제 풀어 볼래?
+              </Button>
+            )}
             <Button variant="ghost" onClick={onClose} className="sm:col-span-2">
               닫기
             </Button>

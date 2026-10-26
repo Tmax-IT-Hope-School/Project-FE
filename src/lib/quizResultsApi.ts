@@ -3,9 +3,18 @@
  *
  * 서버와 정한 약속입니다. (BE 저장소의 docs/API.md "퀴즈 결과 · 통계") 둘 다 로그인이 필요합니다.
  *   퀴즈 한 번 저장  POST /quiz-results
- *                    { subjectId: 3, unit: '함수', correctCount: 2, totalCount: 3, questionSeconds: [45, 30, 62] }
+ *                    { subjectId: 3, unit: '함수', correctCount: 2, totalCount: 3, questionSeconds: [45, 30, 62],
+ *                      topic: '수열의 극한', guessed: false,
+ *                      questions: [{ question, passage: null, choices: [보기 4개], answerIndex: 0, chosenIndex: 2 }, …] }
  *                    -> 201 { id, subjectId, unit, quizDate: '2026-10-25', correctCount, totalCount, questionSeconds }
  *                    날짜는 보내지 않습니다. 서버가 "받은 시각" 으로 정합니다. (새벽 4시 기준, 이 기기와 같은 규칙)
+ *                    topic · guessed · questions 는 "있어도 되고 없어도 되는" 칸입니다. (#650, BE docs/VARIANT-SPEC.md 5-1)
+ *                      topic     : 무엇에 대한 문제였는지 (카드 제목 등). 서버가 100자로 자릅니다.
+ *                      guessed   : 찍은 것 같다고 본 결과면 true. 서버는 이때 맞힌 문제를 '아는 문제' 로 치지 않고 버립니다.
+ *                      questions : 문제마다 학생이 고른 번호 (20개까지, toQuizQuestionsBody). 고르지 않은 문제는 뺍니다.
+ *                    서버는 통계 칸을 지금처럼 저장한 뒤, 따로(기다리지 않고) questions 를 변형 문제의 원본으로 씁니다.
+ *                    틀린 문제는 매일 변형 문제로, 맞힌 문제는 주마다 심화 문제로 다시 나옵니다.
+ *                    questions 가 이상해도 통계 칸은 거절하지 않습니다.
  *   기간 통계        GET /quiz-results/stats?from=2026-10-12&to=2026-10-25  (한 번에 31일까지)
  *                    -> 200 { subjects: [{ subjectId: 3, name: '수학',
  *                               units: [{ unit: '함수', days: [{ date, correctCount, totalCount }, …] }] }, …] }
@@ -18,6 +27,12 @@
  *   - 서버에 올라간 것은 "보낸 목록"('study-quiz-result-sync')에 적어 두고 다시 보내지 않습니다.
  *     서버에는 같은 결과를 알아보는 칸이 없어서, 두 번 보내면 두 번 저장되기 때문입니다.
  *   - 서버가 거절한 것(400 · 404)은 다시 보내도 같아서 "거절 목록" 에 적고 그만 보냅니다. 이 기기의 결과는 그대로입니다.
+ *
+ * ■ 변형 문제의 원본도 이 요청 하나에 같이 보냅니다. (변형 문제용 주소를 따로 부르지 않습니다)
+ *   - 주소가 둘이면 한쪽만 올라가거나, 한쪽만 두 번 올라가는 일이 생깁니다. 한 곳으로 보내면
+ *     위의 "보낸 목록 · 거절 목록 · 다시 보내기" 를 그대로 같이 씁니다.
+ *   - 그래서 아래 "보내지 않는 것" 은 변형 문제의 원본도 되지 않습니다.
+ *     (시연용 · 단원을 모르는 결과 · "틀린 문제 다시" 로 다시 푼 결과 등)
  *
  * ■ 보내지 않는 것 (지금처럼 이 기기에만 남습니다)
  *   - 테스트 로그인: 이 파일을 부르지 않습니다. (hooks/useQuizResultSync.ts)
@@ -151,6 +166,46 @@ function questionSecondsOf(result: QuizResult): number[] {
   )
 }
 
+/** 서버로 보내는 문제 하나 (변형 문제의 원본) */
+export interface QuizQuestionBody {
+  question: string
+  /** 그 문제가 기대는 지문. 없으면 null */
+  passage: string | null
+  /** 보기 4개 */
+  choices: string[]
+  /** 정답 보기의 번호 (0 ~ 3) */
+  answerIndex: number
+  /** 학생이 고른 보기의 번호 (0 ~ 3) */
+  chosenIndex: number
+}
+
+/**
+ * 문제마다 학생이 고른 번호를 붙여 서버로 보낼 모양으로 바꿉니다. (POST /quiz-results 의 questions 칸)
+ * 고르지 않은 문제(choiceIndex 가 -1 이거나 보기 밖)는 뺍니다. 맞았는지는 서버가 두 번호로 다시 셉니다.
+ *
+ *   toQuizQuestionsBody({ questions: [문제1, 문제2], answers: [{ choiceIndex: 0, … }, { choiceIndex: 2, … }], … })
+ *     -> [{ question: '문제1', passage: null, choices: [보기 4개], answerIndex: 0, chosenIndex: 0 },
+ *         { question: '문제2', passage: null, choices: [보기 4개], answerIndex: 1, chosenIndex: 2 }]
+ *   toQuizQuestionsBody({ questions: [문제1, 문제2], answers: [{ choiceIndex: -1, … }, { choiceIndex: 2, … }], … })
+ *     -> [{ question: '문제2', …, chosenIndex: 2 }]   (고르지 않은 문제1 은 뺌)
+ */
+export function toQuizQuestionsBody(result: QuizResult): QuizQuestionBody[] {
+  const questions: QuizQuestionBody[] = []
+  result.questions.forEach((question, index) => {
+    const chosenIndex = result.answers[index]?.choiceIndex ?? -1
+    if (chosenIndex < 0 || chosenIndex >= question.choices.length) return
+    questions.push({
+      question: question.question,
+      passage: question.passage ?? null,
+      choices: question.choices,
+      answerIndex: question.answerIndex,
+      chosenIndex,
+    })
+  })
+  // 서버는 20개까지 받습니다. (보내는 결과는 이미 문제가 20개 이하라서 보통은 그대로입니다)
+  return questions.slice(0, MAX_QUESTIONS)
+}
+
 /**
  * 서버로 보내도 되는 결과인지 확인합니다. 서버가 거절할 것(400)과 날짜가 틀어질 것은 미리 거릅니다.
  * (과목은 내 과목 목록이 있어야 찾을 수 있어서 따로 봅니다. findServerSubjectId)
@@ -209,6 +264,7 @@ export function findQuizResultsToSend(
 
 /**
  * 결과 하나를 서버에 저장하고, 서버가 저장한 칸(과목 · 단원 · 날짜 · 맞은 수)을 돌려줍니다.
+ * 변형 문제의 원본(주제 · 찍음 · 문제와 고른 번호)도 같은 요청에 실어 보냅니다.
  * 실패하면 에러를 던집니다. 보낸 결과는 이 기기의 저장소에 그대로 있습니다.
  */
 export async function saveQuizResultToServer(
@@ -225,6 +281,10 @@ export async function saveQuizResultToServer(
       correctCount: result.correct,
       totalCount: total,
       questionSeconds: questionSecondsOf(result),
+      // 아래 셋은 변형 문제의 원본입니다. (맨 위 설명) 서버가 이 칸 때문에 통계 칸을 거절하지는 않습니다.
+      topic: result.topic,
+      guessed: result.guessed,
+      questions: toQuizQuestionsBody(result),
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })

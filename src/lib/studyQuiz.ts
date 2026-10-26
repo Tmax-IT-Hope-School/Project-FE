@@ -23,6 +23,11 @@ export interface QuizQuestion {
   answerIndex: number
   /** 왜 그게 답인지 한두 문장 */
   explanation: string
+  /**
+   * 이 문제가 기대는 지문 (국어 · 영어 독해 등). 없거나 서버가 아직 안 주면 null 또는 비어 있음.
+   * 변형 문제가 "같은 지문에 다른 문제" 를 낼 때 씁니다. (BE docs/VARIANT-SPEC.md 5-1)
+   */
+  passage?: string | null
 }
 
 /** 학생이 문제 하나에 고른 답 */
@@ -124,6 +129,8 @@ export const QUIZ_COUNT = 3
 /** 주제 한 줄 · 붙여 넣는 글의 최대 글자 수 (서버와 같음) */
 export const MAX_QUIZ_TOPIC_LENGTH = 100
 export const MAX_QUIZ_MATERIAL_LENGTH = 2000
+/** 문제 하나에 붙는 지문의 최대 글자 수 (자료 글 한도와 같게) */
+export const MAX_QUIZ_PASSAGE_LENGTH = 2000
 /** 사진만 넣고 주제를 안 적었을 때 쓰는 주제 */
 export const PHOTO_QUIZ_TOPIC = '사진 속 공부 내용'
 
@@ -317,11 +324,14 @@ export function toQuizQuestion(value: unknown): QuizQuestion | null {
   const answerIndex = item.answerIndex
   if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex)) return null
   if (answerIndex < 0 || answerIndex > 3) return null
+  // 지문은 있어도 되고 없어도 됩니다. (서버가 지문을 주기 전에 남긴 결과도 그대로 읽히게)
+  const passage = isText(item.passage) ? item.passage.trim() : ''
   return {
     question: item.question.trim(),
     choices: (item.choices as string[]).map((choice) => choice.trim()),
     answerIndex,
     explanation: isText(item.explanation) ? item.explanation.trim() : '',
+    passage: passage === '' ? null : passage.slice(0, MAX_QUIZ_PASSAGE_LENGTH),
   }
 }
 
