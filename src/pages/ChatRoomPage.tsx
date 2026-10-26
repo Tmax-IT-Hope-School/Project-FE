@@ -6,6 +6,8 @@ import { ReasonChips } from '@/components/ui/ReasonChips'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/hooks/useAuth'
 import { useCards } from '@/hooks/useCards'
+import { useGoalLimit } from '@/hooks/useGoalLimit'
+import { useGoals } from '@/hooks/useGoals'
 import { useSendCheckIn } from '@/hooks/useCheckInSync'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useStudySessions } from '@/hooks/useStudySessions'
@@ -16,6 +18,7 @@ import { addCardMark, CARD_FAIL_CAUSES, loadCardMarks } from '@/lib/cardMarks'
 import { createInstantCardNow } from '@/lib/cardSession'
 import { countsForCheckCall } from '@/lib/checkCall'
 import {
+  MAX_CHAT_LINES,
   MAX_CHAT_TEXT_LENGTH,
   openChatSession,
   sendChatMessage,
@@ -140,6 +143,14 @@ import { gradeNumberOf } from '@/lib/schoolEvents'
 import { loadSchoolClass, schoolTodayOrNullQuery, todaySubjectsOf } from '@/lib/schoolToday'
 import { SHORTFALL_REASONS } from '@/lib/sessionTags'
 import { loadData, saveData } from '@/lib/storage'
+import {
+  finishGoalChat,
+  openGoalChat,
+  sendGoalChatMessage,
+  toGoalFormDraft,
+} from '@/lib/goalChatApi'
+import { GOAL_DRAFT_KEY } from '@/lib/goalForm'
+import { MAX_ACTIVE_GOALS } from '@/lib/goals'
 import {
   FOCUS_NAME_MAX,
   cleanFocusName,
@@ -463,6 +474,24 @@ interface QuizForm {
 
 /** 위기 표현이 감지돼서 문제 대신 하는 말 (아래에 상담 전화 한 줄이 같이 보임) */
 const QUIZ_HELP_REPLY = '문제는 잠깐 미뤄 두자. 마음이 힘들면 아래 번호로 언제든 이야기해도 돼.'
+
+// ---- 🎯 목표 세우기 대화 (STARFLOW D8, lib/goalChatApi.ts) ----
+// 계획 방의 [🎯 목표 세우기] 를 누르면 목표 전용 서버 대화(/goal-chats)로 WOOP 를 묻고, [끝내기] 로 받은 초안을
+// 목표 만들기 화면(/goals/new)에 채워 둡니다. 학생이 그 화면에서 확인하고 [목표 저장] 을 누르면 서버(POST /goals)로 갑니다.
+// 칩은 글자로 알아봅니다. (계획 방 첫 인사 lib/chatRooms.ts 의 칩 글자와 같아야 합니다)
+const GOAL_CHAT_LABEL = '🎯 목표 세우기'
+const GOAL_FINISH_LABEL = '✅ 끝내기 · 저장 화면에 채우기'
+const GOAL_STOP_LABEL = '목표는 나중에 할래'
+const GOAL_OPEN_FORM_LABEL = '📝 목표 저장 화면 열기'
+const GOAL_START_CHIP: CoachChip = { kind: 'say', label: GOAL_CHAT_LABEL }
+/** 목표 대화 중 AI 의 말마다 붙는 칩 */
+const GOAL_CHAT_CHIPS: CoachChip[] = [
+  { kind: 'say', label: GOAL_FINISH_LABEL },
+  { kind: 'say', label: GOAL_STOP_LABEL },
+]
+const GOAL_CHAT_GONE_REPLY =
+  '목표 대화가 끊겼어. 오래됐거나 서버가 다시 켜졌나 봐. [🎯 목표 세우기] 를 누르면 처음부터 다시 할 수 있어.'
+const GOAL_HELP_REPLY = '목표는 잠깐 미뤄 두자. 마음이 힘들면 아래 번호로 언제든 이야기해도 돼.'
 
 /** 대화방에서 bubbleId 말풍선의 문제를 change 로 바꾼 새 대화방 */
 function withQuiz(
@@ -1092,13 +1121,89 @@ function RoomChat({ room }: RoomChatProps) {
       setThread((current) => applyQuizReply(current, result, input))
     },
   })
+  // 🎯 목표 세우기 대화 중이면 서버 대화 번호와 지금까지 주고받은 말. 아니면 null (이 화면의 기억에만 둡니다)
+  // 대화 중에 쓴 말은 보통 채팅이 아니라 목표 대화로 갑니다. (sendText)
+  const [goalChat, setGoalChat] = useState<{ chatId: string; lines: CallLine[] } | null>(null)
+  // 진행 중 목표가 3개면 목표 대화를 열지 않습니다. (목표 만들기 화면과 같은 기준, hooks/useGoalLimit.ts)
+  const { goals } = useGoals()
+  const goalLimit = useGoalLimit(goals)
+
+  /** 목표 대화가 끊겼을 때(404: 2시간 지남 · 서버 재시작): 대화를 끝내고 다시 시작하라고 알려 줍니다. */
+  function endGoneGoalChat() {
+    setGoalChat(null)
+    setThread((current) =>
+      withBubble(current, { speaker: 'ai', text: GOAL_CHAT_GONE_REPLY, chips: [GOAL_START_CHIP] }),
+    )
+  }
+
+  const goalTalk = useMutation({
+    mutationFn: (input: { step: 'open' } | { step: 'send'; chatId: string; lines: CallLine[] }) =>
+      input.step === 'open'
+        ? openGoalChat()
+        : sendGoalChatMessage(input.chatId, input.lines.slice(-MAX_CHAT_LINES)),
+    onSuccess: (reply, input) => {
+      if (reply.showHelp) {
+        // 위기 표현이면 서버가 대화를 닫았습니다. 목표 이야기를 멈추고 상담 전화 안내를 보여 줍니다.
+        setGoalChat(null)
+      } else {
+        setGoalChat((current) => {
+          // 답을 기다리는 동안 [나중에 할래] 를 눌렀으면 다시 열지 않습니다.
+          if (input.step === 'send' && current === null) return null
+          const before = input.step === 'open' ? [] : (current?.lines ?? input.lines)
+          return { chatId: reply.chatId, lines: [...before, { speaker: 'ai', text: reply.reply }] }
+        })
+      }
+      setThread((current) => ({
+        ...withBubble(current, {
+          speaker: 'ai',
+          text: reply.reply,
+          ...(reply.showHelp ? {} : { chips: GOAL_CHAT_CHIPS, typing: true }),
+        }),
+        isHelpShown: current.isHelpShown || reply.showHelp,
+      }))
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 404) endGoneGoalChat()
+    },
+  })
+
+  const goalFinish = useMutation({
+    mutationFn: ({ chatId, lines }: { chatId: string; lines: CallLine[] }) =>
+      finishGoalChat(chatId, lines.slice(-MAX_CHAT_LINES)),
+    onSuccess: (result) => {
+      setGoalChat(null)
+      if (result.showHelp) {
+        setThread((current) =>
+          withBubble({ ...current, isHelpShown: true }, { speaker: 'ai', text: GOAL_HELP_REPLY }),
+        )
+        return
+      }
+      // 초안을 목표 만들기 화면의 임시 저장 칸에 넣어 둡니다. 화면을 열면 이 값으로 채워져 있습니다. (pages/GoalNewPage.tsx)
+      saveData(GOAL_DRAFT_KEY, toGoalFormDraft(result.goalDraft))
+      setThread((current) =>
+        withBubble(current, {
+          speaker: 'ai',
+          text: result.goalDraft
+            ? '정리한 목표를 저장 화면에 채워 뒀어. 빈 칸만 채우고 [목표 저장] 을 누르면 목표가 저장돼.'
+            : '이번 대화로는 목표를 다 정리하지 못했어. 저장 화면에서 직접 적어 줄래?',
+          chips: [{ kind: 'say', label: GOAL_OPEN_FORM_LABEL }],
+        }),
+      )
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 404) endGoneGoalChat()
+    },
+  })
+
   // AI 의 답이나 계획 · 문제를 기다리는 중인지 (그동안은 새 말 · 칩을 막습니다)
   const isBusy =
     talk.isPending ||
     topicTalk.isPending ||
     planTalk.isPending ||
     quizTalk.isPending ||
-    settingsTalk.isPending
+    settingsTalk.isPending ||
+    goalTalk.isPending ||
+    goalFinish.isPending
 
   const bubbles = thread.bubbles
   const lastBubble = bubbles[bubbles.length - 1]
@@ -1239,6 +1344,11 @@ function RoomChat({ room }: RoomChatProps) {
     const typed = raw.trim().slice(0, MAX_CHAT_TEXT_LENGTH)
     const text = typed === '' && photo ? '이 사진 봐 줘' : typed
     if (text === '' || isBusy) return
+    // 🎯 목표 세우기 대화 중이면 그 대화로 보냅니다. (사진은 목표 대화가 받지 않아서 보통 채팅으로)
+    if (goalChat !== null && photo === null) {
+      sendGoalText(text)
+      return
+    }
     // 위기 표현이 든 말은 계획 고치기 · 알림 · 문제 · 이름 저장으로 알아듣지 않고 보통 대화로 보냅니다.
     // 그래야 서버 AI(테스트 로그인은 시연용 답)가 상담 전화 한 줄을 같이 보여 줍니다. (#705)
     const isCrisis = hasCrisisText([text])
@@ -1403,6 +1513,66 @@ function RoomChat({ room }: RoomChatProps) {
       image: photo,
       about: next.topic?.about ?? null,
     })
+  }
+
+  // ---- 🎯 목표 세우기 대화 (STARFLOW D8) ----
+
+  /** [🎯 목표 세우기]: 진행 중 목표가 3개 미만이면 목표 대화를 엽니다. */
+  function startGoalChat() {
+    if (isBusy) return
+    const withAsk = withBubble(thread, { speaker: 'me', text: GOAL_CHAT_LABEL })
+    if (!goalLimit.canAdd) {
+      setThread(
+        withBubble(withAsk, {
+          speaker: 'ai',
+          text: `진행 중인 목표가 벌써 ${goalLimit.activeCount}개야. 목표는 동시에 ${MAX_ACTIVE_GOALS}개까지라, 하나를 끝내거나 그만두면 새로 세울 수 있어.`,
+        }),
+      )
+      return
+    }
+    setGoalChat(null)
+    setThread(withAsk)
+    goalTalk.mutate({ step: 'open' })
+  }
+
+  /** 목표 대화 중에 쓴 말을 보냅니다. 지금까지 주고받은 말 전체를 같이 보냅니다. (서버가 대화를 기억하지 않음) */
+  function sendGoalText(text: string) {
+    if (goalChat === null) return
+    const lines: CallLine[] = [...goalChat.lines, { speaker: 'me', text }]
+    setGoalChat({ ...goalChat, lines })
+    setThread(withBubble(thread, { speaker: 'me', text }))
+    goalTalk.mutate({ step: 'send', chatId: goalChat.chatId, lines })
+  }
+
+  /** [✅ 끝내기]: 대화를 끝내고 목표 초안을 받습니다. 대화가 이미 끝났으면(화면을 다시 열었음) 다시 시작하라고 합니다. */
+  function finishGoal() {
+    if (isBusy) return
+    const withAsk = withBubble(thread, { speaker: 'me', text: GOAL_FINISH_LABEL })
+    if (goalChat === null) {
+      setThread(
+        withBubble(withAsk, {
+          speaker: 'ai',
+          text: GOAL_CHAT_GONE_REPLY,
+          chips: [GOAL_START_CHIP],
+        }),
+      )
+      return
+    }
+    setThread(withAsk)
+    goalFinish.mutate({ chatId: goalChat.chatId, lines: goalChat.lines })
+  }
+
+  /** [나중에 할래]: 목표 대화를 그만둡니다. 서버 대화는 2시간 뒤 저절로 사라집니다. */
+  function stopGoal() {
+    setGoalChat(null)
+    const withAsk = withBubble(thread, { speaker: 'me', text: GOAL_STOP_LABEL })
+    setThread(
+      withBubble(withAsk, {
+        speaker: 'ai',
+        text: '좋아, 목표는 나중에 세워도 돼. 생각나면 [🎯 목표 세우기] 를 다시 눌러 줘.',
+        chips: [GOAL_START_CHIP],
+      }),
+    )
   }
 
   // ---- 계획 말풍선 ----
@@ -1819,6 +1989,25 @@ function RoomChat({ room }: RoomChatProps) {
     }
     if (chip.kind === 'reviewTalk') {
       startReviewTalk(chip.sessionId)
+      return
+    }
+    // 계획 방의 목표 대화 칩 (진짜 로그인만. 테스트 로그인은 아래 'say' 로 시연용 답을 받습니다)
+    if (chip.kind === 'say' && roomInfo.isPlanner && isServerData) {
+      if (chip.label === GOAL_CHAT_LABEL) {
+        startGoalChat()
+        return
+      }
+      if (chip.label === GOAL_FINISH_LABEL) {
+        finishGoal()
+        return
+      }
+      if (chip.label === GOAL_STOP_LABEL) {
+        stopGoal()
+        return
+      }
+    }
+    if (chip.kind === 'say' && chip.label === GOAL_OPEN_FORM_LABEL) {
+      navigate('/goals/new?step=plan')
       return
     }
     if (chip.kind === 'say') {
@@ -2257,12 +2446,25 @@ function RoomChat({ room }: RoomChatProps) {
               </Fragment>
             )
           })}
-          {(talk.isPending || topicTalk.isPending || settingsTalk.isPending) && (
+          {(talk.isPending ||
+            topicTalk.isPending ||
+            settingsTalk.isPending ||
+            goalTalk.isPending) && (
             <li>
               <TypingBubble
                 roomName={roomInfo.name}
                 roomEmoji={roomInfo.emoji}
                 label={talk.variables?.image ? '사진을 보고 쓰는 중' : '쓰는 중'}
+              />
+            </li>
+          )}
+          {goalFinish.isPending && (
+            <li>
+              <CoachBubble
+                name={roomInfo.name}
+                emoji={roomInfo.emoji}
+                text="목표를 정리하는 중…"
+                isStatus
               />
             </li>
           )}
@@ -2672,6 +2874,29 @@ function RoomChat({ room }: RoomChatProps) {
             </button>
           </div>
         )}
+        {/* 404(대화 끊김)는 말풍선으로 알려 주므로 여기서는 그 밖의 실패만 보여 줍니다. */}
+        {(goalTalk.isError || goalFinish.isError) &&
+          !(
+            (goalTalk.error ?? goalFinish.error) instanceof ApiError &&
+            ((goalTalk.error ?? goalFinish.error) as ApiError).status === 404
+          ) && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 px-2 pt-1">
+              <p className="text-sm break-keep text-red-600">
+                목표 대화를 이어 가지 못했어요.{' '}
+                {getChatErrorMessage(goalTalk.error ?? goalFinish.error)}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (goalTalk.isError && goalTalk.variables) goalTalk.mutate(goalTalk.variables)
+                  else if (goalFinish.variables) goalFinish.mutate(goalFinish.variables)
+                }}
+                className={chipClass}
+              >
+                다시 보내기
+              </button>
+            </div>
+          )}
         {planTalk.isError && (
           <div role="alert" className="flex flex-wrap items-center gap-2 px-2 pt-1">
             <p className="text-sm break-keep text-red-600">
