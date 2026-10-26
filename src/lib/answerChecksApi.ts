@@ -293,6 +293,16 @@ export async function sendAnswerCheck(input: {
   return toSendResult(result)
 }
 
+/**
+ * 채점 결과를 못 받은 이유가 "서버에 기능이 없거나(404) 서버가 고장 남(500 대)" 인지 알려줍니다.
+ * 로그인이 풀린 것(401)이나 인터넷이 끊긴 것은 여기에 들지 않아서, 그때는 원래대로 실패 안내가 나옵니다.
+ *
+ *   new ApiError('…', 404) -> true    new ApiError('…', 500) -> true    new ApiError('…', 401) -> false
+ */
+function isServerMissing(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status >= 500)
+}
+
 /** 그날의 채점 결과를 최신 것부터 받아옵니다. */
 export async function fetchAnswerChecks(date: string): Promise<AnswerCheck[]> {
   if (!isServerDataMode()) return loadDemoChecks()[date] ?? []
@@ -302,8 +312,9 @@ export async function fetchAnswerChecks(date: string): Promise<AnswerCheck[]> {
     if (!Array.isArray(result)) throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
     return result.map(toAnswerCheck).filter((check): check is AnswerCheck => check !== null)
   } catch (error) {
-    // 서버에 이 기능이 아직 배포되지 않았으면 404 입니다. 통계 탭 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
-    if (error instanceof ApiError && error.status === 404) return []
+    // 서버에 이 기능이 아직 배포되지 않았으면 404, 서버 쪽 표가 없거나 고장 났으면 500 대 입니다.
+    // 그때는 통계 탭 첫 카드 · 문제 풀이 리포트 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
+    if (isServerMissing(error)) return []
     throw error
   }
 }
@@ -311,7 +322,7 @@ export async function fetchAnswerChecks(date: string): Promise<AnswerCheck[]> {
 /**
  * from ~ to(둘 다 포함) 동안의 채점 결과를 한 번에 받아옵니다. 기록 탭의 주간 리포트(정답률)가 씁니다.
  * 서버는 한 번에 31일까지 줍니다. (BE GET /answer-checks?from=&to=, Project-BE#377)
- * 기간 조회가 아직 배포되지 않은 서버(400 · 404)면 리포트 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
+ * 기간 조회가 아직 배포되지 않은 서버(400 · 404)나 서버 오류(500 대)면 리포트 전체에 실패 안내를 띄우지 않고 "결과 없음" 으로 봅니다.
  */
 export async function fetchAnswerChecksBetween(from: string, to: string): Promise<AnswerCheck[]> {
   if (!isServerDataMode()) {
@@ -328,7 +339,8 @@ export async function fetchAnswerChecksBetween(from: string, to: string): Promis
     if (!Array.isArray(result)) throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
     return result.map(toAnswerCheck).filter((check): check is AnswerCheck => check !== null)
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 400 || error.status === 404)) return []
+    if (error instanceof ApiError && error.status === 400) return []
+    if (isServerMissing(error)) return []
     throw error
   }
 }
