@@ -101,6 +101,11 @@ export interface QuizInput {
   image: string | null
   /** 카드로 낸 문제면 그 카드 번호 (서버에는 보내지 않음) */
   cardId: string | null
+  /**
+   * true 면 material 의 문제들(학생이 맞힌 문제)과 비슷한 유형의 새 문제를 달라고 합니다.
+   * 일간 리포트의 "맞은 문제 다시 확인" 만 씁니다. (lib/correctRecheck.ts, 2026-10-26)
+   */
+  similar?: boolean
 }
 
 /** 문제를 받은 결과 */
@@ -459,6 +464,7 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
       material: input.material ? input.material.slice(0, MAX_QUIZ_MATERIAL_LENGTH) : null,
       image: input.image,
       count: QUIZ_COUNT,
+      similar: input.similar === true,
     }),
     signal: AbortSignal.timeout(input.image ? PHOTO_QUIZ_TIMEOUT_MS : QUIZ_TIMEOUT_MS),
   })

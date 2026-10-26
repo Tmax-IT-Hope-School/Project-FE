@@ -26,7 +26,8 @@
    * -webkit-tap-highlight-color: 휴대폰에서 누를 때 생기는 파란 네모를 없앱니다. (누른 느낌은 active:scale 로 줍니다)
    */
   body {
-    @apply bg-slate-100 text-slate-900 antialiased;
+    /* print:bg-white: 인쇄(시험지 PDF로 저장)할 때 "배경 그래픽" 을 켜도 종이가 회색이 되지 않게 합니다. */
+    @apply bg-slate-100 text-slate-900 antialiased print:bg-white;
     -webkit-tap-highlight-color: transparent;
   }
 

@@ -94,6 +94,8 @@ export function Header({ hideNav = false, action, hideOnMobile = false }: Header
     <header
       className={cn(
         'sticky top-0 z-20 bg-slate-100 sm:border-b sm:border-slate-200 sm:bg-white',
+        // 인쇄(시험지 PDF로 저장)할 때는 헤더를 숨깁니다. (pages/WrongTestPage.tsx)
+        'print:hidden',
         hideOnMobile && 'hidden sm:block',
       )}
     >

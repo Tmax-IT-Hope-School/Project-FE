@@ -16,7 +16,8 @@ export function BackToTabLink({ to, label }: BackToTabLinkProps) {
     // h-11 = 44px: 손가락으로 누르기 쉬운 높이. brand 색은 1순위 행동에만 써서, 돌아가기는 진한 회색입니다. (2026-10-22)
     <Link
       to={to}
-      className="mb-2 inline-flex h-11 items-center gap-1 text-[15px] font-semibold text-slate-700 hover:underline"
+      // print:hidden: 인쇄(시험지 PDF로 저장)할 때는 숨깁니다.
+      className="mb-2 inline-flex h-11 items-center gap-1 text-[15px] font-semibold text-slate-700 hover:underline print:hidden"
     >
       <span aria-hidden>‹</span> {label}
     </Link>

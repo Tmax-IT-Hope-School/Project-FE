@@ -47,6 +47,7 @@ import {
 } from '@/lib/historyReport'
 import { loadGoals } from '@/lib/goals'
 import { getServerRanges, mergeServerSessions } from '@/lib/historySessions'
+import { YOUTH_HELP_LINE } from '@/lib/helpLines'
 import { mockSubjects } from '@/lib/mock'
 import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
@@ -55,12 +56,43 @@ import { sessionsByRangeQuery } from '@/lib/sessionsApi'
 import { loadSessionSyncState } from '@/lib/sessionSync'
 import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
-import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
-import { CHAT_PATH, MANUAL_PATH, QUIZ_REPORT_PATH } from '@/lib/tabMenu'
+import {
+  correctProblemsOn,
+  MAX_RECHECK_PROBLEMS,
+  RECHECK_TOPIC,
+  recheckMaterial,
+  recheckTopic,
+} from '@/lib/correctRecheck'
+import { getApiErrorMessage } from '@/lib/api'
+import {
+  isGuessed,
+  loadQuizResults,
+  makeDemoQuiz,
+  requestQuizOrDemo,
+  saveQuizResult,
+  type QuizAnswer,
+  type QuizInput,
+  type QuizQuestion,
+  type QuizReply,
+  type QuizResult,
+} from '@/lib/studyQuiz'
+import {
+  CHAT_PATH,
+  MANUAL_PATH,
+  QUIZ_REPORT_PATH,
+  WRONG_NOTE_PATH,
+  WRONG_TEST_PATH,
+} from '@/lib/tabMenu'
 import { findWeeklyPick, type WeeklyPick, type WeeklyPickInput } from '@/lib/weeklyPicks'
 import { getPicksRange, weeklyPicksQuery } from '@/lib/weeklyPicksApi'
+import { buildWrongItems, testableWrongItems } from '@/lib/wrongNote'
 import type { Card as CardData, Goal, StudyPlan, StudySession, Subject } from '@/types'
-import { usePrefetchQuery, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
+import {
+  useMutation,
+  usePrefetchQuery,
+  useSuspenseQueries,
+  useSuspenseQuery,
+} from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -276,6 +308,23 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
             pick={findWeeklyPick(picks, weekStart)}
           />
         )}
+
+        {/* 이번 주 오답 테스트 입구 (2026-10-26). 첫 리포트 전(카운트다운)에도 보이게 위 갈래 밖에 둡니다. */}
+        {isWeekly && (
+          <AsyncBoundary
+            pendingFallback={<Skeleton className="h-36 w-full rounded-2xl" />}
+            errorMessage="틀린 문제를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+            resetKeys={[weekStart]}
+          >
+            <WrongTestCard
+              weekStart={weekStart}
+              todayKey={todayKey}
+              quizResults={quizResults}
+              cards={cards}
+              subjects={subjects}
+            />
+          </AsyncBoundary>
+        )}
       </div>
 
       {/* 시안에는 없지만 기록 탭에서 들어가는 입구 두 개. 위 묶음들과 같은 테두리로 둡니다. */}
@@ -293,6 +342,25 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
             <span className="block text-[15px] font-semibold text-slate-900">문제 풀이 리포트</span>
             <span className="mt-0.5 block text-sm text-slate-500">
               과목별 점수 변화 · 취약 단원 · 주간 정리표
+            </span>
+          </span>
+          <span aria-hidden className="shrink-0 text-slate-400">
+            ›
+          </span>
+        </Link>
+
+        {/* 오답노트로 가는 입구 (2026-10-26, pages/WrongNotePage.tsx). 최근 4주 동안 틀린 문제를 모아 봅니다. */}
+        <Link
+          to={WRONG_NOTE_PATH}
+          className={cn(
+            CARD_CLASS,
+            'flex min-h-14 items-center justify-between gap-3 py-4 hover:bg-slate-50',
+          )}
+        >
+          <span className="min-w-0">
+            <span className="block text-[15px] font-semibold text-slate-900">오답노트</span>
+            <span className="mt-0.5 block text-sm text-slate-500">
+              최근 4주 동안 틀린 문제 · 정답과 해설
             </span>
           </span>
           <span aria-hidden className="shrink-0 text-slate-400">
@@ -795,6 +863,16 @@ function DailyReport({
         </AsyncBoundary>
       </ReportCard>
 
+      {/* 그날 맞은 문제와 비슷한 문제로 다시 확인합니다. (lib/correctRecheck.ts, 2026-10-26) */}
+      <ReportCard title={`${isToday ? '오늘' : '이날'} 맞은 문제 다시 확인`}>
+        <AsyncBoundary
+          pendingFallback={<Skeleton className="mt-2 h-16 w-full" />}
+          errorMessage="사진 채점 결과를 불러오지 못했어요."
+        >
+          <CorrectRecheck dateKey={day.dateKey} quizResults={quizResults} />
+        </AsyncBoundary>
+      </ReportCard>
+
       <ReportCard title="계획 완료">
         <p className={BIG_SENTENCE_CLASS}>
           {day.isComplete
@@ -885,6 +963,253 @@ function DailyAccuracy({ dateKey, input, quizResults, subjectNames }: DailyAccur
     </>
   )
 }
+
+interface CorrectRecheckProps {
+  dateKey: string
+  quizResults: QuizResult[]
+}
+
+/**
+ * 그날 맞은 문제(사진 채점 · 확인 문제)를 몇 개 골라, 같은 유형의 새 문제를 받아 풀어 봅니다.
+ * "제대로 알아서 맞혔는지" 를 확인하는 칸입니다. 푼 결과는 확인 문제 기록으로 남아서, 틀리면 오답노트에 모입니다.
+ *   진짜 로그인: 서버 AI(/ai/quiz, similar: true). 서버가 아직 준비 안 됐으면 시연용 예시 문제
+ *   테스트 로그인: 시연용 예시 문제
+ */
+function CorrectRecheck({ dateKey, quizResults }: CorrectRecheckProps) {
+  const isServerData = useIsServerData()
+  // 사진 채점 결과는 위의 "확인 문제 정답률" 과 같은 쿼리라 한 번만 받아 옵니다.
+  const { data: checks } = useSuspenseQuery(answerChecksQuery(dateKey))
+  const problems = correctProblemsOn(checks, quizResults, dateKey).slice(0, MAX_RECHECK_PROBLEMS)
+  const [quiz, setQuiz] = useState<RecheckQuizState | null>(null)
+  const request = useMutation({
+    mutationFn: async (input: QuizInput): Promise<QuizReply> =>
+      isServerData ? requestQuizOrDemo(input) : makeDemoQuiz(input),
+    onSuccess: (reply) => {
+      if (reply.questions !== null) {
+        setQuiz({
+          questions: reply.questions,
+          unit: reply.unit,
+          isDemo: reply.isDemo,
+          answers: [],
+          shownAt: Date.now(),
+        })
+      }
+    },
+  })
+
+  function handleStart() {
+    request.mutate({
+      topic: recheckTopic(problems),
+      checklist: [],
+      material: recheckMaterial(problems),
+      image: null,
+      cardId: null,
+      similar: true,
+    })
+  }
+
+  if (quiz !== null) {
+    return <RecheckQuizPlay quiz={quiz} onChange={setQuiz} onClose={() => setQuiz(null)} />
+  }
+
+  if (problems.length === 0) {
+    return (
+      <p className="mt-2 text-sm break-keep text-slate-500">
+        맞은 문제가 생기면 비슷한 문제로 한 번 더 확인할 수 있어요. 사진 채점은 AI 가 문제 글을 읽은
+        문제만 쓸 수 있어요.
+      </p>
+    )
+  }
+
+  const reply = request.data
+  return (
+    <>
+      <p className="mt-2 text-sm break-keep text-slate-600">
+        맞은 문제 {problems.length}개와 비슷한 유형으로 새 문제를 내 줄게요. 제대로 알고 맞혔는지
+        확인해 봐요.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {problems.map((problem) => (
+          <li
+            key={problem.text}
+            className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          >
+            {problem.unit !== null && (
+              <span className="mr-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-sky-700">
+                {problem.unit}
+              </span>
+            )}
+            <span className="break-words">{problem.text}</span>
+          </li>
+        ))}
+      </ul>
+      {reply?.showHelp && (
+        <a
+          href={`tel:${YOUTH_HELP_LINE.number}`}
+          className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-2 text-sm"
+        >
+          <span className="break-keep text-slate-700">
+            문제는 잠깐 미뤄 둬요. 지금 이야기할 곳: {YOUTH_HELP_LINE.name}
+          </span>
+          <span className="text-brand font-semibold">{YOUTH_HELP_LINE.number}</span>
+        </a>
+      )}
+      {reply !== undefined && !reply.showHelp && reply.questions === null && (
+        <p className="mt-3 text-sm break-keep text-slate-500">
+          지금은 비슷한 문제를 만들지 못했어요. 조금 뒤에 다시 해 봐요.
+        </p>
+      )}
+      {request.isError && (
+        <p role="alert" className="mt-3 text-sm break-keep text-red-600">
+          {getApiErrorMessage(request.error)}
+        </p>
+      )}
+      <Button className="mt-4 w-full sm:w-auto" disabled={request.isPending} onClick={handleStart}>
+        {request.isPending ? '문제를 만드는 중' : '비슷한 문제 풀기'}
+      </Button>
+    </>
+  )
+}
+
+/** "맞은 문제 다시 확인" 으로 받은 문제를 푸는 중인 상태 */
+interface RecheckQuizState {
+  questions: QuizQuestion[]
+  unit: string | null
+  isDemo: boolean
+  /** 지금까지 고른 답 (questions 와 같은 순서). 길이 = 푼 문제 수 */
+  answers: QuizAnswer[]
+  /** 지금 문제를 보여 주기 시작한 시각 (걸린 시간을 재는 데 씀) */
+  shownAt: number
+}
+
+interface RecheckQuizPlayProps {
+  quiz: RecheckQuizState
+  onChange: (quiz: RecheckQuizState) => void
+  onClose: () => void
+}
+
+/** 한 문제씩 풀고, 고르면 바로 맞음 · 틀림과 해설을 보여 줍니다. 다 풀면 결과를 이 기기에 남깁니다. */
+function RecheckQuizPlay({ quiz, onChange, onClose }: RecheckQuizPlayProps) {
+  // 방금 고른 문제를 보는 중인지 (해설을 보여 주고 [다음] 을 기다림)
+  const [isShowingAnswer, setIsShowingAnswer] = useState(false)
+  const total = quiz.questions.length
+  const correct = quiz.answers.filter(
+    (answer, index) => answer.choiceIndex === quiz.questions[index].answerIndex,
+  ).length
+  const isDone = quiz.answers.length === total && !isShowingAnswer
+
+  function handleChoose(choiceIndex: number) {
+    const now = Date.now()
+    const answers = [...quiz.answers, { choiceIndex, ms: now - quiz.shownAt }]
+    onChange({ ...quiz, answers })
+    setIsShowingAnswer(true)
+    if (answers.length === total) {
+      // 다 풀었으면 확인 문제 기록으로 남깁니다. 틀린 문제는 오답노트 · 복습에 쓰입니다.
+      saveQuizResult({
+        id: `recheck-${now}`,
+        date: getTodayKey(),
+        at: now,
+        topic: RECHECK_TOPIC,
+        cardId: null,
+        unit: quiz.unit,
+        questions: quiz.questions,
+        answers,
+        correct: answers.filter(
+          (answer, index) => answer.choiceIndex === quiz.questions[index].answerIndex,
+        ).length,
+        guessed: isGuessed(
+          answers,
+          quiz.questions.map((question) => question.answerIndex),
+        ),
+        isDemo: quiz.isDemo,
+      })
+    }
+  }
+
+  function handleNext() {
+    setIsShowingAnswer(false)
+    onChange({ ...quiz, shownAt: Date.now() })
+  }
+
+  if (isDone) {
+    return (
+      <>
+        <p className={BIG_SENTENCE_CLASS}>
+          {total}문제 중 {correct}개 맞혔어요
+        </p>
+        <p className="mt-2 text-sm break-keep text-slate-600">
+          {correct === total
+            ? '비슷한 문제도 다 맞혔어요. 제대로 알고 있어요.'
+            : '틀린 문제는 오답노트에 모여요. 해설을 한 번 더 읽어 봐요.'}
+        </p>
+        <Button variant="outline" className="mt-4 w-full sm:w-auto" onClick={onClose}>
+          닫기
+        </Button>
+      </>
+    )
+  }
+
+  // 지금 보는 문제: 해설을 보는 중이면 방금 푼 문제, 아니면 다음 문제
+  const index = isShowingAnswer ? quiz.answers.length - 1 : quiz.answers.length
+  const question = quiz.questions[index]
+  const chosen = isShowingAnswer ? quiz.answers[index].choiceIndex : null
+  return (
+    <>
+      <p className="mt-2 text-sm text-slate-500">
+        {index + 1} / {total}
+      </p>
+      <p className="mt-1 text-base font-semibold break-words text-slate-900">{question.question}</p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {question.choices.map((choice, choiceIndex) => {
+          const isAnswer = choiceIndex === question.answerIndex
+          const isChosen = choiceIndex === chosen
+          return (
+            <li key={choice}>
+              <button
+                type="button"
+                disabled={chosen !== null}
+                onClick={() => handleChoose(choiceIndex)}
+                className={cn(
+                  'flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm break-words text-slate-800',
+                  chosen === null && 'hover:bg-slate-50',
+                  chosen !== null &&
+                    isAnswer &&
+                    'border-emerald-300 bg-emerald-50 text-emerald-800',
+                  chosen !== null &&
+                    isChosen &&
+                    !isAnswer &&
+                    'border-red-300 bg-red-50 text-red-700',
+                )}
+              >
+                <span className="shrink-0 font-semibold">{CHOICE_MARKS[choiceIndex]}</span>
+                <span className="min-w-0">{choice}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {chosen !== null && (
+        <>
+          <p
+            className={cn(
+              'mt-3 text-sm font-semibold',
+              chosen === question.answerIndex ? 'text-emerald-700' : 'text-red-600',
+            )}
+          >
+            {chosen === question.answerIndex ? '맞았어요' : '아쉬워요'}
+          </p>
+          <p className="mt-1 text-sm break-keep text-slate-600">{question.explanation}</p>
+          <Button className="mt-4 w-full sm:w-auto" onClick={handleNext}>
+            {index + 1 === total ? '결과 보기' : '다음 문제'}
+          </Button>
+        </>
+      )}
+    </>
+  )
+}
+
+/** 보기 앞에 붙이는 번호 */
+const CHOICE_MARKS = ['①', '②', '③', '④']
 
 // ---------------------------------------------------------------------------
 // 주간 리포트
@@ -1086,6 +1411,81 @@ function WeeklyReport({
         </ReportCard>
       )}
     </>
+  )
+}
+
+interface WrongTestCardProps {
+  /** 보고 있는 주의 월요일 */
+  weekStart: string
+  todayKey: string
+  quizResults: QuizResult[]
+  cards: CardData[]
+  subjects: Subject[]
+}
+
+/**
+ * 「이번 주 오답 테스트」 묶음. 그 주에 틀린 문제(문제 글이 있는 것)로 시험지를 만들어 [테스트 풀기] 로 보냅니다. (2026-10-26)
+ * 틀린 문제를 고르는 규칙은 lib/wrongNote.ts, 테스트 화면은 pages/WrongTestPage.tsx 입니다.
+ * 사진 채점은 주간 리포트와 같은 범위(지난주 ~ 이번 주)로 받아서, 이미 받아 둔 결과를 다시 씁니다.
+ */
+function WrongTestCard({ weekStart, todayKey, quizResults, cards, subjects }: WrongTestCardProps) {
+  const isServerData = useIsServerData()
+  const weekEnd = moveDateKey(weekStart, 6)
+  const { data: checks } = useSuspenseQuery(
+    answerChecksBetweenQuery(moveDateKey(weekStart, -7), weekEnd),
+  )
+  const count = testableWrongItems(
+    buildWrongItems({
+      checks,
+      quizResults,
+      cards,
+      subjects,
+      from: weekStart,
+      to: weekEnd,
+      todayKey,
+      includeDemo: !isServerData,
+    }),
+  ).length
+
+  return (
+    <ReportCard title="이번 주 오답 테스트">
+      {count > 0 ? (
+        <>
+          <p className="mt-2 text-[15px] leading-[22px] break-keep text-slate-700">
+            이번 주 틀린 문제 <span className="text-brand font-bold">{count}개</span>로 시험지를
+            만들었어요. 다시 풀어 보면 내 것이 돼요.
+          </p>
+          {/* 주간 리포트의 채운 버튼은 [이걸로 정하기] 하나라서, 여기는 회색 버튼으로 둡니다. (Button 의 secondary 모양) */}
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Link
+              to={`${WRONG_TEST_PATH}?week=${weekStart}`}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100 px-2 text-sm font-bold text-slate-900 hover:bg-slate-200"
+            >
+              테스트 풀기
+            </Link>
+            <Link
+              to={WRONG_NOTE_PATH}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+            >
+              오답노트 보기
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm break-keep text-slate-500">
+            이번 주에는 다시 풀 틀린 문제가 아직 없어요. 확인 문제나 사진 채점에서 틀린 문제가
+            생기면 여기서 시험지로 만들어 드려요.
+          </p>
+          <Link
+            to={WRONG_NOTE_PATH}
+            className="mt-3 inline-flex h-10 items-center text-sm font-semibold text-slate-700 hover:underline"
+          >
+            오답노트 보기 ›
+          </Link>
+        </>
+      )}
+    </ReportCard>
   )
 }
 

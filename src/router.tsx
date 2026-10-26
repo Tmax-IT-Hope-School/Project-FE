@@ -33,6 +33,12 @@ const StatsPage = lazy(() => import('@/pages/StatsPage').then((m) => ({ default:
 const QuizReportPage = lazy(() =>
   import('@/pages/QuizReportPage').then((m) => ({ default: m.QuizReportPage })),
 )
+const WrongNotePage = lazy(() =>
+  import('@/pages/WrongNotePage').then((m) => ({ default: m.WrongNotePage })),
+)
+const WrongTestPage = lazy(() =>
+  import('@/pages/WrongTestPage').then((m) => ({ default: m.WrongTestPage })),
+)
 const ManualPage = lazy(() => import('@/pages/ManualPage').then((m) => ({ default: m.ManualPage })))
 const CallActivePage = lazy(() =>
   import('@/pages/CallActivePage').then((m) => ({ default: m.CallActivePage })),
@@ -158,6 +164,9 @@ export const router = createBrowserRouter([
       { path: 'records', element: <RecordsPage /> },
       // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 기록 탭의 입구에서 들어옵니다.
       { path: 'records/quiz', element: <QuizReportPage /> },
+      // 오답노트 · 주간 오답 테스트 (2026-10-26). 사진 채점 · 확인 문제에서 틀린 문제를 모아 다시 풀고, 시험지로 인쇄합니다.
+      { path: 'records/wrong-note', element: <WrongNotePage /> },
+      { path: 'records/wrong-test', element: <WrongTestPage /> },
       // 나 사용설명서 (2026-10-24 History 시안 ⑤). 기록 탭 아래쪽 줄과 주간 리포트의 [사용설명서에 넣기] 뒤에서 들어옵니다.
       { path: 'records/manual', element: <ManualPage /> },
       // 사진 채점의 옛 주소(통계 탭으로 옮기기 전). 이미 띄워 둔 QR 로 열어도 같은 화면이 나오게 넘겨 줍니다.

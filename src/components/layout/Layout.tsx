@@ -100,6 +100,8 @@ export function Layout() {
           !isTimerLocked &&
           !isCoach &&
           'pb-[calc(3.5rem+env(safe-area-inset-bottom))] sm:pb-0',
+        // 인쇄(시험지 PDF로 저장)할 때는 하단 탭 자리를 비우지 않습니다. (pages/WrongTestPage.tsx)
+        'print:pb-0',
       )}
     >
       {/* 대화방은 모바일에서 자기 머리(‹ · 방 이름 · 통화 · 종)만 보여 주고 이 헤더는 숨깁니다. 메신저 앱처럼 화면 전체를 대화에. (2026-10-22) */}
@@ -112,6 +114,8 @@ export function Layout() {
           // min-h-0: 안의 채팅 목록이 넘칠 때 화면이 늘어나지 않고 목록 안에서 스크롤되게 합니다.
           // 모바일 위 여백은 12px(pt-3)입니다. 24px 는 헤더 아래가 비어 보여서 줄였습니다. (2026-10-19)
           isCoach ? 'flex min-h-0 flex-col py-3 sm:py-4' : 'pt-3 pb-6 sm:py-10',
+          // 인쇄할 때는 종이 여백만 쓰도록 화면용 여백 · 너비 제한을 풉니다.
+          'print:max-w-none print:p-0',
         )}
       >
         {/* 아이폰 "홈 화면에 추가" 안내(components/layout/IosInstallGuide.tsx, #105)는 2026-10-19 에 껐습니다.
@@ -157,7 +161,7 @@ export function Layout() {
       {/* 코치 화면은 높이를 꽉 채우는 채팅이라 아래 글을 숨깁니다.
           모바일(앱)에서는 웹 사이트의 꼬리말이 어색해서 PC 에서만 보여 줍니다. (2026-10-22) */}
       {!isCoach && (
-        <footer className="hidden border-t border-slate-200 py-6 text-center text-sm text-slate-500 sm:block">
+        <footer className="hidden border-t border-slate-200 py-6 text-center text-sm text-slate-500 sm:block print:hidden">
           © 2026 Tmax IT Hope School
         </footer>
       )}
