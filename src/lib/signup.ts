@@ -96,16 +96,17 @@ export function loadSignupProfile(): SignupProfile | null {
  * 내 계정 화면에서 고친 정보를 이 기기에 저장해 둔 가입 정보에도 반영합니다. (설정의 계정 카드가 이 값을 보여줍니다)
  * 이 기기에 가입 정보가 없으면(다른 기기에서 가입한 사람) 아무 일도 하지 않습니다.
  *
- *   updateSavedSignupProfile({ name: '김하늘', nickname: '하늘이', school: null })
+ * 가입 때 적은 실명은 이 기기에만 있고 내 계정 화면에서 고치지 않으므로 건드리지 않습니다.
+ *
+ *   updateSavedSignupProfile({ nickname: '하늘이', school: null })
  */
 export function updateSavedSignupProfile(changes: {
-  name: string
   nickname: string
   school: School | null
 }): void {
   const saved = loadData<unknown>(SIGNUP_STORAGE_KEY, null)
   if (typeof saved !== 'object' || saved === null) return
-  // 동의 내역·동의한 시각 같은 나머지 값은 그대로 두고, 고친 세 가지만 바꿉니다.
+  // 실명 · 동의 내역 · 동의한 시각 같은 나머지 값은 그대로 두고, 고친 두 가지만 바꿉니다.
   saveData(SIGNUP_STORAGE_KEY, { ...saved, ...changes })
 }
 

@@ -8,7 +8,7 @@ import {
   saveInsightResponse,
 } from '@/lib/insightResponses'
 import type { Insight, InsightResponse, StudySession } from '@/types'
-import { loadInsightDisputes, saveInsightDispute } from '@/lib/insightDisputes'
+import { loadInsightDisputes } from '@/lib/insightDisputes'
 import { useId, useState } from 'react'
 
 interface InsightCardProps {
@@ -28,10 +28,10 @@ interface InsightCardProps {
  * "나를 잘 아는" 인사이트를 한 문장 카드로 보여줍니다. (#73)
  *
  * - 근거 보기 (#84): 누르면 이 결론이 나온 날짜마다 그날의 순공시간과 컨디션이 펼쳐집니다.
- * - 반응 버튼 3개 (#84): [몰랐는데 맞아] [이미 알던 거야] [틀렸어] 중 하나만 고를 수 있고,
+ * - 반응 버튼 2개 (#84): [몰랐는데 맞아] [이미 알던 거야] 중 하나만 고를 수 있고,
  *   다시 눌러 바꿀 수 있습니다. 고른 반응은 저장됩니다.
- * - [틀렸어] 를 눌러도 **숨기지 않습니다** (#411). 예전에 자기 실험으로 확인한 결과가 있으면
- *   "AI가 틀렸어요" / "맞았어요" 를 붙입니다. (lib/insightDisputes.ts, 가설·실험 탭은 2026-10-18 에 지웠습니다)
+ * - [틀렸어] 는 숨겼습니다. 눌러도 실험으로 확인하는 곳이 없어서(가설·실험 탭은 2026-10-18 에 지움) 결과가 바뀌지 않았습니다.
+ *   예전에 자기 실험으로 확인한 결과가 있으면 "AI가 틀렸어요" / "맞았어요" 는 그대로 붙입니다. (lib/insightDisputes.ts, #411)
  *
  * <InsightCard insight={insight} sessions={sessions} />
  * <InsightCard insight={insight} sessions={sessions} isExample />   // 예시일 때
@@ -60,8 +60,6 @@ export function InsightCard({
   function handleSelectResponse(selected: InsightResponse) {
     setResponse(selected)
     saveInsightResponse(insight.id, selected)
-    // [틀렸어] 면 이 문장을 실험의 가설로 쓸 수 있게 적어 둡니다. (실험을 시작해야 실제로 확인합니다)
-    if (selected === 'wrong') saveInsightDispute(insight.id, { sentence: insight.sentence })
   }
 
   return (
@@ -141,33 +139,36 @@ export function InsightCard({
         </ul>
       )}
 
-      {/* 375px 에서 3개가 한 줄에 안 들어가면 줄이 바뀝니다. (flex-wrap) */}
+      {/* 375px 에서 한 줄에 안 들어가면 줄이 바뀝니다. (flex-wrap) */}
       <div
         role="radiogroup"
         aria-label="이 발견에 대한 내 반응"
         className="mt-2 flex flex-wrap gap-2"
       >
-        {insightResponseOptions.map((option) => {
-          const isSelected = response === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              onClick={() => handleSelectResponse(option.value)}
-              className={cn(
-                // 고르는 칩이라 rounded-full. 고른 것은 brand 테두리 + 굵은 글자로 또렷하게 보입니다.
-                'h-10 cursor-pointer rounded-full border px-4 text-sm font-medium transition-colors',
-                isSelected
-                  ? 'border-brand bg-brand-light text-brand font-semibold'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-              )}
-            >
-              {option.label}
-            </button>
-          )
-        })}
+        {/* [틀렸어] 는 결과에 반영되지 않아서 뺍니다. (위 설명 참고) */}
+        {insightResponseOptions
+          .filter((option) => option.value !== 'wrong')
+          .map((option) => {
+            const isSelected = response === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => handleSelectResponse(option.value)}
+                className={cn(
+                  // 고르는 칩이라 rounded-full. 고른 것은 brand 테두리 + 굵은 글자로 또렷하게 보입니다.
+                  'h-10 cursor-pointer rounded-full border px-4 text-sm font-medium transition-colors',
+                  isSelected
+                    ? 'border-brand bg-brand-light text-brand font-semibold'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+                )}
+              >
+                {option.label}
+              </button>
+            )
+          })}
       </div>
     </Card>
   )

@@ -29,7 +29,7 @@ export const STRENGTH_PRESETS: StrengthPreset[] = [
   {
     strength: 'soft',
     label: '약',
-    description: '칭찬 위주로 부드럽게. 잠그거나 따로 전화하지 않아요.',
+    description: '칭찬 위주로 부드럽게. 따로 전화하지 않아요.',
     maxCareLevel: 1,
     maxHarshness: 2,
     allowFocusMode: false,
@@ -38,7 +38,8 @@ export const STRENGTH_PRESETS: StrengthPreset[] = [
   {
     strength: 'normal',
     label: '보통',
-    description: '할 일을 콕 집어 알려 주고, 집중 모드 잠금을 써요.',
+    // 집중 모드를 켜는 곳이 아직 없어서(hooks/useFocusMode.ts) '잠금을 써요' 는 설명에서 뺐습니다.
+    description: '할 일을 콕 집어 알려 줘요.',
     maxCareLevel: 2,
     maxHarshness: 3,
     allowFocusMode: true,

@@ -84,7 +84,7 @@ function TrackChoices({ schoolCode, value, onChange, inputClassName }: TrackChoi
       <div>
         <p className="text-sm font-semibold text-slate-900">어느 쪽에 관심 있어? (선택)</p>
         <p className="mt-1 text-sm break-keep text-slate-500">
-          알려 주면 코치가 관심 분야에 맞춰 공지 · 대회 · 진로 이야기를 해 줘요.
+          고른 값은 이 기기에만 저장돼요. 설정 › 계정에서 언제든 바꿀 수 있어요.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {GENERAL_TRACKS.map((track) => {
@@ -131,7 +131,7 @@ function TrackChoices({ schoolCode, value, onChange, inputClassName }: TrackChoi
     <div>
       <p className="text-sm font-semibold text-slate-900">무슨 과야? (선택)</p>
       <p className="mt-1 text-sm break-keep text-slate-500">
-        알려 주면 코치가 우리 과에 맞는 공지 · 대회 · 자격증 이야기를 해 줘요.
+        고른 값은 이 기기에만 저장돼요. 설정 › 계정에서 언제든 바꿀 수 있어요.
         {!data.complete && ' 학교에 따라 목록이 다 안 나올 수 있어요.'}
       </p>
       {data.majors.length > 0 && (

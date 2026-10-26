@@ -7,6 +7,7 @@ import { useGoalLimit } from '@/hooks/useGoalLimit'
 import { useGoals } from '@/hooks/useGoals'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useStudySessions } from '@/hooks/useStudySessions'
+import { isInApp } from '@/lib/appBridge'
 import { CARD_RESULT_LABELS } from '@/lib/cardResult'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { getCardsOnDate } from '@/lib/cards'
@@ -25,6 +26,11 @@ import { getTodayKey, isDateKey, moveDateKey } from '@/lib/date'
 import { formatDday, getDaysUntil } from '@/lib/exams'
 import { isGoalResultDue } from '@/lib/goalProgress'
 import { MAX_ACTIVE_GOALS, getDoneGoals } from '@/lib/goals'
+import {
+  getNotificationPermission,
+  isNotificationSupported,
+  requestNotificationPermission,
+} from '@/lib/notifications'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { getWeekday, getWeekdayName } from '@/lib/routines'
 import type { Card as CardData, FixedBlock, Goal, StudySession } from '@/types'
@@ -487,6 +493,38 @@ function CardTimeline({
  * 목표 목록(#391) → 카드 일·주 타임라인(#394) 순서입니다. (최종 기획서 「3 앱 구조」 카드 탭)
  * 계획 패턴 안내(#394)는 시연 범위 밖이라 2026-10-18 에 지웠습니다.
  */
+/**
+ * 카드 시작 알림(정각 · N분 전)에 브라우저 알림 권한이 필요하다는 안내입니다. 권한이 있으면 아무것도 그리지 않습니다.
+ * 휴대폰 앱 안에서는 앱이 알림을 맡아서 보여 주지 않습니다. (설정 › 알림의 "브라우저 알림" 과 같은 규칙)
+ * 카드 알림은 앱(이 웹 화면)을 열어 둔 동안에만 옵니다. (hooks/useCardAlerts.ts)
+ */
+function CardAlertPermissionNotice() {
+  const [permission, setPermission] = useState<NotificationPermission>(getNotificationPermission)
+
+  async function handleRequest() {
+    setPermission(await requestNotificationPermission())
+  }
+
+  if (isInApp() || permission === 'granted') return null
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm break-keep text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        {!isNotificationSupported()
+          ? '이 브라우저는 알림을 지원하지 않아서 카드 시작 알림이 오지 않아요.'
+          : permission === 'denied'
+            ? '브라우저 알림이 꺼져 있어서 카드 시작 알림이 오지 않아요. 브라우저 주소창 옆 설정에서 알림을 허용해 주세요.'
+            : '카드 시작 알림을 받으려면 브라우저 알림을 켜 주세요. 이 화면을 열어 둔 동안에만 와요.'}
+      </p>
+      {isNotificationSupported() && permission === 'default' && (
+        <Button size="sm" className="h-10 shrink-0" onClick={handleRequest}>
+          알림 켜기
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function CardsPage() {
   const todayKey = getTodayKey()
   // 카드 (최종 기획서 「4.3」, #392)
@@ -575,6 +613,9 @@ export function CardsPage() {
           </Button>
         </div>
       </div>
+
+      {/* 카드 시작 알림은 브라우저 알림이라 권한이 없으면 오지 않습니다. 그때만 안내합니다. */}
+      <CardAlertPermissionNotice />
 
       {/* 묶음 순서는 "매일 보는 것 → 가끔 보는 것" 입니다. (서열 위치 효과)
           날짜 이동 바로 아래에 그날 카드, 그다음 목표, 맨 아래에 학교 일정입니다. */}

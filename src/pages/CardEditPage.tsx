@@ -754,18 +754,11 @@ function CardForm({
               쉼표로 여러 개 적을 수 있어요. 내 행동에서 나오는 원인을 하나는 넣어 주세요.
             </p>
 
-            {/* 알림: 방식 · 몇 분 전 · 문구 */}
+            {/* 알림: 몇 분 전 · 문구
+                「알림 방식 [메시지] [AI 전화]」 는 숨겼습니다. 카드 알림으로 전화를 거는 코드가 아직 없어서(BE CardService)
+                AI 전화를 골라도 메시지와 똑같았습니다. 예전에 고른 값은 그대로 저장됩니다. */}
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-slate-700">알림</p>
-              <SegmentedToggle
-                label="알림 방식"
-                options={[
-                  { value: 'message', label: '메시지' },
-                  { value: 'call', label: 'AI 전화' },
-                ]}
-                value={values.alertMethod}
-                onChange={(next) => change('alertMethod', next)}
-              />
               <div className="flex flex-wrap gap-2">
                 {ALERT_MINUTES_OPTIONS.map((minutes) => (
                   <ChipButton

@@ -443,24 +443,9 @@ export function SettingsPage() {
                   />
                 )}
               </div>
-              {/* 켜고 끄는 칸은 스위치 모양(index.css 의 .switch). 줄 전체가 label 이라 어디를 눌러도 바뀝니다. (min-h-12 = 48px) */}
-              <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3">
-                <span className="flex min-w-0 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-900">
-                    집중 모드 잠금 허용
-                  </span>
-                  <span className="text-[13px] break-keep text-slate-500">
-                    풀려면 10초 기다리고 이유를 적어요
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={limits.allowFocusMode}
-                  onChange={(event) => setLimits(setAllowFocusMode(event.target.checked))}
-                  aria-label="집중 모드 잠금 허용"
-                  className="switch shrink-0"
-                />
-              </label>
+              {/* 「집중 모드 잠금 허용」 스위치는 숨겼습니다. 집중 모드를 켜는 곳이 아직 없어서 눌러도 달라지는 게 없었습니다.
+                  (hooks/useFocusMode.ts 의 켜기를 부르는 곳이 없음) 켜는 버튼이 생기면 다시 꺼내면 됩니다.
+                  켜고 끄는 칸은 스위치 모양(index.css 의 .switch). 줄 전체가 label 이라 어디를 눌러도 바뀝니다. (min-h-12 = 48px) */}
               <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-col">
                   <span className="text-[15px] font-semibold text-slate-900">

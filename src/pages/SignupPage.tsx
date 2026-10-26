@@ -353,7 +353,7 @@ export function SignupPage() {
             </p>
           ) : googleSignup !== null ? (
             <p className="mt-2 text-[15px] break-keep text-slate-600">
-              구글 계정으로 가입해요. 이름은 고칠 수 있어요.{' '}
+              구글 계정으로 가입해요.{' '}
               {/* type="button": form 안의 버튼이라, 적지 않으면 눌렀을 때 가입 제출이 돼 버립니다. */}
               <button
                 type="button"
@@ -401,7 +401,8 @@ export function SignupPage() {
                 className={FIELD_CLASS}
               />
               <p className="text-[13px] text-slate-500">
-                실제 이름을 적어 주세요. ({NAME_MIN_LENGTH}~{NAME_MAX_LENGTH}자)
+                실제 이름을 적어 주세요. ({NAME_MIN_LENGTH}~{NAME_MAX_LENGTH}자) 이 기기에만 남고
+                서버에는 저장하지 않아요.
               </p>
             </div>
 

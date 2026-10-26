@@ -181,9 +181,12 @@ export interface AnalysisView {
 
 /**
  * AI 분석과 기본 분석을 합칩니다. AI 가 못 쓴 칸(요약 · 실험 제안)만 기본 문장으로 채웁니다.
+ * 근거 숫자가 하나도 없는 묶음은 AI 가 써 왔어도 뺍니다. 예측 · 실험을 만드는 곳이 없어서(FE #666)
+ * 일반 계정은 '생각과 실제' 의 예측 숫자가 비어 있는데, 그 묶음이 "아직 기록이 없어요" 같은 빈 글로 보이지 않게 하려는 것입니다.
  *
  *   mergeAnalysis(기본, 사실, null)                           -> { analysis: 기본, source: 'code', … }
  *   mergeAnalysis(기본, 사실, { analysis: { summary: null, … } }) -> 요약만 기본 문장, source: 'ai'
+ *   사실에 'distortion' 묶음 숫자가 없음                         -> AI 가 쓴 '생각과 실제' 묶음은 빠짐
  */
 export function mergeAnalysis(
   code: SelfAnalysis,
@@ -192,10 +195,14 @@ export function mergeAnalysis(
 ): AnalysisView {
   const allFacts = [...facts, ...(result?.serverFacts ?? [])]
   if (!result?.analysis) return { analysis: code, source: 'code', facts: allFacts }
+  const groupsWithFacts = new Set(allFacts.map((fact) => fact.group))
+  const sections = result.analysis.sections.filter((section) => groupsWithFacts.has(section.group))
+  // 남는 묶음이 없으면 AI 글 대신 기본 분석을 그대로 씁니다.
+  if (sections.length === 0) return { analysis: code, source: 'code', facts: allFacts }
   return {
     analysis: {
       summary: result.analysis.summary ?? code.summary,
-      sections: result.analysis.sections,
+      sections,
       nextExperiment: result.analysis.nextExperiment ?? code.nextExperiment,
     },
     source: 'ai',

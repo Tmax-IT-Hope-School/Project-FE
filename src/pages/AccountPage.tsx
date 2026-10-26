@@ -9,11 +9,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { getAccountErrorMessage, profileQuery, updateProfile, type Profile } from '@/lib/accountApi'
 import type { School } from '@/lib/schoolSearch'
 import {
-  NAME_MAX_LENGTH,
-  NAME_MIN_LENGTH,
   NICKNAME_MAX_LENGTH,
   NICKNAME_MIN_LENGTH,
-  getNameError,
   getNicknameError,
   updateSavedSignupProfile,
 } from '@/lib/signup'
@@ -107,13 +104,15 @@ interface ProfileCardProps {
   profile: Profile
 }
 
-/** 내 정보(이름 · 닉네임 · 학교 · 일기 분석 동의)를 고치는 카드입니다. 이메일은 보여주기만 합니다. */
+/**
+ * 내 정보(닉네임 · 학교 · 일기 분석 동의)를 고치는 카드입니다. 이메일은 보여주기만 합니다.
+ * 실명은 서버가 받지 않아서(BE #71, 실명을 모으지 않기로 함) 고치는 칸을 두지 않습니다.
+ */
 function ProfileCard({ profile }: ProfileCardProps) {
   const queryClient = useQueryClient()
   const { user, token, login } = useAuth()
 
   // 고치는 중인 값입니다. 받아온 값을 그대로 보여주는 것이 아니라 "입력 칸의 상태" 라서 따로 둡니다.
-  const [name, setName] = useState(profile.name)
   const [nickname, setNickname] = useState(profile.nickname)
   const [school, setSchool] = useState<School | null>(
     // 서버는 학교의 번호와 이름만 가지고 있습니다. 주소는 없어서 빈 글자로 둡니다.
@@ -125,7 +124,6 @@ function ProfileCard({ profile }: ProfileCardProps) {
   // 저장에 성공했는지. 성공 안내를 보여주고, 값을 다시 고치기 시작하면 지웁니다.
   const [isSaved, setIsSaved] = useState(false)
 
-  const nameError = getNameError(name)
   const nicknameError = getNicknameError(nickname)
 
   // useMutation: 서버의 값을 "바꾸는" 요청에 씁니다. isPending(보내는 중)과 error(실패)를 대신 관리해 줍니다. (docs/DATA-FETCHING.md 5장)
@@ -135,7 +133,7 @@ function ProfileCard({ profile }: ProfileCardProps) {
       // 보관해 둔 내 정보를 "낡았다" 고 표시해서 다시 받아오게 합니다.
       void queryClient.invalidateQueries({ queryKey: profileQuery().queryKey })
       // 이 기기에 저장해 둔 가입 정보와 로그인한 사람의 이름도 맞춥니다. (설정의 계정 카드가 이 값을 보여줍니다)
-      updateSavedSignupProfile({ name: updated.name, nickname: updated.nickname, school })
+      updateSavedSignupProfile({ nickname: updated.nickname, school })
       if (user !== null && token !== null) login({ ...user, name: updated.nickname }, token)
       setIsSaved(true)
     },
@@ -144,10 +142,11 @@ function ProfileCard({ profile }: ProfileCardProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     // form 이 기본으로 하는 "페이지 새로고침" 을 막습니다.
     event.preventDefault()
-    if (nameError !== null || nicknameError !== null || mutation.isPending) return
+    if (nicknameError !== null || mutation.isPending) return
     setIsSaved(false)
     mutation.mutate({
-      name: name.trim(),
+      // 예전 서버와 맞추려고 자리만 남긴 값입니다. 서버는 읽지 않고 버립니다.
+      name: profile.name,
       nickname: nickname.trim(),
       schoolCode: school?.code ?? null,
       schoolName: school?.name ?? null,
@@ -165,25 +164,6 @@ function ProfileCard({ profile }: ProfileCardProps) {
           <p className="text-base break-all text-slate-900">{profile.email}</p>
           <p className="text-sm break-keep text-slate-500">
             로그인에 쓰는 구글 계정 주소라서 바꿀 수 없어요.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Input
-            id="account-name"
-            label="이름"
-            value={name}
-            maxLength={NAME_MAX_LENGTH}
-            autoComplete="name"
-            error={nameError ?? undefined}
-            onChange={(event) => {
-              setName(event.target.value)
-              setIsSaved(false)
-            }}
-            className="h-12 text-base"
-          />
-          <p className="text-sm text-slate-500">
-            실제 이름이에요. ({NAME_MIN_LENGTH}~{NAME_MAX_LENGTH}자)
           </p>
         </div>
 
@@ -252,7 +232,7 @@ function ProfileCard({ profile }: ProfileCardProps) {
           type="submit"
           size="lg"
           className="w-full sm:w-auto sm:self-end"
-          disabled={nameError !== null || nicknameError !== null || mutation.isPending}
+          disabled={nicknameError !== null || mutation.isPending}
         >
           {mutation.isPending ? '저장하는 중…' : '저장'}
         </Button>
