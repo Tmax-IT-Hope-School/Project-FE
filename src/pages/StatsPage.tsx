@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { SubjectBadge } from '@/components/ui/SubjectBadge'
 import { TalkButton } from '@/components/ui/TalkButton'
 import { useCards } from '@/hooks/useCards'
+import { useIsServerData } from '@/hooks/useIsServerData'
+import { useServerMergedSessions } from '@/hooks/useServerMergedSessions'
 import {
   buildCalendarDay,
   DAY_STATUS_INFO,
@@ -115,10 +117,45 @@ function SubjectTag({ subject, subjectId }: SubjectTagProps) {
 /**
  * 통계 탭 화면(/stats)입니다. (2026-10-24)
  * 2026-10-24 까지 기록 탭(/records)이던 화면을 그대로 옮겼습니다. 기록 탭은 일간 · 주간 리포트(History)가 됩니다.
+ *
+ * 진짜 로그인이면 서버의 공부 기록(최근 6개월)도 받아서 이 기기 기록과 합쳐 봅니다. (기록 탭과 같은 방법, #659)
+ * 그래서 새 기기 · 새로 로그인한 계정도 4주 실행률 · 7일 공부 시간 · 달력 · 날짜별 기록이 비어 보이지 않습니다.
+ * 7일 집중도는 서버에 저장하지 않는 값이라 이 기기 기록만 씁니다. (lib/focusScore.ts)
  */
 export function StatsPage() {
-  // 공부 기록은 타이머가 저장해 둔 것을 읽기만 합니다. 과목은 계획 화면에서 저장한 목록을 씁니다.
-  const [sessions] = useState<StudySession[]>(loadSessions)
+  // 이 기기의 공부 기록은 화면을 처음 그릴 때 한 번만 읽습니다.
+  const [localSessions] = useState<StudySession[]>(loadSessions)
+  const isServerData = useIsServerData()
+
+  // 테스트 로그인은 서버가 없어서 이 기기 기록만 봅니다.
+  if (!isServerData) return <StatsView sessions={localSessions} />
+
+  // 받는 동안에는 이 기기 기록으로 먼저 그리고, 못 받으면 안내와 함께 이 기기 기록만 보여 줍니다.
+  return (
+    <AsyncBoundary
+      pendingFallback={<StatsView sessions={localSessions} />}
+      errorMessage="서버의 공부 기록을 받아오지 못했어요. 이 기기에 있는 기록만 보여 드려요."
+      errorExtra={<StatsView sessions={localSessions} />}
+    >
+      <ServerStats localSessions={localSessions} />
+    </AsyncBoundary>
+  )
+}
+
+/** 서버의 공부 기록을 받아 이 기기 기록과 합친 뒤 그립니다. (hooks/useServerMergedSessions.ts) */
+function ServerStats({ localSessions }: { localSessions: StudySession[] }) {
+  const sessions = useServerMergedSessions(localSessions)
+  return <StatsView sessions={sessions} />
+}
+
+interface StatsViewProps {
+  /** 통계에 쓸 공부 기록 (노는 기록 뺀 것). 진짜 로그인이면 서버 기록까지 합친 것입니다 */
+  sessions: StudySession[]
+}
+
+/** 통계 탭 화면 본체. 공부 기록만 밖에서 받고, 나머지(카드 · 체크인 · 휴식 …)는 여기서 읽습니다. */
+function StatsView({ sessions }: StatsViewProps) {
+  // 과목은 계획 화면에서 저장한 목록을 씁니다.
   const subjects = useSubjects()
 
   // 달력의 그날 감정 표시에 체크인을 씁니다.

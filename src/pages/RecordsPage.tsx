@@ -6,6 +6,7 @@ import { useCards } from '@/hooks/useCards'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { loadManualItems, useManualItems } from '@/hooks/useManualItems'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { useServerMergedSessions } from '@/hooks/useServerMergedSessions'
 import { useSubjects } from '@/hooks/useSubjects'
 import { useWeeklyPicks } from '@/hooks/useWeeklyPicks'
 import { answerChecksBetweenQuery, answerChecksQuery } from '@/lib/answerChecksApi'
@@ -46,13 +47,11 @@ import {
   type WeekReport,
 } from '@/lib/historyReport'
 import { loadGoals } from '@/lib/goals'
-import { getServerRanges, mergeServerSessions } from '@/lib/historySessions'
+import { mergeManualItems, manualQuery, type ServerManual } from '@/lib/manualApi'
 import { mockSubjects } from '@/lib/mock'
 import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
-import { sessionsByRangeQuery } from '@/lib/sessionsApi'
-import { loadSessionSyncState } from '@/lib/sessionSync'
 import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
 import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
@@ -134,22 +133,17 @@ export function RecordsPage() {
  */
 function ServerHistory({ localSessions }: { localSessions: StudySession[] }) {
   const [todayKey] = useState(getTodayKey)
-  const { cards } = useCards()
   const picksRange = getPicksRange(todayKey)
   // 고른 것을 공부 기록과 "같이" 받기 시작합니다. 이 줄이 없으면 아래 useSuspenseQuery 는
   // 공부 기록을 다 받은 뒤에야 불려서, 그때부터 받기 시작하느라 늦어집니다.
   usePrefetchQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
-  const results = useSuspenseQueries({
-    queries: getServerRanges(todayKey).map((range) => sessionsByRangeQuery(range.from, range.to)),
-  })
+  usePrefetchQuery(manualQuery())
+  // 서버 기록 6개월 + 이 기기 기록 (통계 탭과 같은 훅, hooks/useServerMergedSessions.ts)
+  const sessions = useServerMergedSessions(localSessions)
   const { data: serverPicks } = useSuspenseQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
-  const sessions = mergeServerSessions({
-    local: localSessions,
-    server: results.flatMap((result) => result.data),
-    sentServerIds: Object.values(loadSessionSyncState().sent),
-    cards,
-  })
-  return <HistoryView sessions={sessions} serverPicks={serverPicks} />
+  // 나 사용설명서 항목 수에 서버 항목도 셉니다. 못 받으면 null 이라 이 기기 것만 셉니다. (#654, lib/manualApi.ts)
+  const { data: serverManual } = useSuspenseQuery(manualQuery())
+  return <HistoryView sessions={sessions} serverPicks={serverPicks} serverManual={serverManual} />
 }
 
 interface HistoryViewProps {
@@ -157,10 +151,12 @@ interface HistoryViewProps {
   sessions: StudySession[]
   /** 서버에서 받은 "이번 주에 고른 것". 테스트 로그인 · 받는 중 · 못 받았으면 없음 (이 기기 것만 봅니다) */
   serverPicks?: WeeklyPick[] | null
+  /** 서버에서 받은 나 사용설명서. 테스트 로그인 · 받는 중 · 못 받았으면 없음 (이 기기 것만 셉니다) */
+  serverManual?: ServerManual | null
 }
 
 /** 기록 탭 화면 본체. 공부 기록만 밖에서 받고, 나머지(카드 · 체크인 · 고른 것 …)는 여기서 읽습니다. */
-function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
+function HistoryView({ sessions, serverPicks = null, serverManual = null }: HistoryViewProps) {
   // 오늘 · 지금 시각은 화면을 처음 그릴 때 한 번만 정합니다. (다시 그릴 때마다 바뀌면 숫자가 흔들립니다)
   const [todayKey] = useState(getTodayKey)
   const [now] = useState(Date.now)
@@ -184,7 +180,11 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
   // 이번 주에 고른 것. 이 기기 것 + 서버 것을 합쳐 보고, 고르면 이 기기에 저장한 뒤 서버로도 보냅니다. (#654)
   const { picks, savePick } = useWeeklyPicks({ serverPicks, todayKey })
   // 아래 "나 사용설명서" 줄에 보일 항목 수 (주간 리포트에서 넣으면 다음에 열 때 늘어납니다)
-  const [manualCount] = useState(() => loadManualItems().length)
+  const [manualCount] = useState(() =>
+    serverManual
+      ? mergeManualItems(loadManualItems(), serverManual.items).length
+      : loadManualItems().length,
+  )
   const [goals] = useState(loadGoals)
   const { cards } = useCards()
   const subjects = useSubjects()

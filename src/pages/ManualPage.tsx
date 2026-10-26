@@ -1,8 +1,12 @@
+import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
+import { useIsServerData } from '@/hooks/useIsServerData'
 import { useManualItems } from '@/hooks/useManualItems'
 import { cn } from '@/lib/cn'
 import { getTodayKey, moveDateKey } from '@/lib/date'
+import { manualQuery, type ServerManual } from '@/lib/manualApi'
 import { RECORDS_PATH } from '@/lib/tabMenu'
 import type { ManualItem, ManualItemCategory } from '@/types'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -12,6 +16,7 @@ import { Link } from 'react-router-dom'
  *   - 주간 리포트의 [사용설명서에 넣기] · 자기 실험의 "효과 있음" 이 여기에 올라옵니다.
  *   - 최근 7일 안에 들어온 항목에는 '새로 넣음' 표시가 붙습니다.
  *   - 항목을 누르면 [틀렸어요] 가 나옵니다. 누른 항목은 흐리게 둡니다.
+ *   - 진짜 로그인이면 서버와 읽고 씁니다. 이 기기에 있던 항목 · 틀렸어요는 처음 한 번 서버로 올립니다. (#654, lib/manualApi.ts)
  *
  * 기록 탭(History) 아래 화면이라 아래 탭은 '기록' 이 선택된 모양입니다. (lib/tabMenu.ts)
  *
@@ -42,7 +47,34 @@ function formatMonthDay(dateKey: string): string {
 }
 
 export function ManualPage() {
-  const { items, disputes, toggleDispute } = useManualItems()
+  const isServerData = useIsServerData()
+
+  // 테스트 로그인은 서버가 없어서 이 기기 항목만 봅니다.
+  if (!isServerData) return <ManualView serverManual={null} />
+
+  // 진짜 로그인은 서버의 사용설명서(실험 · 인사이트 항목 + 다른 기기에서 넣은 항목)도 받아서 합쳐 봅니다. (#654)
+  // 받는 동안에는 이 기기 항목으로 먼저 그립니다. 못 받으면 쿼리가 null 이라 이 기기 항목만 보입니다. (lib/manualApi.ts)
+  return (
+    <AsyncBoundary pendingFallback={<ManualView serverManual={null} />}>
+      <ServerManualView />
+    </AsyncBoundary>
+  )
+}
+
+/** 서버의 사용설명서를 받아서 그립니다. */
+function ServerManualView() {
+  const { data: serverManual } = useSuspenseQuery(manualQuery())
+  return <ManualView serverManual={serverManual} />
+}
+
+interface ManualViewProps {
+  /** 서버에서 받은 사용설명서. 테스트 로그인 · 받는 중 · 못 받았으면 null (이 기기 것만 봅니다) */
+  serverManual: ServerManual | null
+}
+
+/** 나 사용설명서 화면 본체 */
+function ManualView({ serverManual }: ManualViewProps) {
+  const { items, disputes, toggleDispute } = useManualItems(serverManual)
   // 지금 [틀렸어요] 를 펼쳐 둔 항목. null 이면 모두 접혀 있습니다.
   const [openId, setOpenId] = useState<string | null>(null)
   const [todayKey] = useState(getTodayKey)

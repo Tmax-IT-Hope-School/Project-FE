@@ -68,6 +68,9 @@ const RECORD_KEYS = [
   'manual-items',
   // 나 사용설명서에서 "틀렸어요" 를 누른 항목 (hooks/useManualItems.ts)
   'manual-disputes',
+  // 서버에 못 보낸 "틀렸어요" · 이 기기의 틀렸어요를 서버로 한 번 올렸는지 (lib/manualApi.ts, #654)
+  'manual-disputes-unsent',
+  'manual-disputes-uploaded',
   // 주간 리포트에서 고른 "다음 주에 하나만 해 볼 것" (lib/weeklyPicks.ts)
   'weekly-picks',
   // 서버로 아직 못 보낸 고른 것의 주들 (#654). 고른 것을 지우면 보낼 것도 없습니다.
