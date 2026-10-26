@@ -6,6 +6,7 @@ import { useCards } from '@/hooks/useCards'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { loadManualItems, useManualItems } from '@/hooks/useManualItems'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { useServerMergedSessions } from '@/hooks/useServerMergedSessions'
 import { useSubjects } from '@/hooks/useSubjects'
 import { useWeeklyPicks } from '@/hooks/useWeeklyPicks'
 import { answerChecksBetweenQuery, answerChecksQuery } from '@/lib/answerChecksApi'
@@ -46,13 +47,10 @@ import {
   type WeekReport,
 } from '@/lib/historyReport'
 import { loadGoals } from '@/lib/goals'
-import { getServerRanges, mergeServerSessions } from '@/lib/historySessions'
 import { mockSubjects } from '@/lib/mock'
 import { serverQuizCountsQuery } from '@/lib/quizResultsApi'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { buildCardIdByPlanId } from '@/lib/sessionRecords'
-import { sessionsByRangeQuery } from '@/lib/sessionsApi'
-import { loadSessionSyncState } from '@/lib/sessionSync'
 import { loadRoutines } from '@/lib/routines'
 import { loadRecord } from '@/lib/storage'
 import { loadQuizResults, type QuizResult } from '@/lib/studyQuiz'
@@ -134,21 +132,13 @@ export function RecordsPage() {
  */
 function ServerHistory({ localSessions }: { localSessions: StudySession[] }) {
   const [todayKey] = useState(getTodayKey)
-  const { cards } = useCards()
   const picksRange = getPicksRange(todayKey)
   // 고른 것을 공부 기록과 "같이" 받기 시작합니다. 이 줄이 없으면 아래 useSuspenseQuery 는
   // 공부 기록을 다 받은 뒤에야 불려서, 그때부터 받기 시작하느라 늦어집니다.
   usePrefetchQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
-  const results = useSuspenseQueries({
-    queries: getServerRanges(todayKey).map((range) => sessionsByRangeQuery(range.from, range.to)),
-  })
+  // 서버 기록 6개월 + 이 기기 기록 (통계 탭과 같은 훅, hooks/useServerMergedSessions.ts)
+  const sessions = useServerMergedSessions(localSessions)
   const { data: serverPicks } = useSuspenseQuery(weeklyPicksQuery(picksRange.from, picksRange.to))
-  const sessions = mergeServerSessions({
-    local: localSessions,
-    server: results.flatMap((result) => result.data),
-    sentServerIds: Object.values(loadSessionSyncState().sent),
-    cards,
-  })
   return <HistoryView sessions={sessions} serverPicks={serverPicks} />
 }
 
