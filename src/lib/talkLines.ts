@@ -8,10 +8,13 @@
 import { CARD_FAIL_CAUSES, type CardFailCause } from '@/lib/cardMarks'
 import { CARD_RESULT_LABELS } from '@/lib/cardResult'
 import { DAY_STATUS_INFO, type CalendarDay } from '@/lib/calendarDay'
-import { formatMinutes, sessionMinutes } from '@/lib/dailyRecords'
+import { formatClock, formatMinutes, sessionMinutes } from '@/lib/dailyRecords'
+import { toDayKey } from '@/lib/date'
 import type { SelfAnalysis } from '@/lib/analysisFacts'
 import type { FocusScoreRecord } from '@/lib/focusScore'
 import { getScaleLevel, psychScales, type PsychScale } from '@/lib/psychTest'
+import type { MissedTimeDay } from '@/lib/scheduleAdjust'
+import { getSessionCardId } from '@/lib/sessionRecords'
 import { SHORTFALL_REASONS } from '@/lib/sessionTags'
 import type { QuizAnswer, QuizQuestion } from '@/lib/studyQuiz'
 import type { Card, ShortfallReason, StudySession } from '@/types'
@@ -195,4 +198,62 @@ export function dayReviewLines(day: CalendarDay, studyMinutes: number | undefine
   }
   if (day.pendingCount > 0) lines.push(`아직 결과 안 나온 카드 ${day.pendingCount}장`)
   return lines
+}
+
+/**
+ * 일정 조정 제안 (SCHEDULE_ADJUST, 2026-10-26) — 첫 줄은 무엇이 이어졌는지, 그 뒤는 하루에 한 줄 (7일까지)
+ * 하루 줄의 괄호에는 그날 제시간에 시작하지 못한 카드 중 가장 이른 카드 하나를 예로 적습니다.
+ *
+ *   scheduleAdjustLines([{ dateKey: '2026-10-24', timedCount: 3, notOnTime: [영어 단어 late, …] }, …], cards, sessions)
+ *     -> ['최근 3일 연속, 시각을 정한 카드의 절반 넘게 제시간(10분 안)에 시작하지 못했어요',
+ *         '10/24: 카드 3개 중 2개 늦게 시작하거나 못 함 (영어 단어 19:00 계획 → 19:40 시작)', …]
+ */
+export function scheduleAdjustLines(
+  streak: MissedTimeDay[],
+  cards: Card[],
+  sessions: StudySession[],
+): string[] {
+  const lines = [
+    `최근 ${streak.length}일 연속, 시각을 정한 카드의 절반 넘게 제시간(10분 안)에 시작하지 못했어요`,
+  ]
+  for (const day of streak.slice(0, 7)) {
+    const [, month, date] = day.dateKey.split('-').map(Number)
+    const head = `${month}/${date}: 카드 ${day.timedCount}개 중 ${day.notOnTime.length}개 늦게 시작하거나 못 함`
+
+    // 예로 들 카드: 제시간에 못 시작한 카드 중 시작 시각이 가장 이른 것
+    const examples = day.notOnTime
+      .map((item) => ({ ...item, card: cards.find((card) => card.id === item.cardId) }))
+      .filter((item) => item.card?.startTime)
+      .sort((a, b) => (a.card?.startTime ?? '').localeCompare(b.card?.startTime ?? ''))
+    const example = examples[0]
+    if (!example?.card) {
+      lines.push(head)
+      continue
+    }
+
+    // 늦게 시작했으면 처음 켠 시각, 아니면 결과 글자(미뤘어요 · 못 했어요 · 아직 정리 안 했어요)
+    const firstStartAt = firstCardStartAt(sessions, example.cardId, day.dateKey)
+    const what =
+      example.result === 'late' && firstStartAt !== null
+        ? `${formatClock(firstStartAt)} 시작`
+        : CARD_RESULT_LABELS[example.result]
+    lines.push(`${head} (${example.card.title} ${example.card.startTime} 계획 → ${what})`)
+  }
+  return lines
+}
+
+/** 그 카드 · 그 날짜에 처음 타이머를 켠 시각. 노는 기록은 빼고, 없으면 null */
+function firstCardStartAt(
+  sessions: StudySession[],
+  cardId: string,
+  dateKey: string,
+): number | null {
+  let first: number | null = null
+  for (const session of sessions) {
+    if (session.kind === 'play') continue
+    if (getSessionCardId(session, {}) !== cardId) continue
+    if (toDayKey(session.startedAt) !== dateKey) continue
+    if (first === null || session.startedAt < first) first = session.startedAt
+  }
+  return first
 }

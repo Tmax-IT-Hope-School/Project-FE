@@ -172,9 +172,16 @@ export function threadStorageKey(room: ChatRoomId): string {
  * 무엇에 대한 대화인지 (BE #330). 서버는 이 종류에 맞춰 코치의 첫 말과 이야기 방법을 정합니다.
  *   SESSION_REVIEW 방금 공부 후기 · CARD_FAIL 못 한 카드 · WEEKLY_REPORT 주간 리포트 · AI 분석
  *   QUIZ_WRONG 틀린 확인 문제 · PSYCH_RESULT 성향 검사 결과 · DAY_REVIEW 달력의 하루
+ *   SCHEDULE_ADJUST 일정 조정 제안 (홈, 2026-10-26 — lib/scheduleAdjust.ts)
  */
 export type ChatAboutKind =
-  'SESSION_REVIEW' | 'CARD_FAIL' | 'WEEKLY_REPORT' | 'QUIZ_WRONG' | 'PSYCH_RESULT' | 'DAY_REVIEW'
+  | 'SESSION_REVIEW'
+  | 'CARD_FAIL'
+  | 'WEEKLY_REPORT'
+  | 'QUIZ_WRONG'
+  | 'PSYCH_RESULT'
+  | 'DAY_REVIEW'
+  | 'SCHEDULE_ADJUST'
 
 const ABOUT_KINDS: ChatAboutKind[] = [
   'SESSION_REVIEW',
@@ -183,11 +190,12 @@ const ABOUT_KINDS: ChatAboutKind[] = [
   'QUIZ_WRONG',
   'PSYCH_RESULT',
   'DAY_REVIEW',
+  'SCHEDULE_ADJUST',
 ]
 
 /**
  * [이야기하기] 의 주제마다 어느 방으로 갈지. 방 구성이 바뀌면 여기만 고칩니다.
- *   후기 · 못 한 카드 · 검사 결과 · 하루 → 상담(매일 코치) / 주간 숫자 → 계획 / 틀린 문제 → 과목 쌤
+ *   후기 · 못 한 카드 · 검사 결과 · 하루 → 상담(매일 코치) / 주간 숫자 · 일정 조정 → 계획 / 틀린 문제 → 과목 쌤
  */
 export const TALK_ROOM_OF: Record<ChatAboutKind, ChatRoomId> = {
   SESSION_REVIEW: DAILY_COACH_ROOM,
@@ -196,6 +204,7 @@ export const TALK_ROOM_OF: Record<ChatAboutKind, ChatRoomId> = {
   QUIZ_WRONG: 'tutor',
   PSYCH_RESULT: DAILY_COACH_ROOM,
   DAY_REVIEW: DAILY_COACH_ROOM,
+  SCHEDULE_ADJUST: PLANNER_ROOM,
 }
 
 /** 주제와, 이 기기에서 만든 사실 줄 (카드 제목 · 숫자 등. 이름 같은 개인정보는 넣지 않습니다) */

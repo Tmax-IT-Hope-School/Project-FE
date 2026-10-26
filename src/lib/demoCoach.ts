@@ -214,6 +214,11 @@ export function demoTopicOpener(kind: ChatAboutKind): CoachMessage {
         text: '이 날 기록 같이 볼까? 그날 뭐가 제일 잘 됐고, 뭐가 제일 아쉬웠어?',
         chips: [say('잘 된 게 있었어'), say('아쉬운 게 더 많아')],
       }
+    case 'SCHEDULE_ADJUST':
+      return {
+        text: '최근 며칠 계획한 시각에 시작하기 어려웠구나. 탓하려는 게 아니야. 시작 시각을 옮기거나 양을 줄여 보면 지키기 쉬워질 수 있어. 어느 쪽이 나을 것 같아?',
+        chips: [say('시작 시각을 옮기고 싶어'), say('양을 줄이고 싶어'), PLAN_CHIP],
+      }
   }
 }
 

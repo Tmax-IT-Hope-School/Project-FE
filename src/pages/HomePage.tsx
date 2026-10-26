@@ -13,6 +13,7 @@ import { useGoals } from '@/hooks/useGoals'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { isInApp } from '@/lib/appBridge'
+import { buildJudgedCardDays } from '@/lib/cardDays'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { getCardsOnDate } from '@/lib/cards'
 import { localCheckCall, type StudiedInfo } from '@/lib/checkCall'
@@ -26,8 +27,16 @@ import { weekEventsQuery, type CalendarEvent } from '@/lib/googleCalendar'
 import { getUpcomingMyEvents } from '@/lib/myEvents'
 import { loadOnboardingAnswers } from '@/lib/onboardingSteps'
 import { toDayMinutes } from '@/lib/planConflict'
-import { loadRestDays } from '@/lib/restDays'
+import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { getWeekday, getWeekdayName } from '@/lib/routines'
+import {
+  SCHEDULE_ADJUST_LOOKBACK_DAYS,
+  dismissScheduleAdjust,
+  getMissedTimeStreak,
+  isScheduleAdjustHidden,
+  loadScheduleAdjustDismissed,
+  shouldSuggestScheduleAdjust,
+} from '@/lib/scheduleAdjust'
 import {
   daysUntilKey,
   dismissReplan,
@@ -54,7 +63,8 @@ import {
 } from '@/lib/settingChanges'
 import type { SettingChange } from '@/lib/settingsMapping'
 import { loadStudyFocus } from '@/lib/studyFocus'
-import { COACH_PATH, PLAN_CHAT_PATH, handOffPlanChip } from '@/lib/chatRooms'
+import { COACH_PATH, PLAN_CHAT_PATH, handOffPlanChip, startTalk } from '@/lib/chatRooms'
+import { scheduleAdjustLines } from '@/lib/talkLines'
 import {
   getTodayCardsState,
   type TodayCardItem,
@@ -98,6 +108,7 @@ const textLinkClass =
  *   ③ 학교 정보 한 묶음: 위 탭 [시간표 | 급식 | 일정 | 공지] 중 하나만 펼침 (2026-10-22, 주소 ?school=)
  *      일정 = 학교 일정 + 내 일정을 날짜 순서로 D-day 와 함께, 공지 = 학교 홈페이지 글 제목 · 대회 글은 🏆
  *   맨 아래: AI 가 바꾼 설정 알림
+ *   (며칠 연속 계획한 시각에 시작하기 어려웠으면 ② 바로 위에 일정 조정 제안, 2026-10-26 lib/scheduleAdjust.ts)
  *
  * 숲(2026-10-24 에 뺌) · 오늘 한 줄 · 관리 모드 띠(2026-10-25 에 뺌)는 빠졌습니다. 알림 · 통화는 코치 화면 머리에, 설정은 헤더(PC 메뉴 · 모바일 오른쪽 위 톱니)에 있습니다.
  */
@@ -142,6 +153,42 @@ function HomeView() {
   // AI 가 바꾼 설정 기록 (#385). [되돌리기] · [확인] 을 누르면 줄어듭니다. (lib/settingChanges.ts)
   const [settingChanges, setSettingChanges] = useState(loadSettingChanges)
 
+  // 일정 조정 제안 (2026-10-26, lib/scheduleAdjust.ts)
+  // 어제까지 "시각을 정한 카드의 절반 넘게 제시간에 시작하지 못한 날" 이 3일 연속이면 계획 방에서 조정하자고 제안합니다.
+  const [adjustDismissed, setAdjustDismissed] = useState(loadScheduleAdjustDismissed)
+  const recentJudgedDays = buildJudgedCardDays(
+    cards,
+    allSessions,
+    moveDateKey(todayKey, -SCHEDULE_ADJUST_LOOKBACK_DAYS),
+    moveDateKey(todayKey, -1),
+    now,
+    (cardId, dateKey) => getCardDayMarkInfo(cardId, dateKey, restDays, marks),
+  )
+  const missedStreak = getMissedTimeStreak(recentJudgedDays, cards, todayKey)
+  const showScheduleAdjust =
+    shouldSuggestScheduleAdjust(missedStreak) && !isScheduleAdjustHidden(adjustDismissed, todayKey)
+
+  // [계획 방에서 조정하기]: 이어진 날의 사실 줄을 계획 방에 맡기고 갑니다. 다녀온 뒤 또 뜨지 않게 3일 숨깁니다.
+  function handleAdjustSchedule() {
+    dismissScheduleAdjust(todayKey)
+    navigate(
+      startTalk({
+        about: {
+          kind: 'SCHEDULE_ADJUST',
+          lines: scheduleAdjustLines(missedStreak, cards, allSessions),
+        },
+        label: '📅 일정 조정해 보고 싶어',
+        target: null,
+      }),
+    )
+  }
+
+  // [괜찮아요]: 오늘부터 3일 동안 숨깁니다.
+  function handleDismissScheduleAdjust() {
+    dismissScheduleAdjust(todayKey)
+    setAdjustDismissed(todayKey)
+  }
+
   // 머리글에 보여 줄 가장 가까운 목표의 D-day
   const nearestGoal = [...activeGoals].sort((a, b) => a.dDay.localeCompare(b.dDay))[0]
 
@@ -171,6 +218,14 @@ function HomeView() {
       {/* 모바일은 위아래로 쌓고, PC(sm 이상)는 왼쪽에 계획(넓게) · 오른쪽에 미션 · 통화(좁게)를 나란히 놓습니다. */}
       <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-[3fr_2fr] sm:gap-6">
         <div className="flex min-w-0 flex-col gap-4">
+          {/* 며칠 연속 계획한 시각에 시작하기 어려웠으면, 오늘 계획 바로 위에 일정 조정을 제안합니다. (2026-10-26) */}
+          {showScheduleAdjust && (
+            <ScheduleAdjustSuggestion
+              days={missedStreak.length}
+              onAdjust={handleAdjustSchedule}
+              onDismiss={handleDismissScheduleAdjust}
+            />
+          )}
           {/* ② 지금 할 카드 → 오늘 계획. 홈에서 가장 먼저 · 가장 크게 보이는 것은 "지금 할 카드" 하나입니다. */}
           <TodayPlanSection
             state={todayCards}
@@ -973,6 +1028,47 @@ function PlanRow({ item, isHero, onStart }: PlanRowProps) {
     </li>
   )
 }
+interface ScheduleAdjustSuggestionProps {
+  /** 계획한 시각에 시작하기 어려웠던 날이 며칠 이어졌는지 (3 이상) */
+  days: number
+  /** [계획 방에서 조정하기] 를 눌렀을 때 */
+  onAdjust: () => void
+  /** [괜찮아요] 를 눌렀을 때 (3일 숨김) */
+  onDismiss: () => void
+}
+
+/**
+ * 일정 조정 제안 (2026-10-26). 탓하지 않고, 목표는 그대로 둔 채 시각이나 양을 바꿔 보자고 권합니다.
+ * 모양은 시험 계획 제안(ExamPlanSuggestion)과 같은 노란 묶음 + 버튼 두 개입니다.
+ */
+function ScheduleAdjustSuggestion({ days, onAdjust, onDismiss }: ScheduleAdjustSuggestionProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <p className="text-[15px] font-bold break-keep text-amber-900">
+        목표 달성을 위해 일정을 조정해 볼까요?
+      </p>
+      <p className="text-sm break-keep text-amber-900">
+        최근 {days}일 동안 계획한 시각에 시작하기 어려웠어요. 시작 시각이나 양을 바꿔 보면 지키기
+        쉬워질 수 있어요.
+      </p>
+      {/* 모바일은 [조정하기] 가 남은 폭을 채우고 [괜찮아요] 는 글자만큼, sm 부터는 왼쪽에 모읍니다. (375px 에서 글자가 두 줄로 안 깨지게) */}
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-w-0 flex-1 sm:flex-none"
+          onClick={onAdjust}
+        >
+          📅 계획 방에서 조정하기
+        </Button>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={onDismiss}>
+          괜찮아요
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 interface SettingChangeNoticeProps {
   changes: SettingChange[]
   onRevert: (change: SettingChange) => void

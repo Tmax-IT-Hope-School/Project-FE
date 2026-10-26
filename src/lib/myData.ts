@@ -150,6 +150,8 @@ const RECORD_KEYS = [
   'checklist-complete-count',
   // 테스트 로그인에서 사진 채점을 해 본 시연 결과 (lib/answerChecksApi.ts)
   'answer-checks-demo',
+  // 홈의 일정 조정 제안에서 [괜찮아요] 를 누른 날짜 (lib/scheduleAdjust.ts)
+  'schedule-adjust-dismissed',
   ...DIARY_KEYS,
 ]
 
