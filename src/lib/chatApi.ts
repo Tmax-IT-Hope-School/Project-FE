@@ -34,6 +34,7 @@
  */
 import { api, ApiError } from '@/lib/api'
 import { loadCallCard } from '@/lib/callCard'
+import { markChatCrisis } from '@/lib/crisisSignal'
 import { loadStudySignals } from '@/lib/studySignals'
 import type { CallLine } from '@/lib/callReview'
 import type { ChatAbout, ServerChatRoom } from '@/lib/chatRooms'
@@ -230,6 +231,8 @@ async function postChat(path: string, body: unknown): Promise<ChatReply> {
   })
   // 502: 서버가 이상한 응답을 줬다는 뜻으로 씁니다.
   if (!isChatReply(result)) throw new ApiError('서버 응답 모양이 올바르지 않습니다', 502)
+  // 위기 표현이 감지됐으면 이 기기에도 적어 둡니다. 독촉 알림 · 전화가 7일 동안 멈춥니다. (lib/crisisSignal.ts)
+  if (result.showHelp) markChatCrisis(Date.now())
   const record = result as unknown as Record<string, unknown>
   return {
     chatId: result.chatId,

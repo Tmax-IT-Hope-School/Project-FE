@@ -66,11 +66,12 @@ function notifyUnreadMessages(): void {
   const today = getTodayKey()
 
   // 체크인·일기·성찰 일기에 저장된 글과 기분을 모두 안전 브레이크 입력으로 씁니다.
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   const brake = getSafetyBrakeResult({
     now: new Date(),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
     quietHours: toQuietHours(settings),
   })

@@ -372,11 +372,12 @@ export function loadSinceLastCall(
 ): SinceLastCallFields {
   const { cards, judgedDays, lastCallAt } = loadCallJudgedDays(now, todayKey)
 
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   const brake = getSafetyBrakeResult({
     now: new Date(now),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
   })
   const careStage = loadLatestCareStage(todayKey)

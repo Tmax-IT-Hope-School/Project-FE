@@ -492,11 +492,12 @@ export function loadNudgeDay(dateKey: string, stopWhip: boolean): NudgeDay {
 
 /** 이 기기의 안전 브레이크가 지금 공부 재촉을 멈췄는지 (위기 표현이 있던 글이 있으면 true) */
 export function loadStopWhip(now: number): boolean {
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   return getSafetyBrakeResult({
     now: new Date(now),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
   }).stopWhip
 }

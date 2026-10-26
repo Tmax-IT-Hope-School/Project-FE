@@ -116,11 +116,12 @@ function loadCallTime(): string | null {
   if (typeof saved !== 'string' || parseCallTime(saved) === null) return null
   if (isCallTimeInQuietHours(saved, toQuietHours(getMessageSettings()))) return null
 
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   const brake = getSafetyBrakeResult({
     now: new Date(),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
   })
   return brake.stopWhip ? null : saved

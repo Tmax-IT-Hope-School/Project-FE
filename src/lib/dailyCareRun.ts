@@ -148,11 +148,12 @@ export function runDailyCareStage(todayKey: string, now: number): SavedCareStage
     dayIndex,
   )
 
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   const brake = getSafetyBrakeResult({
     now: new Date(now),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
   })
 

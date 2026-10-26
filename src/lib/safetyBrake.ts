@@ -46,6 +46,11 @@ export interface SafetyBrakeInput {
   exams: ExamDateInput[]
   /** 연락 금지 시간. 안 넘기면 기본값(DEFAULT_QUIET_HOURS, 23시~7시)을 씁니다. (#60) */
   quietHours?: QuietHours
+  /**
+   * 글 말고 다른 곳에서 온 위기 신호. true 면 글에 위기 표현이 없어도 위기로 봅니다.
+   * 채팅에서 서버가 위기를 감지했거나 보호 조치 메시지를 보냈을 때입니다. (lib/crisisSignal.ts)
+   */
+  crisisFlagged?: boolean
 }
 
 export interface SafetyBrakeResult {
@@ -74,6 +79,7 @@ export interface SafetyBrakeResult {
  * - 끝의 어미(다 · 어 · 었어 …)는 빼고 적습니다.
  *   '죽고싶' 하나로 '죽고 싶다' · '죽고싶어' · '죽고 싶었어' 를 모두 잡습니다.
  * - 놓치는 것보다 한 번 더 안내하는 쪽이 안전합니다. 그래서 '죽고 싶지는 않아' 처럼 부정하는 말도 잡힙니다.
+ * - 서버(BE CrisisText)와 같은 목록 · 같은 규칙입니다. 한쪽을 고치면 다른 쪽도 같이 고칩니다.
  */
 export const CRISIS_KEYWORDS = [
   '죽고싶',
@@ -122,23 +128,70 @@ function countDays(fromKey: string, toKey: string): number {
   return Math.round(diffMs / msPerDay) + 1
 }
 
+/** 낱말 사이에서 우연히 만들어질 수 있는 짧은 표현. 아래 ① · ② 규칙은 이 둘에만 씁니다. */
+const JOIN_PRONE_KEYWORDS = ['자살', '자해']
+
+/**
+ * at 자리의 '자살' · '자해' 가 낱말 사이에서 우연히 만들어진 것인지 봅니다.
+ *   ① '혼자' 뒤에 살 · 해 가 붙은 것            '혼자 해냈다'(혼자해냈다) · '혼자 살기'   -> true
+ *   ② '자' 가 앞 낱말의 끝이고, 띄어 쓴 다음 낱말이 살 · 해 로 시작  '과자 살래' · '하자 해서' -> true
+ *   '혼자 자해' 의 두 번째 '자' 는 앞에 빈칸이 있어서 한 낱말입니다                      -> false (위기)
+ * spaceBefore[i] 는 붙여 쓴 글의 i 번째 글자 바로 앞에 빈칸이 있었는지입니다.
+ */
+function isJoinedByChance(
+  compactText: string,
+  spaceBefore: boolean[],
+  keyword: string,
+  at: number,
+): boolean {
+  if (!JOIN_PRONE_KEYWORDS.includes(keyword) || at === 0) return false
+  if (compactText[at - 1] === '혼') return true
+  return !spaceBefore[at] && spaceBefore[at + 1]
+}
+
+/** 글 하나에 목록의 표현이 들어 있는지 봅니다. */
+function containsCrisisKeyword(text: string): boolean {
+  // 빈칸(띄어쓰기 · 줄바꿈 · 탭)을 전부 지워서 붙여 씁니다. 지우면서 글자마다 앞에 빈칸이 있었는지 적어 둡니다.
+  let compactText = ''
+  const spaceBefore: boolean[] = []
+  let sawSpace = false
+  for (const letter of text.split('')) {
+    if (/\s/.test(letter)) {
+      sawSpace = true
+      continue
+    }
+    compactText += letter
+    spaceBefore.push(sawSpace)
+    sawSpace = false
+  }
+
+  return CRISIS_KEYWORDS.some((keyword) => {
+    // 같은 표현이 여러 번 나올 수 있어서, 나온 자리를 하나씩 다 봅니다.
+    let at = compactText.indexOf(keyword)
+    while (at !== -1) {
+      if (!isJoinedByChance(compactText, spaceBefore, keyword, at)) return true
+      at = compactText.indexOf(keyword, at + 1)
+    }
+    return false
+  })
+}
+
 /**
  * 규칙 1: 위기 표현 검사
  *
  * 띄어쓰기와 줄바꿈을 모두 지운 뒤에 목록의 글자가 들어 있는지 봅니다.
  * 그래서 '죽고 싶다' 와 '죽고싶다' 를 같게 봅니다.
+ * 단, 낱말 사이에서 우연히 만들어진 '자살' · '자해' 는 빼 줍니다. (isJoinedByChance)
+ * 사용자가 미성년자라서, 진짜 위기 표현을 놓치는 쪽으로는 줄이지 않습니다.
  *
  *   예1) ['오늘 학원에서 힘들었다'] -> false
  *   예2) ['이제 그만 살고 싶다는 생각이 들었다'] -> true ('그만살고싶')
  *   예3) ['죽고싶다'], ['죽고 싶어'], ['사라지고 싶어'], ['자해했어'], ['극단적 선택'] -> 모두 true
  *   예4) ['오래오래 살고 싶다'] -> false ('살고싶' 만으로는 잡지 않습니다)
+ *   예5) ['숙제를 혼자 해냈다'], ['과자 살래'] -> false   ['혼자 자해했어'], ['자 살 하 고 싶 다'] -> true
  */
 export function hasCrisisText(texts: string[]): boolean {
-  return texts.some((text) => {
-    // \s+ 는 띄어쓰기·줄바꿈·탭이 이어진 부분입니다. 전부 지워서 붙여 씁니다.
-    const compactText = text.replace(/\s+/g, '')
-    return CRISIS_KEYWORDS.some((keyword) => compactText.includes(keyword))
-  })
+  return texts.some((text) => containsCrisisKeyword(text))
 }
 
 /**
@@ -222,7 +275,7 @@ export function getSafetyBrakeResult(input: SafetyBrakeInput): SafetyBrakeResult
   const todayKey = toDayKey(input.now)
   const quietHours = input.quietHours ?? DEFAULT_QUIET_HOURS
 
-  const crisisDetected = hasCrisisText(input.recentTexts)
+  const crisisDetected = input.crisisFlagged === true || hasCrisisText(input.recentTexts)
   const examIsNear = isNearExam(todayKey, input.exams)
   const moodIsLow = hasLowMoodStreak(todayKey, input.recentMoods)
 

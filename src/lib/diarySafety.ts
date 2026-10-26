@@ -4,6 +4,7 @@
  *
  * 글을 저장할 때 도움 안내 화면으로 보내던 shouldShowCrisisHelp 는 2026-10-18 에 지웠습니다. (전용 도움 화면 삭제)
  */
+import { hasRecentCrisisSignal } from '@/lib/crisisSignal'
 import { loadExams } from '@/lib/exams'
 import type { ExamDateInput, MoodRecordInput } from '@/lib/safetyBrake'
 import { loadSchoolExamDates } from '@/lib/schoolEvents'
@@ -41,8 +42,14 @@ function loadUnlockReasons(): string[] {
  * - 일기(#63): 기분 + 일기 원문 (저장 이름 'diary', useDiaryEntries 와 같습니다)
  * - 성찰 일기(#70): 답변 글 (저장 이름 'reflection-entries', useReflectionEntries 와 같습니다)
  * - 시험 회고(#80) · 집중 모드 해제 이유(#69): 적은 글
+ * - crisisFlagged: 채팅은 글을 이 기기에서 검사하지 않고 서버가 검사합니다. 서버가 최근 7일 안에
+ *   위기라고 알려 줬으면 true 입니다. (lib/crisisSignal.ts) 안전 브레이크의 crisisFlagged 에 그대로 넘깁니다.
  */
-export function loadSavedWritings(): { texts: string[]; moods: MoodRecordInput[] } {
+export function loadSavedWritings(): {
+  texts: string[]
+  moods: MoodRecordInput[]
+  crisisFlagged: boolean
+} {
   const checkIns = loadEntries<CheckIn>('checkins')
   const diaries = loadEntries<DiaryEntry>('diary')
   const reflections = loadEntries<ReflectionEntry>('reflection-entries')
@@ -62,6 +69,7 @@ export function loadSavedWritings(): { texts: string[]; moods: MoodRecordInput[]
       ...checkIns.map((checkIn) => ({ date: checkIn.date, mood: checkIn.mood })),
       ...diaries.map((diary) => ({ date: diary.date, mood: diary.mood })),
     ],
+    crisisFlagged: hasRecentCrisisSignal(Date.now()),
   }
 }
 

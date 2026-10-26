@@ -96,11 +96,12 @@ export function getAutoUnlockReason(input: {
  * 관리 강도(#28)와 같은 기준으로 stopWhip 또는 recoveryMode 면 켜진 것으로 봅니다.
  */
 export function isSafetyBrakeOnNow(): boolean {
-  const { texts, moods } = loadSavedWritings()
+  const { texts, moods, crisisFlagged } = loadSavedWritings()
   const brake = getSafetyBrakeResult({
     now: new Date(),
     recentTexts: texts,
     recentMoods: moods,
+    crisisFlagged,
     exams: loadExamDates(),
   })
   return brake.stopWhip || brake.recoveryMode
