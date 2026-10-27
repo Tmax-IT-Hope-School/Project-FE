@@ -11,14 +11,14 @@
  *   그 코드를 한꺼번에 바꾸지 않으려고, 저장할 때 기기에 먼저 저장하고 서버로도 보냅니다.
  *   그래서 서버에 못 보내도 방금 고른 기분은 사라지지 않습니다. 못 보낸 날은 적어 두었다가 다음에 다시 보냅니다.
  *
- * ■ 서버에서 읽어 오는 것은 두 가지뿐입니다.
+ * ■ 서버에서 읽어 오는 것은 세 가지입니다.
  *   1. 코치 화면을 열 때 "오늘 체크인을 했는지" (다른 기기에서 했으면 다시 묻지 않으려고. pages/CoachPage.tsx)
  *   2. 보내기 직전에 서버에 있는 그날의 체크인.
  *      - 1탭 체크인은 AI 통화가 채운 칸(어제 못 채운 이유 등)이 덮어쓰기로 지워지지 않게, 비어 있는 칸만 서버 값으로 채워 보냅니다.
  *      - 자세히 체크인(/check)은 학생이 화면에서 보고 고친 그대로 보냅니다. 약속을 일부러 지웠는데 서버의 옛 약속이
  *        다시 채워지면 안 되기 때문입니다. (서버 규칙도 "마지막에 보낸 그대로" 입니다)
- *   지난 날들을 서버에서 통째로 가져오지는 않습니다. "모든 기록 지우기" 는 이 기기의 기록만 지워서,
- *   가져오면 지운 기록이 되살아나기 때문입니다.
+ *   3. 지난 날들의 체크인 (fetchServerCheckIns). 이 기기에 그날 체크인이 없을 때만 lib/serverHistoryPull.ts 가 적어 둡니다. (2026-10-27)
+ *      "모든 기록 지우기" 가 서버의 체크인도 같이 지워서, 받아 와도 지운 기록이 되살아나지 않습니다.
  *
  * ■ 테스트 로그인(서버가 모르는 가짜 토큰)일 때는 서버를 부르지 않고 지금처럼 이 기기에만 저장합니다. (canSyncCheckIns)
  *
@@ -179,6 +179,15 @@ async function fetchServerCheckIn(date: string): Promise<ServerCheckIn | null> {
   if (!Array.isArray(result)) return null
   const found = result.find((item) => isServerCheckIn(item) && item.date === date)
   return found === undefined ? null : (found as ServerCheckIn)
+}
+
+/** 기간 안(31일까지)의 서버 체크인 목록. 모양이 틀린 것은 뺍니다. (lib/serverHistoryPull.ts 가 이 기기로 받아 올 때 씁니다) */
+export async function fetchServerCheckIns(from: string, to: string): Promise<ServerCheckIn[]> {
+  const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+  const result = await api<unknown>(`/checkins?${query}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  return Array.isArray(result) ? result.filter(isServerCheckIn) : []
 }
 
 /**

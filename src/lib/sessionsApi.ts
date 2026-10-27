@@ -431,7 +431,8 @@ function assertRange(from: string, to: string): void {
   }
 }
 
-async function fetchSessionsByRange(from: string, to: string): Promise<StudySession[]> {
+/** 기간 안의 내 기록 목록 (31일까지). 서버 기록을 이 기기로 받아 올 때도 씁니다. (lib/serverHistoryPull.ts) */
+export async function fetchSessionsByRange(from: string, to: string): Promise<StudySession[]> {
   assertRange(from, to)
   const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
   const result = await api<unknown>(`/study-sessions?${query}`, {
