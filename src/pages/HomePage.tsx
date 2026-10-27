@@ -51,7 +51,7 @@ import {
 } from '@/lib/settingChanges'
 import type { SettingChange } from '@/lib/settingsMapping'
 import { loadStudyFocus } from '@/lib/studyFocus'
-import { COACH_PATH, PLAN_CHAT_PATH, handOffPlanChip } from '@/lib/chatRooms'
+import { COACH_PATH, handOffPlanChip } from '@/lib/chatRooms'
 import {
   getTodayCardsState,
   type TodayCardItem,
@@ -93,8 +93,9 @@ const textLinkClass =
  *   ② 학교 정보 한 묶음: 위 탭 [시간표 | 급식 | 일정 | 공지] 중 하나만 펼침 (2026-10-22, 주소 ?school=)
  *      일정 = 학교 일정 + 내 일정을 날짜 순서로 D-day 와 함께, 공지 = 학교 홈페이지 글 제목 · 대회 글은 🏆
  *      2026-10-27 시연 피드백으로 지금 할 카드 위로 올렸습니다.
- *   ③ 지금 할 카드 + 달력: 이번 주 7일 줄과 고른 날의 카드 · 구글 캘린더 일정 (2026-10-24, 주소 ?day=)
- *      오늘을 고르면 예전 "오늘 계획" 목록 그대로 [시작] 이 붙습니다. 카드가 없으면 [코치와 오늘 계획 짜기] · [사진으로 만들기]
+ *   ③ 달력: 이번 주 7일 줄과 고른 날의 카드 · 구글 캘린더 일정 (2026-10-24, 주소 ?day=)
+ *      오늘을 고르면 예전 "오늘 계획" 목록 그대로 [시작] 이 붙고, 지금 할 카드(없으면 다음 카드)에 형광펜 '지금' · '다음' 이 붙습니다.
+ *      위에 크게 있던 "지금 할 카드" 묶음(카드가 없으면 [코치와 오늘 계획 짜기] · [사진으로 만들기])은 2026-10-27 시연 피드백으로 뺐습니다.
  *   맨 아래: AI 가 바꾼 설정 알림
  *
  * 숲(2026-10-24 에 뺌) · 오늘 한 줄 · 관리 모드 띠(2026-10-25 에 뺌)는 빠졌습니다. 알림 · 통화는 코치 화면 머리에, 설정은 헤더(PC 메뉴 · 모바일 오른쪽 위 톱니)에 있습니다.
@@ -167,15 +168,12 @@ function HomeView() {
           2026-10-27 시연 피드백으로 "지금 할 카드" 위, 인사 바로 아래로 올렸습니다. */}
       <SchoolInfoSection todayKey={todayKey} />
 
-      {/* ③ 지금 할 카드 → 오늘 계획 */}
+      {/* ③ 달력 · 오늘 계획 (위의 "지금 할 카드" 큰 묶음은 2026-10-27 시연 피드백으로 뺐습니다) */}
       <TodayPlanSection
         state={todayCards}
         cards={cards}
         todayKey={todayKey}
         onStart={(card) => navigate(`/timer?card=${encodeURIComponent(card.id)}`)}
-        // ?plan=today: 코치 화면이 열리자마자 오늘 계획을 짜 줍니다. (계획 핑퐁)
-        onPlanWithCoach={() => navigate(`${PLAN_CHAT_PATH}?plan=today`)}
-        onPhoto={() => navigate('/cards/photo')}
       />
 
       {/* AI 가 설정을 바꿨으면 알림 줄 + [되돌리기] (#385) */}
@@ -226,46 +224,24 @@ interface TodayPlanSectionProps {
   todayKey: string
   /** 카드로 시작 — 타이머가 그 카드로 엽니다 (/timer?card=…) */
   onStart: (card: CardModel) => void
-  /** 카드가 없을 때: 코치와 오늘 계획 짜기 */
-  onPlanWithCoach: () => void
-  /** 카드가 없을 때: 시험 범위 사진으로 카드 만들기 */
-  onPhoto: () => void
 }
 
 /**
- * ③ 지금 할 카드 + 달력 (「4.2」).
- *   - 맨 위 "지금 할 카드" 묶음(brand 색): 지금 할 카드, 없으면 다음 카드를 크게 + [▶ 시작]. 홈에서 채운 버튼은 이것 하나입니다.
- *     카드가 없으면 같은 자리에서 계획을 만드는 길(코치와 짜기 · 사진으로 만들기)을 보여 줍니다.
- *   - 그 아래 달력 묶음: 이번 주 7일 줄 + 고른 날의 카드 · 구글 캘린더 일정. (HomeCalendarSection)
+ * ③ 달력 (「4.2」): 이번 주 7일 줄 + 고른 날의 카드 · 구글 캘린더 일정. (HomeCalendarSection)
+ * 위에 크게 있던 "지금 할 카드" 묶음(brand 색, [▶ 시작])은 2026-10-27 시연 피드백으로 뺐습니다.
+ * 지금 할 카드(없으면 다음 카드)는 오늘 목록에서 형광펜 '지금' · '다음' 으로 알려 줍니다.
  */
-function TodayPlanSection({
-  state,
-  cards,
-  todayKey,
-  onStart,
-  onPlanWithCoach,
-  onPhoto,
-}: TodayPlanSectionProps) {
-  // 위 묶음에 크게 보여 줄 카드: 지금 할 카드가 먼저, 없으면 다음 카드
+function TodayPlanSection({ state, cards, todayKey, onStart }: TodayPlanSectionProps) {
+  // 오늘 목록에서 형광펜으로 표시할 카드: 지금 할 카드가 먼저, 없으면 다음 카드
   const heroCard = state.current ?? state.next
   return (
-    <>
-      <NowCardBlock
-        state={state}
-        heroCard={heroCard}
-        onStart={onStart}
-        onPlanWithCoach={onPlanWithCoach}
-        onPhoto={onPhoto}
-      />
-
-      <HomeCalendarSection
-        state={state}
-        cards={cards}
-        todayKey={todayKey}
-        heroCard={heroCard}
-        onStart={onStart}
-      />
-    </>
+    <HomeCalendarSection
+      state={state}
+      cards={cards}
+      todayKey={todayKey}
+      heroCard={heroCard}
+      onStart={onStart}
+    />
   )
 }
 
@@ -273,7 +249,7 @@ interface HomeCalendarSectionProps {
   state: TodayCardsState
   cards: CardModel[]
   todayKey: string
-  /** 위 "지금 할 카드" 묶음에 크게 나온 카드 */
+  /** 오늘 목록에서 형광펜 '지금' · '다음' 으로 표시할 카드 */
   heroCard: CardModel | undefined
   onStart: (card: CardModel) => void
 }
@@ -372,8 +348,8 @@ function HomeCalendarSection({
         <CalendarBody {...bodyProps} googleEvents={[]} />
       )}
 
-      {/* 위 묶음이 카드를 보여 줄 때만 여기서 알려 줍니다. (할 카드가 없으면 위 묶음이 이 안내를 대신 크게 보여 줌) */}
-      {selectedKey === todayKey && heroCard && state.unhandled.length > 0 && (
+      {/* 시간이 끝났는데 처리 안 한 카드가 있으면 알려 줍니다. (예전에는 할 카드가 없을 때 위 큰 묶음이 대신 보여 줬습니다) */}
+      {selectedKey === todayKey && state.unhandled.length > 0 && (
         <Link
           to="/timer"
           className="mt-3 flex min-h-10 items-center rounded-xl bg-amber-50 px-3 text-sm break-keep text-amber-900"
@@ -713,112 +689,9 @@ function formatWeekRange(startKey: string): string {
     : `${startMonth}월 ${startDay}일 ~ ${endMonth}월 ${endDay}일`
 }
 
-// 위 묶음은 오늘 카드만 써서, 달력에 쓰는 cards · todayKey 는 받지 않습니다.
-interface NowCardBlockProps extends Omit<TodayPlanSectionProps, 'cards' | 'todayKey'> {
-  /** 크게 보여 줄 카드 (지금 할 카드 → 다음 카드). 없으면 undefined */
-  heroCard: CardModel | undefined
-}
-
-/**
- * "지금 할 카드" 묶음. 앱에서 유일하게 brand 색으로 꽉 채운 곳입니다. (폰 레스토프 효과: 눈에 띄는 것은 하나만)
- * 버튼은 묶음 폭 전체 · 높이 56px 로 크게 둡니다. (피츠의 법칙: 크고 가까운 것이 빨리 눌린다)
- */
-function NowCardBlock({ state, heroCard, onStart, onPlanWithCoach, onPhoto }: NowCardBlockProps) {
-  const blockClass = 'rounded-2xl bg-brand p-5 text-white sm:p-6'
-
-  // 1) 지금 · 다음 카드가 있으면: 형광펜 표시 + 큰 제목 + 시각 + [▶ 시작]
-  if (heroCard) {
-    const isNow = heroCard === state.current
-    // 중간에 끝냈지만 카드 시간이 남은 카드면 이어서 하자고 씁니다. (#709)
-    const isResumable = state.items.some((item) => item.card === heroCard && item.isResumable)
-    return (
-      <section aria-label="지금 할 카드" className={blockClass}>
-        <span className="bg-now inline-flex rounded-full px-2.5 py-0.5 text-[13px] font-bold text-slate-900">
-          {isNow ? '지금' : '다음'}
-        </span>
-        <h2 className="mt-3 line-clamp-2 text-[28px] leading-tight font-bold tracking-tight break-keep">
-          {heroCard.title}
-        </h2>
-        <p className="mt-1 text-[15px] text-indigo-100 tabular-nums">{cardTimeText(heroCard)}</p>
-        <Button
-          variant="inverse"
-          size="lg"
-          className="mt-5 w-full"
-          onClick={() => onStart(heroCard)}
-          // 아래 오늘 계획 목록의 줄 버튼("○○ 시작")과 이름이 겹치지 않게 다르게 붙입니다.
-          aria-label={`${heroCard.title} 바로 시작`}
-        >
-          {isResumable ? '▶ 이어서 하기' : '▶ 시작'}
-        </Button>
-      </section>
-    )
-  }
-
-  // 2) 오늘 카드가 아예 없으면: 계획을 만드는 두 길. 채운 버튼은 [코치와 짜기] 하나, 사진은 글자 버튼으로 낮춥니다.
-  if (state.items.length === 0) {
-    return (
-      <section aria-label="오늘 계획 만들기" className={blockClass}>
-        <h2 className="text-2xl leading-snug font-bold tracking-tight">아직 오늘 계획이 없어요</h2>
-        <p className="mt-1 text-[15px] break-keep text-indigo-100">
-          코치와 같이 짜거나, 시험 범위 사진으로 만들어 봐요.
-        </p>
-        <Button variant="inverse" size="lg" className="mt-5 w-full" onClick={onPlanWithCoach}>
-          💬 코치와 오늘 계획 짜기
-        </Button>
-        <button
-          type="button"
-          onClick={onPhoto}
-          className="mt-2 h-12 w-full cursor-pointer rounded-xl text-[15px] font-semibold text-white hover:bg-white/10"
-        >
-          📸 사진으로 만들기
-        </button>
-      </section>
-    )
-  }
-
-  // 3) 시간이 끝났는데 처리 안 한 카드만 남았으면: 타이머에서 정리하기
-  if (state.unhandled.length > 0) {
-    return (
-      <section aria-label="시간이 끝난 카드" className={blockClass}>
-        <h2 className="text-2xl leading-snug font-bold tracking-tight break-keep">
-          시간이 끝난 카드 {state.unhandled.length}개
-        </h2>
-        <p className="mt-1 text-[15px] break-keep text-indigo-100">
-          타이머에서 미루거나 실패로 남겨요.
-        </p>
-        <Link
-          to="/timer"
-          className="text-brand-dark hover:bg-brand-light mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-white px-6 text-[17px] font-semibold transition active:scale-[0.98]"
-        >
-          타이머에서 정리하기
-        </Link>
-      </section>
-    )
-  }
-
-  // 4) 남은 카드가 없으면(다 끝냈거나 미루기 · 쉬는 날로 넘김): 같은 자리에서 코치와 계획을 더 짤 수 있게 합니다.
-  const isAllDone = state.doneCount === state.total
-  return (
-    <section aria-label="오늘 남은 카드 없음" className={blockClass}>
-      <span className="bg-now inline-flex rounded-full px-2.5 py-0.5 text-[13px] font-bold text-slate-900 tabular-nums">
-        {state.doneCount}/{state.total} 끝
-      </span>
-      <h2 className="mt-3 text-2xl leading-snug font-bold tracking-tight break-keep">
-        {isAllDone ? '오늘 계획을 다 마쳤어요 👏' : '오늘 남은 카드가 없어요'}
-      </h2>
-      <p className="mt-1 text-[15px] break-keep text-indigo-100">
-        더 하고 싶으면 코치와 계획을 더 짜 봐요.
-      </p>
-      <Button variant="inverse" size="lg" className="mt-5 w-full" onClick={onPlanWithCoach}>
-        💬 코치와 계획 더 짜기
-      </Button>
-    </section>
-  )
-}
-
 interface PlanRowProps {
   item: TodayCardItem
-  /** 위 "지금 할 카드" 묶음에 크게 나온 카드인지. 맞으면 형광펜 글자로만 짧게 표시합니다. */
+  /** 지금 할 카드(없으면 다음 카드)인지. 맞으면 형광펜 글자로만 짧게 표시합니다. */
   isHero: boolean
   onStart: (card: CardModel) => void
 }
@@ -831,7 +704,7 @@ function PlanRow({ item, isHero, onStart }: PlanRowProps) {
   const canStart = status === 'current' || status === 'waiting'
   // 끝냈거나 넘긴 카드는 흐리게 보여 줍니다.
   const isFinished = status === 'done' || status === 'endedEarly' || status === 'skipped'
-  // 위 묶음에 나온 카드는 '지금' · '다음' 을 형광펜으로, 나머지는 상태 글자(시간 지남 · 끝 · 넘김)를 그대로 씁니다.
+  // 지금 할 카드(없으면 다음 카드)는 '지금' · '다음' 을 형광펜으로, 나머지는 상태 글자(시간 지남 · 끝 · 넘김)를 그대로 씁니다.
   // 중간에 끝냈지만 카드 시간이 남은 카드는 '이어 하기' 로 알려 줍니다. (#709)
   const label = isHero
     ? status === 'current'
