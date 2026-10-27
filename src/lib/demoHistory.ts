@@ -1,5 +1,6 @@
 import { moveDateKey } from '@/lib/date'
-import { DEMO_ID_PREFIX, type DemoPersona } from '@/lib/demoPersona'
+import { DEMO_ID_PREFIX } from '@/lib/demoIds'
+import type { DemoPersona } from '@/lib/demoPersona'
 import { getWeekStart } from '@/lib/historyReport'
 import type { WeeklyPick } from '@/lib/weeklyPicks'
 import type { CheckIn, ManualItem, StudySession } from '@/types'

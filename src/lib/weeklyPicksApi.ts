@@ -21,7 +21,7 @@
  */
 import { api, ApiError } from '@/lib/api'
 import { isDateKey, moveDateKey } from '@/lib/date'
-import { DEMO_ID_PREFIX } from '@/lib/demoPersona'
+import { DEMO_ID_PREFIX } from '@/lib/demoIds'
 import { getWeekStart } from '@/lib/historyReport'
 import { getWeekday } from '@/lib/routines'
 import { loadData, saveData } from '@/lib/storage'

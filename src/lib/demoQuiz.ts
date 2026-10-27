@@ -1,5 +1,6 @@
 import { moveDateKey, toDayKey } from '@/lib/date'
-import { createRandom, DEMO_ID_PREFIX, hashSeed } from '@/lib/demoPersona'
+import { DEMO_ID_PREFIX } from '@/lib/demoIds'
+import { createRandom, hashSeed } from '@/lib/demoPersona'
 import type { QuizQuestion, QuizResult } from '@/lib/studyQuiz'
 import type { Card, StudySession } from '@/types'
 

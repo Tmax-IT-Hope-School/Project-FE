@@ -4,6 +4,7 @@ import type { SavedCareStage } from '@/lib/careStage'
 import { formatMinutes } from '@/lib/dailyRecords'
 import { moveDateKey } from '@/lib/date'
 import { getDaySummary } from '@/lib/daySummary'
+import { DEMO_ID_PREFIX } from '@/lib/demoIds'
 import { judgeExperiment, type Experiment } from '@/lib/experiments'
 import type { FocusScoreRecord } from '@/lib/focusScore'
 import { scorePsychTest } from '@/lib/psychTest'
@@ -65,8 +66,6 @@ import type {
 
 /** 며칠치를 만드는지 (오늘 포함) */
 export const DEMO_DAYS = 28
-/** 가상 데이터 id 앞에 붙는 글자. 지울 때 이걸로 골라냅니다. */
-export const DEMO_ID_PREFIX = 'demo-'
 /** 실험을 시작한 날 = 0번째 날부터 셌을 때 몇 번째 날인지 (오늘의 14일 전) */
 const EXPERIMENT_START_INDEX = DEMO_DAYS - 15
 

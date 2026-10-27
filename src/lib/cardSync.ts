@@ -7,6 +7,7 @@ import {
   updateServerCard,
   type ServerCard,
 } from '@/lib/cardsApi'
+import { isDemoId } from '@/lib/demoIds'
 import { loadGoals } from '@/lib/goals'
 import { hasUnsentPostpone } from '@/lib/markSync'
 import { loadData, saveData } from '@/lib/storage'
@@ -66,6 +67,8 @@ export function diffCardChanges(prev: Card[], next: Card[]): PendingCardSync {
   const upserts: string[] = []
   for (const card of next) {
     const before = prev.find((item) => item.id === card.id)
+    // 가상 카드는 서버로 보내지 않습니다. (lib/demoIds.ts)
+    if (isDemoId(card.id)) continue
     if (!before || !isSameContent(before, card)) upserts.push(card.id)
   }
   const deletes: string[] = []
@@ -109,7 +112,8 @@ export function mergeServerCards(
   for (const card of local) {
     if (!card.serverId) {
       cards.push(card)
-      toUpload.push(card.id)
+      // 가상 카드는 서버로 보내지 않습니다. (lib/demoIds.ts)
+      if (!isDemoId(card.id)) toUpload.push(card.id)
       continue
     }
     const serverCard = server.find((item) => item.id === card.serverId)

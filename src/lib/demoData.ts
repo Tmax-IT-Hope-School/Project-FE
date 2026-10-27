@@ -2,7 +2,8 @@ import { loadAiMessages, saveAiMessages } from '@/lib/aiMessages'
 import { loadSavedCards, saveCards } from '@/lib/cards'
 import { getTodayKey } from '@/lib/date'
 import { buildDemoHistory } from '@/lib/demoHistory'
-import { DEMO_ID_PREFIX, buildDemoOnboarding, buildDemoPersona } from '@/lib/demoPersona'
+import { DEMO_ID_PREFIX, DEMO_MANIFEST_KEY } from '@/lib/demoIds'
+import { buildDemoOnboarding, buildDemoPersona } from '@/lib/demoPersona'
 import { buildDemoQuizResults } from '@/lib/demoQuiz'
 import { MAX_ACTIVE_GOALS, getActiveGoals, loadGoals, saveGoals } from '@/lib/goals'
 import { mockAiMessages } from '@/lib/mock'
@@ -16,8 +17,8 @@ import type { StudySession } from '@/types'
  *
  * ■ 넣을 때
  *   - 카드 · 세션 · 목표 같은 목록은 내 기록 뒤에 붙입니다. 가상 데이터의 id 는 모두 'demo-' 로 시작합니다.
- *   - 카드 · 목표는 saveCards · saveGoals 로 저장합니다. 그래야 진짜 로그인(시연 코드 로그인)에서 서버와 맞춰집니다.
- *     (saveData 로 바로 쓰면 서버에 "지웠다" 가 안 가서, 다시 넣을 때마다 서버의 옛 카드가 되돌아와 겹쳤습니다)
+ *   - 카드 · 목표는 saveCards · saveGoals 로 저장합니다. (화면들이 카드 · 목표가 바뀐 것을 알게)
+ *   - 가상 데이터는 서버로 보내지 않습니다. 이 기기에만 있어서 뺄 때 깨끗하게 다 빠집니다. (lib/demoIds.ts)
  *   - 체크인 · 관리 단계 기록처럼 날짜별로 저장하는 값은, 내 기록이 없는 날짜에만 넣습니다.
  *   - 온보딩 답 · 심리검사처럼 하나뿐인 값은, 비어 있을 때만 넣습니다. (온보딩을 끝낸 사람의 답은 건드리지 않음)
  *   - 무엇을 넣었는지 'demo-manifest' 에 적어 둡니다.
@@ -25,7 +26,7 @@ import type { StudySession } from '@/types'
  *   - 'demo-' 로 시작하는 것과, 'demo-manifest' 에 적힌 것만 지웁니다. 내가 직접 만든 기록은 남습니다.
  */
 
-const MANIFEST_KEY = 'demo-manifest'
+const MANIFEST_KEY = DEMO_MANIFEST_KEY
 
 /** 무엇을 넣었는지 적어 두는 표. 뺄 때 이 표에 적힌 것만 지웁니다. */
 interface DemoManifest {
