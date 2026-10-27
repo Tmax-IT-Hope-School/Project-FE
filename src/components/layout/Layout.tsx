@@ -21,6 +21,7 @@ import { useOnboardingCompletionSync } from '@/hooks/useOnboardingCompletionSync
 import { usePsychTestSync } from '@/hooks/usePsychTestSync'
 import { useQuizResultSync } from '@/hooks/useQuizResultSync'
 import { useScrollToTopOnPageChange } from '@/hooks/useScrollToTopOnPageChange'
+import { useServerHistoryPull } from '@/hooks/useServerHistoryPull'
 import { useSessionSync } from '@/hooks/useSessionSync'
 import { useTimerLock } from '@/hooks/useTimerLock'
 import { cn } from '@/lib/cn'
@@ -51,7 +52,9 @@ export function Layout() {
   useGoalCardEnds()
   // 시연 계정(VITE_DEMO_SEED_USER_ID)으로 로그인하면 이 기기에 가상 28일을 넣습니다. 카드 · 목표를 받아 맞춘 뒤라서 이 자리입니다.
   useDemoAutoSeed()
-  // 진짜 로그인이면 끝난 공부 기록을 서버로 보냅니다. (끝나고 10분 뒤, 받아 오지는 않습니다, #516)
+  // 진짜 로그인이면 서버의 공부 기록 · 미루기/실패 · 휴식 · 체크인 중 이 기기에 없는 것을 받아 옵니다. 카드를 받아 맞춘 뒤라서 이 자리입니다.
+  useServerHistoryPull()
+  // 진짜 로그인이면 끝난 공부 기록을 서버로 보냅니다. (끝나고 10분 뒤. 받아 오는 것은 바로 위 useServerHistoryPull, #516)
   useSessionSync()
   // 진짜 로그인이면 미루기 · 실패 · 휴식 · 사후 입력도 서버로 보냅니다. (한도 · 기한은 서버가 다시 봅니다, #516)
   useMarkSync()
