@@ -17,7 +17,6 @@ import {
   buildDayReports,
   buildWeekReport,
   countCompleteDaysUntil,
-  dayHeadline,
   dayOfMonth,
   findWeekFinding,
   formatDuration,
@@ -266,7 +265,6 @@ function HistoryView({ sessions, serverPicks = null }: HistoryViewProps) {
           <DailyReport
             day={getDayReport(reports, selectedDate)}
             isToday={selectedDate === todayKey}
-            completeDays={countCompleteDaysUntil(reports, selectedDate)}
             pick={findWeeklyPick(picks, weekStart)}
           />
         )}
@@ -708,28 +706,14 @@ function ReportSkeleton() {
 interface DailyReportProps {
   day: DayReport
   isToday: boolean
-  /** 그날까지 계획을 끝까지 해낸 날 수 */
-  completeDays: number
   /** 그 주에 고른 것 */
   pick: WeeklyPick | undefined
 }
 
-function DailyReport({ day, isToday, completeDays, pick }: DailyReportProps) {
+// 맨 위의 "하루 한 줄" · "계획 완료" 카드는 2026-10-27 시연 피드백으로 뺐습니다. (주간 리포트의 "이번 주 한 줄" 은 그대로)
+function DailyReport({ day, isToday, pick }: DailyReportProps) {
   return (
     <>
-      <HeadlineCard label="하루 한 줄" text={dayHeadline(day, completeDays, isToday)} />
-
-      <ReportCard title="계획 완료">
-        <p className={BIG_SENTENCE_CLASS}>
-          {day.isComplete
-            ? `${isToday ? '오늘' : '이날'} 계획을 끝까지 해냈어요`
-            : day.cardCount + day.pendingCount === 0
-              ? '이날은 카드가 없었어요'
-              : `카드 ${day.cardCount + day.pendingCount}장 중 ${day.doneCount}장을 끝까지 했어요`}
-        </p>
-        <TotalSuccessBox days={completeDays} />
-      </ReportCard>
-
       {pick && !pick.skip && (
         <ReportCard title="이번 주에 고른 것">
           <div className="mt-2.5 flex items-center justify-between gap-3">
