@@ -348,15 +348,7 @@ function HomeCalendarSection({
         <CalendarBody {...bodyProps} googleEvents={[]} />
       )}
 
-      {/* 시간이 끝났는데 처리 안 한 카드가 있으면 알려 줍니다. (예전에는 할 카드가 없을 때 위 큰 묶음이 대신 보여 줬습니다) */}
-      {selectedKey === todayKey && state.unhandled.length > 0 && (
-        <Link
-          to="/timer"
-          className="mt-3 flex min-h-10 items-center rounded-xl bg-amber-50 px-3 text-sm break-keep text-amber-900"
-        >
-          시간이 끝난 카드 {state.unhandled.length}개 — 타이머에서 미루거나 실패로 남겨요 ›
-        </Link>
-      )}
+      {/* "시간이 끝난 카드 N개 — 타이머에서 정리" 안내는 타이머의 그 묶음을 뺄 때(2026-10-27) 같이 뺐습니다. */}
 
       <GoogleConnectRow connection={connection} />
     </section>
