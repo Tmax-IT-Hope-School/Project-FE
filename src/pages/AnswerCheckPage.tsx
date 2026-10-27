@@ -437,7 +437,7 @@ function SendResults({ photos, isDone, onRetake, onAnother }: SendResultsProps) 
             <span className="tabular-nums">
               ({finishedCount}/{photos.length}장)
             </span>
-            <span className="mt-1 block text-sm font-normal text-slate-500">한 장에 최대 25초</span>
+            <span className="mt-1 block text-sm font-normal text-slate-500">한 장에 보통 25초</span>
           </>
         ) : gradedCount > 0 ? (
           '끝났어요. 결과는 통계 탭에 있어요'
