@@ -1,7 +1,7 @@
 import { isNavItemSelected, navItems } from '@/components/layout/navItems'
 import { cn } from '@/lib/cn'
 import { scrollToTop } from '@/lib/scroll'
-import { CARDS_PATH, CHAT_PATH, HOME_PATH, RECORDS_PATH, STATS_PATH } from '@/lib/tabMenu'
+import { CARDS_PATH, CHAT_PATH, HOME_PATH, STATS_PATH } from '@/lib/tabMenu'
 import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
@@ -23,7 +23,7 @@ function TabIcon({ children }: { children: ReactNode }) {
   )
 }
 
-/** 탭 주소 → 아이콘. 홈(집) · 카드(달력) · 채팅(말풍선) · 통계(막대그래프) · 기록(되감는 시계) */
+/** 탭 주소 → 아이콘. 홈(집) · 카드(달력) · 채팅(말풍선) · 통계(막대그래프) */
 const TAB_ICONS: Record<string, ReactNode> = {
   [HOME_PATH]: (
     <TabIcon>
@@ -46,17 +46,10 @@ const TAB_ICONS: Record<string, ReactNode> = {
       <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     </TabIcon>
   ),
-  // 지난 날을 돌아보는 탭이라 시곗바늘 + 거꾸로 도는 화살표입니다.
-  [RECORDS_PATH]: (
-    <TabIcon>
-      <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8" />
-      <path d="M3 3v5h5M12 7v5l3 2" />
-    </TabIcon>
-  ),
 }
 
 /**
- * 모바일 화면 아래에 고정되는 탭 메뉴입니다. (홈 · 카드 · 채팅 · 통계 · 기록, 2026-10-24 5탭)
+ * 모바일 화면 아래에 고정되는 탭 메뉴입니다. (홈 · 카드 · 채팅 · 통계, 2026-10-27 기록 탭을 빼서 4탭)
  * 아이콘 + 작은 글자이고, 지금 있는 탭은 brand 색 + 굵은 글자로 보여 줍니다. (2026-10-18 모바일 UI, 2026-10-22 색)
  * 비치는 효과(blur) 없이 흰 바탕 + 위 1px 선으로 구분합니다.
  * PC(sm 이상)에서는 숨기고, 대신 헤더 메뉴를 보여줍니다.
@@ -70,8 +63,8 @@ export function BottomTabNav() {
       // pb: 아이폰 아래 홈 막대만큼 띄웁니다. (안전 영역이 없는 화면에서는 0)
       className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden"
     >
-      {/* 탭 5개를 같은 너비로 나눕니다. (375px 에서 한 칸 75px) */}
-      <ul className="grid grid-cols-5">
+      {/* 탭 4개를 같은 너비로 나눕니다. (375px 에서 한 칸 약 94px) */}
+      <ul className="grid grid-cols-4">
         {navItems.map((item) => (
           <li key={item.to}>
             <NavLink

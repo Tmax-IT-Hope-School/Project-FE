@@ -16,8 +16,8 @@ interface HeaderProps {
   hideOnMobile?: boolean
 }
 
-// 아래 탭 5개의 첫 화면. 여기서는 로고를, 그 밖의 하위 화면(설정 · 알림 · 타이머 등)에서는 모바일에 ‹ 뒤로 를 보여 줍니다. (2026-10-22 앱 기준, 2026-10-24 5탭)
-const TAB_ROOT_PATHS = ['/', '/cards', '/chat', '/stats', '/records']
+// 아래 탭 4개의 첫 화면. 여기서는 로고를, 그 밖의 하위 화면(설정 · 알림 · 타이머 등)에서는 모바일에 ‹ 뒤로 를 보여 줍니다. (2026-10-22 앱 기준, 2026-10-27 4탭)
+const TAB_ROOT_PATHS = ['/', '/cards', '/chat', '/stats']
 
 /**
  * 화면 안에 자기 돌아가기 링크("← 카드" · "‹ 설정")가 있는 화면입니다. 헤더에 ‹ 뒤로를 또 두지 않고 로고를 보여 줍니다.
@@ -34,7 +34,7 @@ function hasOwnBackLink(pathname: string): boolean {
     pathname.startsWith('/settings/') ||
     // 사진 채점(/stats/answer-check)은 폰에서 QR 로 바로 열려 "바로 전 화면" 이 없어서, 화면 안의 "‹ 통계" 로 돌아갑니다.
     pathname.startsWith('/stats/') ||
-    // 나 사용설명서(/records/manual)는 화면 안의 "‹ 기록" 으로 돌아갑니다.
+    // 문제 풀이 리포트(/records/quiz)는 화면 위의 "‹ 통계" 로 돌아갑니다. 나 사용설명서(/records/manual)도 같은 주소 아래입니다.
     pathname.startsWith('/records/')
   )
 }

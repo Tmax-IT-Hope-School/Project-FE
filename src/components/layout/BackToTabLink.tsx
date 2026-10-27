@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 
 interface BackToTabLinkProps {
-  /** 돌아갈 탭의 주소. 예: '/records' */
+  /** 돌아갈 탭의 주소. 예: '/stats' */
   to: string
-  /** 돌아갈 탭의 이름. 예: '기록' */
+  /** 돌아갈 탭의 이름. 예: '통계' */
   label: string
 }
 
