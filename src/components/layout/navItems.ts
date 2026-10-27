@@ -3,14 +3,13 @@ import {
   CHAT_PATH,
   HOME_PATH,
   isCardsPath,
-  isRecordsPath,
   isStatsPath,
-  RECORDS_PATH,
   STATS_PATH,
 } from '@/lib/tabMenu'
 
 /**
- * 앱의 주요 메뉴 목록입니다. (2026-10-24 시안대로 5탭: 홈 · 카드 · 채팅 · 통계 · 기록)
+ * 앱의 주요 메뉴 목록입니다. (2026-10-27 4탭: 홈 · 카드 · 채팅 · 통계)
+ * 기록 탭(일간 · 주간 리포트)은 2026-10-27 시연 피드백으로 뺐습니다. 문제 풀이 리포트 입구는 통계 탭으로 옮겼습니다.
  * 예전 4탭(홈 · 채팅 · 타이머 · 기록)에서 타이머 탭을 빼고 카드 · 통계 탭을 넣었습니다.
  * 타이머는 카드의 [시작] 으로 들어가고, 예전 기록 탭의 그래프 · AI 분석은 통계 탭으로 옮겼습니다.
  * 채팅은 대화방 목록입니다(📞 매일 통화 · 📅 계획 · 💬 상담 · 📚 과목 쌤, lib/chatRooms.ts).
@@ -23,7 +22,6 @@ export const navItems = [
   { to: CARDS_PATH, label: '카드' },
   { to: CHAT_PATH, label: '채팅' },
   { to: STATS_PATH, label: '통계' },
-  { to: RECORDS_PATH, label: '기록' },
 ]
 
 /**
@@ -34,6 +32,5 @@ export const navItems = [
 export function isNavItemSelected(to: string, pathname: string): boolean {
   if (to === CARDS_PATH) return isCardsPath(pathname)
   if (to === STATS_PATH) return isStatsPath(pathname)
-  if (to === RECORDS_PATH) return isRecordsPath(pathname)
   return false
 }

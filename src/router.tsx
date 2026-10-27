@@ -10,7 +10,7 @@ import {
 } from '@/lib/onboardingProgress'
 import { CONSENT_PATH } from '@/lib/consentApi'
 import { PSYCH_TEST_PATH } from '@/lib/psychTest'
-import { MANUAL_PATH, RECORDS_PATH, STATS_PATH } from '@/lib/tabMenu'
+import { MANUAL_PATH, STATS_PATH } from '@/lib/tabMenu'
 import { PageBoundary } from '@/components/layout/PageBoundary'
 import { SubjectsGate } from '@/components/layout/SubjectsGate'
 import { ErrorPage } from '@/pages/ErrorPage'
@@ -25,9 +25,6 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
  */
 const AccountPage = lazy(() =>
   import('@/pages/AccountPage').then((m) => ({ default: m.AccountPage })),
-)
-const RecordsPage = lazy(() =>
-  import('@/pages/RecordsPage').then((m) => ({ default: m.RecordsPage })),
 )
 const StatsPage = lazy(() => import('@/pages/StatsPage').then((m) => ({ default: m.StatsPage })))
 const QuizReportPage = lazy(() =>
@@ -154,9 +151,10 @@ export const router = createBrowserRouter([
       { path: 'stats', element: <StatsPage /> },
       // 사진 채점 (2026-10-24). PC 통계 탭의 QR 을 폰으로 찍으면 열립니다. 사진은 저장하지 않고 채점 뒤 버립니다.
       { path: 'stats/answer-check', element: <AnswerCheckPage /> },
-      // 기록 탭 (일간 · 주간 리포트). 2026-10-24 시안대로 History 화면으로 바뀝니다.
-      { path: 'records', element: <RecordsPage /> },
-      // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 기록 탭의 입구에서 들어옵니다.
+      // 기록 탭(일간 · 주간 리포트)은 2026-10-27 에 뺐습니다. 옛 링크 · 즐겨찾기로 오면 통계 탭으로 보냅니다.
+      // (화면 파일 pages/RecordsPage.tsx 는 지우지 않고 남겨 두었습니다)
+      { path: 'records', element: <Navigate to={STATS_PATH} replace /> },
+      // 문제 풀이 주간 리포트 (과목별 점수 그래프 · 주간 정리표, 2026-10-24). 통계 탭의 입구에서 들어옵니다. (2026-10-27 까지는 기록 탭)
       { path: 'records/quiz', element: <QuizReportPage /> },
       // 나 사용설명서 (2026-10-24 History 시안 ⑤). 기록 탭 아래쪽 줄과 주간 리포트의 [사용설명서에 넣기] 뒤에서 들어옵니다.
       { path: 'records/manual', element: <ManualPage /> },
@@ -169,13 +167,13 @@ export const router = createBrowserRouter([
       { path: 'diary/reflection', element: <Navigate to="/" replace /> },
       // 시험 기록(/exams · 시험 결과)은 시연 범위 밖이라 2026-10-18 에 지웠습니다. 시험 날짜는 학교 학사일정(NEIS)이 알려 줍니다.
       // 옛 링크는 기록 탭으로 보냅니다.
-      { path: 'exams', element: <Navigate to={RECORDS_PATH} replace /> },
-      { path: 'exams/:examId/result', element: <Navigate to={RECORDS_PATH} replace /> },
+      { path: 'exams', element: <Navigate to={STATS_PATH} replace /> },
+      { path: 'exams/:examId/result', element: <Navigate to={STATS_PATH} replace /> },
       // 휴대폰 집중 모드 안내(/phone-focus)는 #417 에서 지웠습니다. (OS 앱 잠금은 다음 버전)
       { path: 'phone-focus', element: <Navigate to="/settings" replace /> },
       { path: 'call/result', element: <CallResultPage /> },
       // 만약-그러면 처방 카드(/suggestions)는 #417 에서 지웠습니다. 옛 링크는 기록 탭으로 보냅니다. (가설·실험 탭도 2026-10-18 에 지움)
-      { path: 'suggestions', element: <Navigate to={RECORDS_PATH} replace /> },
+      { path: 'suggestions', element: <Navigate to={STATS_PATH} replace /> },
       { path: 'settings', element: <SettingsPage /> },
       // 내 계정(내 정보 고치기 · 비밀번호 바꾸기 · 탈퇴). 설정의 계정 카드에서 들어옵니다. (#296)
       { path: 'settings/account', element: <AccountPage /> },
@@ -190,7 +188,7 @@ export const router = createBrowserRouter([
       // 탭 이름을 '분석' 에서 '기록' 으로 바꾸기 전 주소(2026-10-18). 분석 내용은 지금 통계 탭에 있습니다.
       { path: 'analysis', element: <RedirectWithQuery to={STATS_PATH} /> },
       // 리포트(/report · /records?tab=report)는 2026-10-23 에 뺐습니다. 옛 링크로 오면 기록 화면이 보입니다.
-      { path: 'report', element: <RedirectWithQuery to={RECORDS_PATH} /> },
+      { path: 'report', element: <RedirectWithQuery to={STATS_PATH} /> },
       { path: 'manual', element: <RedirectWithQuery to={MANUAL_PATH} /> },
       // 없는 주소는 404 화면으로. 이 줄은 항상 맨 마지막에 둡니다.
       { path: '*', element: <NotFoundPage /> },

@@ -1,6 +1,7 @@
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AsyncBoundary } from '@/components/ui/AsyncBoundary'
 import { AiAnalysisCard, AnalysisInsight } from '@/components/ui/AiAnalysisCard'
 import { AnswerCheckCard } from '@/components/ui/AnswerCheckCard'
@@ -39,6 +40,7 @@ import { buildCardIdByPlanId } from '@/lib/sessionRecords'
 import { loadData, loadRecord } from '@/lib/storage'
 import { dayReviewLines } from '@/lib/talkLines'
 import { formatHoursMinutes, getWeeklyStudy } from '@/lib/weeklyStudy'
+import { QUIZ_REPORT_PATH } from '@/lib/tabMenu'
 import { getMondayKey } from '@/lib/weeklyFacts'
 import { describeScoreChange, weeklyScoreGuides, weeklyScoreQuery } from '@/lib/weeklyScoreApi'
 import type { CheckIn, EmotionTag, StudyPlan, StudySession } from '@/types'
@@ -130,6 +132,25 @@ export function StatsPage() {
       <AsyncBoundary pendingFallback={<Skeleton className="h-40 w-full rounded-2xl" />}>
         <WeeklyScoreCard weekStart={getMondayKey(new Date(now))} />
       </AsyncBoundary>
+
+      {/* 문제 풀이 주간 리포트(과목별 점수 그래프 · 주간 정리표)로 가는 입구 (pages/QuizReportPage.tsx)
+          기록 탭을 뺄 때(2026-10-27) 그 탭 맨 아래에 있던 것을 옮겼습니다. 이번 주 점수의 정답률과 같은 결과를 자세히 봅니다. */}
+      <Link
+        to={QUIZ_REPORT_PATH}
+        className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-white p-5 hover:bg-slate-50 sm:p-6"
+      >
+        <span className="min-w-0">
+          <span className="block text-[17px] font-bold tracking-tight text-slate-900">
+            문제 풀이 리포트
+          </span>
+          <span className="mt-0.5 block text-sm text-slate-500">
+            과목별 점수 변화 · 취약 단원 · 주간 정리표
+          </span>
+        </span>
+        <span aria-hidden className="shrink-0 text-slate-400">
+          ›
+        </span>
+      </Link>
 
       {/* 묶음 순서: 매일 보는 숫자(실행률 · 7일 공부 시간) → AI 분석 (가장 자주 보는 것을 위로)
           내 숲 · 지난 통화 요약은 2026-10-24 에 뺐습니다. (lib/forest*.ts · lib/callSummary.ts 는 다른 곳이 써서 남김) */}
