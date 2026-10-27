@@ -25,8 +25,11 @@ import { api, ApiError } from '@/lib/api'
 import { isServerDataMode } from '@/lib/dataMode'
 import { loadData, saveData } from '@/lib/storage'
 
-/** 서버가 사진을 25초까지 채점하므로, 사진을 보내는 시간까지 넉넉히 기다립니다. */
-const SEND_TIMEOUT_MS = 40_000
+/**
+ * 서버는 AI 채점을 25초까지 기다리고, "채점했어요" 에서 O · X 를 하나도 못 읽으면 한 번 더 물어봅니다. (BE #464)
+ * 그래서 길면 50초쯤 걸려서, 사진을 보내는 시간까지 넉넉히 65초 기다립니다. (2026-10-27, 전에는 40초)
+ */
+const SEND_TIMEOUT_MS = 65_000
 
 /** 어떤 사진인지. MARKED = 채점했어요 · UNMARKED = 아직 안 했어요 */
 export type AnswerCheckMode = 'MARKED' | 'UNMARKED'
