@@ -27,9 +27,10 @@ import { isGoalResultDue } from '@/lib/goalProgress'
 import { MAX_ACTIVE_GOALS, getDoneGoals } from '@/lib/goals'
 import { getCardDayMarkInfo, loadRestDays } from '@/lib/restDays'
 import { getWeekday, getWeekdayName } from '@/lib/routines'
+import { getTodayCardsState } from '@/lib/todayCards'
 import type { Card as CardData, FixedBlock, Goal, StudySession } from '@/types'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 /** 분을 '10분' · '1시간' · '1시간 30분' 처럼 보여줍니다. (플래너의 "빈 시간" 에 씁니다) */
 function formatGap(totalMinutes: number): string {
@@ -494,7 +495,22 @@ export function CardsPage() {
   // 목표 (최종 기획서 「4.7」, #391)
   const { goals, activeGoals } = useGoals()
   // 공부 기록. 블록의 "한 시간" · 결과와 계획 패턴에 씁니다.
-  const { sessions } = useStudySessions()
+  const { sessions, allSessions } = useStudySessions()
+  const navigate = useNavigate()
+  // 화면을 연 시각 · 미루기/실패 · 쉬는 날. 맨 위 "지금 할 카드" 를 고르는 데 씁니다. (홈과 같은 규칙, lib/todayCards.ts)
+  const [now] = useState(() => Date.now())
+  const [marks] = useState(loadCardMarks)
+  const [restDays] = useState(loadRestDays)
+  // 카드 시간이 지금인 카드. 없으면 undefined (다음 카드는 보여 주지 않습니다)
+  const todayCards = getTodayCardsState({
+    cards,
+    sessions: allSessions,
+    marks,
+    isRestDay: restDays.some((restDay) => restDay.date === todayKey),
+    todayKey,
+    now,
+  })
+  const nowCard = todayCards.current
 
   // 보고 있는 날짜는 주소에 둡니다. (/cards = 오늘, /cards?date=2026-10-11 = 그날)
   // replace: ◀ ▶ 를 여러 번 눌러도 뒤로 가기 한 번이면 카드 화면을 떠납니다.
@@ -526,13 +542,7 @@ export function CardsPage() {
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-[28px] leading-tight font-bold tracking-tight">카드</h1>
           <div className="flex shrink-0 items-center gap-1">
-            {/* 하단 탭에서 타이머가 빠져서(2026-10-24), 카드 없이 시작 · 미루기 · 폰 내고 시작은 여기서 들어갑니다. (#717) */}
-            <Link
-              to="/timer"
-              className="text-brand inline-flex h-10 items-center rounded-xl px-3 text-sm font-semibold hover:bg-slate-100"
-            >
-              ⏱ 타이머
-            </Link>
+            {/* [⏱ 타이머] 링크는 2026-10-27 시연 피드백으로 뺐습니다. 타이머는 카드의 [시작] · 아래 "지금" 묶음으로 들어갑니다. */}
             <Button
               variant="ghost"
               size="sm"
@@ -575,6 +585,35 @@ export function CardsPage() {
           </Button>
         </div>
       </div>
+
+      {/* 지금 시간인 카드가 있을 때만 맨 위에 크게 [▶ 시작] (2026-10-27 시연 피드백. 홈에서 뺀 "지금 할 카드" 묶음을 여기로)
+          다음 카드는 보여 주지 않습니다. 지금 할 카드가 없으면 묶음 자체가 없습니다. */}
+      {nowCard && (
+        <section aria-label="지금 할 카드" className="bg-brand rounded-2xl p-5 text-white sm:p-6">
+          <span className="bg-now inline-flex rounded-full px-2.5 py-0.5 text-[13px] font-bold text-slate-900">
+            지금
+          </span>
+          <h2 className="mt-3 line-clamp-2 text-[28px] leading-tight font-bold tracking-tight break-keep">
+            {nowCard.title}
+          </h2>
+          <p className="mt-1 text-[15px] text-indigo-100 tabular-nums">
+            {nowCard.startTime ?? '시간 미정'} · {nowCard.durationMinutes}분
+          </p>
+          <Button
+            variant="inverse"
+            size="lg"
+            className="mt-5 w-full"
+            onClick={() => navigate(`/timer?card=${encodeURIComponent(nowCard.id)}`)}
+            // 아래 타임라인의 카드 버튼과 이름이 겹치지 않게 다르게 붙입니다.
+            aria-label={`${nowCard.title} 바로 시작`}
+          >
+            {/* 중간에 끝냈지만 카드 시간이 남은 카드면 이어서 하자고 씁니다. (#709) */}
+            {todayCards.items.some((item) => item.card === nowCard && item.isResumable)
+              ? '▶ 이어서 하기'
+              : '▶ 시작'}
+          </Button>
+        </section>
+      )}
 
       {/* 묶음 순서는 "매일 보는 것 → 가끔 보는 것" 입니다. (서열 위치 효과)
           날짜 이동 바로 아래에 그날 카드, 그다음 목표, 맨 아래에 학교 일정입니다. */}
