@@ -34,8 +34,7 @@ export function needsSubjectsPath(pathname: string): boolean {
     pathname === '/' ||
     pathname === '/cards' ||
     pathname === '/timer' ||
-    // 통계 탭 · 기록 탭 (과목 이름 · 색으로 기록을 보여 줍니다)
-    pathname === '/stats' ||
-    pathname === '/records'
+    // 통계 탭 (과목 이름 · 색으로 기록을 보여 줍니다)
+    pathname === '/stats'
   )
 }

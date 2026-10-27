@@ -136,7 +136,7 @@ export function CallResultPage() {
           size="lg"
           variant={mutation.isSuccess ? 'primary' : 'secondary'}
           className="w-full sm:w-auto"
-          onClick={() => navigate('/records')}
+          onClick={() => navigate('/stats')}
         >
           내 기록 보기
         </Button>
