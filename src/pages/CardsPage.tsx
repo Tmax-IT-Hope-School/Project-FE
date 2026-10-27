@@ -603,13 +603,7 @@ export function CardsPage() {
         >
           + 카드 만들기
         </Link>
-        {/* 시험 범위표 · 학습지를 찍으면 AI 가 카드 여러 장을 나눠 줍니다. (pages/CardsFromPhotoPage.tsx) */}
-        <Link
-          to="/cards/photo"
-          className="inline-flex h-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-[15px] font-semibold text-slate-900 hover:bg-slate-50 active:scale-[0.98]"
-        >
-          📸 사진으로
-        </Link>
+        {/* [📸 사진으로] (시험 범위 사진으로 카드 만들기)는 2026-10-27 시연 피드백으로 뺐습니다. 화면(/cards/photo)은 남겨 둡니다. */}
       </StickyActionBar>
     </div>
   )
