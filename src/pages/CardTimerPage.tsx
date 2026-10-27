@@ -611,70 +611,8 @@ export function CardTimerPage() {
         </div>
       )}
 
-      {unhandledCards.length > 0 && (
-        <Card title="시간이 끝난 카드">
-          <p className="text-sm text-slate-600">
-            시작하지 못했어요. 미룰지, 못 했다고 남길지 골라요.
-          </p>
-          {/* 아프거나 너무 지쳐서 오늘 전체를 못 한 날은 사후에 '쉰 날' 로 처리할 수 있어요. (월 4회, #407) */}
-          <button
-            type="button"
-            onClick={() => (restLeft > 0 ? setIsRestOpen(true) : setIsRecoveryCheckOpen(true))}
-            className="mt-2 h-10 text-sm font-medium text-slate-700 underline underline-offset-2"
-          >
-            {restLeft > 0
-              ? `아프거나 너무 지쳤어요 · 오늘은 쉰 날로 (이번 달 ${restLeft}번 남음)`
-              : '이번 달 쉬는 날을 다 썼어요'}
-          </button>
-          <ul className="mt-3 flex flex-col gap-2">
-            {unhandledCards.map(withStage4).map((card) => {
-              const left = postponeLeft(card)
-              return (
-                <li
-                  key={card.id}
-                  className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">{card.title}</p>
-                    <p className="text-sm text-slate-600 tabular-nums">
-                      {card.startTime} · {formatMinutes(card.durationMinutes)}
-                    </p>
-                  </div>
-                  {/* 자주 쓰는 [미루기] 를 위에, 되돌리기 어려운 [실패로 기록] 은 맨 아래 빨간 글자로 떨어뜨려 둡니다. (2차 규칙 3) */}
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-                    <Button
-                      variant="outline"
-                      disabled={left === 0}
-                      onClick={() => setMissTarget({ card, action: 'postpone' })}
-                    >
-                      {card.priority === 'absolute'
-                        ? '미룰 수 없음'
-                        : isPostponeLocked
-                          ? '미루기 잠김'
-                          : `미루기 (${left}회 남음)`}
-                    </Button>
-                    {lateEntryOf(card).ok && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setMissTarget({ card, action: 'late' })}
-                      >
-                        폰을 내서 못 켰어요 · 나중에 적기
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      className="text-red-700 hover:bg-red-50"
-                      onClick={() => setMissTarget({ card, action: 'fail' })}
-                    >
-                      실패로 기록
-                    </Button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </Card>
-      )}
+      {/* "시간이 끝난 카드" 묶음([미루기] · [나중에 적기] · [실패로 기록] · 쉰 날로)은 2026-10-27 시연 피드백으로 뺐습니다.
+          시간이 끝난 카드는 아래 "오늘 남은 카드" 에도 넣지 않습니다. */}
 
       {/* 이 화면의 1순위 행동은 "다음 카드 시작" 하나입니다. 맨 위 카드만 brand 색 블록으로 크게, 나머지는 목록 행으로 작게 둡니다. (2026-10-22)
           PC 에서는 왼쪽에 카드, 오른쪽에 "카드 없이 지금 시작" 을 나란히 둡니다. */}
