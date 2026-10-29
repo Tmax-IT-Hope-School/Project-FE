@@ -591,7 +591,7 @@ interface GoogleConnectRowProps {
  *   - 앱(WebView) 안에서는 구글이 연결 창을 막아서, 버튼 대신 안내만 보입니다.
  */
 function GoogleConnectRow({ connection }: GoogleConnectRowProps) {
-  const { status, isReady, isConnecting, errorMessage, connect, disconnect } = connection
+  const { status, canWrite, isReady, isConnecting, errorMessage, connect, disconnect } = connection
   const isServerData = useIsServerData()
   if (status === 'unavailable') return null
   if (isInApp()) {
@@ -614,7 +614,25 @@ function GoogleConnectRow({ connection }: GoogleConnectRowProps) {
                 일정 시작 10분 전에 알림을 보내요. 설정에서 푸시 알림을 켜 두세요.
               </span>
             )}
+            {/* 카드를 구글 일정으로 넣는 것도 서버 카드 번호가 있어야 해서 진짜 로그인일 때만입니다. (#736) */}
+            {isServerData && canWrite && (
+              <span className="block text-[13px] text-slate-500">
+                시각이 있는 카드(AI 계획 포함)는 구글 캘린더에도 넣어요.
+              </span>
+            )}
           </p>
+          {/* 읽기 권한만 받은 옛 연결이면, 다시 연결해야 카드를 넣을 수 있다고 알려 줍니다. */}
+          {isServerData && !canWrite && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={isConnecting || !isReady}
+              onClick={connect}
+            >
+              계획도 넣기
+            </Button>
+          )}
           <button
             type="button"
             className="h-10 shrink-0 px-2 text-sm font-medium text-slate-500 underline underline-offset-4"
@@ -628,8 +646,10 @@ function GoogleConnectRow({ connection }: GoogleConnectRowProps) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm break-keep text-slate-600">
             {status === 'off'
-              ? '구글 캘린더를 연결하면 학원 · 약속 같은 일정이 여기 같이 보여요.'
-              : '구글 연결은 한 시간마다 끝나요. 다시 연결하면 일정을 다시 불러와요.'}
+              ? isServerData
+                ? '구글 캘린더를 연결하면 학원 · 약속 같은 일정이 여기 같이 보이고, 시각이 있는 카드는 구글 캘린더에도 들어가요.'
+                : '구글 캘린더를 연결하면 학원 · 약속 같은 일정이 여기 같이 보여요.'
+              : '구글 연결은 한 시간마다 끝나요. 다시 연결하면 일정을 다시 불러오고, 그동안 바뀐 카드도 캘린더에 넣어요.'}
           </p>
           <div className="flex shrink-0 gap-2">
             <Button
