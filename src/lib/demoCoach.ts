@@ -201,8 +201,9 @@ export function demoTopicOpener(kind: ChatAboutKind): CoachMessage {
       }
     case 'QUIZ_WRONG':
       return {
-        text: '틀린 문제 같이 보자. 정답부터 말하기 전에, 왜 그 답을 골랐는지 먼저 말해 줄래?',
-        chips: [say('헷갈려서 찍었어'), say('공식을 잘못 떠올렸어'), say('문제를 잘못 읽었어')],
+        // 과목 쌤처럼 되묻기 전에 먼저 설명하는 모양입니다. (2026-10-31, BE ChatTopic.QUIZ_WRONG 과 같음)
+        text: '틀린 문제 같이 보자. (시연용 답이라 문제를 실제로 풀지는 않아) 진짜 과목 쌤은 틀린 문제마다 정답이 왜 맞는지와 고른 답이 왜 아닌지를 먼저 설명하고, 비슷한 문제 하나로 확인해.',
+        chips: [say('헷갈려서 찍었어'), say('비슷한 문제 내 줘'), say('문제를 잘못 읽었어')],
       }
     case 'PSYCH_RESULT':
       return {
@@ -249,37 +250,41 @@ export function guessDemoTags(kind: 'SESSION_REVIEW' | 'CARD_FAIL', text: string
     .slice(0, 3)
 }
 
-/** 과목 쌤 방의 시연용 답 */
+/**
+ * 과목 쌤 방의 시연용 답.
+ * 진짜 과목 쌤처럼 되묻기 전에 먼저 답하는 모양으로 씁니다. (2026-10-31 "질문이 다시 질문으로 돌아옴")
+ * 정해진 답이라 실제 문제를 풀 수는 없어서, 무엇을 해 주는지를 먼저 말하고 질문은 끝에 하나만 둡니다.
+ */
 function tutorDemo(text: string, hasPhoto: boolean): DemoReply {
   if (hasPhoto) {
     return {
-      text: '사진 받았어! (시연용 답이라 사진을 실제로 읽지는 않아) 이 문제 어디까지 풀어 봤어? 막힌 줄을 말해 주면 거기서부터 같이 볼게.',
+      text: '사진 받았어! (시연용 답이라 사진을 실제로 읽지는 않아) 진짜 과목 쌤은 사진 속 문제를 읽고 풀이 과정을 단계별로 쓴 뒤 답까지 바로 보여 줘. 그다음 헷갈린 단계가 있는지만 물어볼게.',
       chips: [
-        { kind: 'say', label: '처음부터 모르겠어' },
-        { kind: 'say', label: '중간에 막혔어' },
+        { kind: 'say', label: '풀이 다시 보여 줘' },
+        { kind: 'say', label: '비슷한 문제 내 줘' },
       ],
       showHelp: false,
     }
   }
   if (hasAny(text, ['찍', '헷갈', '잘못'])) {
     return {
-      text: '그럴 수 있어. 그럼 보기를 하나씩 지워 보자. 확실히 아닌 보기부터 골라 볼래? 왜 아닌지도 한 줄로.',
+      text: '그럴 수 있어. 보기 고르는 순서를 먼저 알려 줄게.\n1. 문제가 "옳은 것" 인지 "옳지 않은 것" 인지 다시 본다.\n2. 확실히 아닌 보기부터 지운다.\n3. 남은 보기 두 개는 핵심 낱말이 문제와 맞는지 견준다.\n헷갈린 보기를 말해 주면 왜 아닌지 바로 설명해 줄게.',
       chips: [{ kind: 'say', label: '정답 설명해 줘' }, QUIZ_CHIP],
       showHelp: false,
     }
   }
   if (hasAny(text, ['모르', '이해', '설명', '처음부터'])) {
     return {
-      text: '좋아, 같이 보자. 먼저 네가 아는 데까지 말해 줄래? 예를 들어 이 단원의 정의는 기억나? 거기서부터 한 단계씩 갈게.',
+      text: '좋아, 처음부터 설명할게.\n1. 이 단원의 정의를 한 줄로 정리하고\n2. 쉬운 예시 하나로 보여 준 다음\n3. 비슷한 문제 하나로 확인해 보자.\n(시연용 답이라 단원을 몰라서 여기까지야. 진짜 과목 쌤은 물은 단원으로 바로 설명해.)',
       chips: [
-        { kind: 'say', label: '정의부터 설명해 줘' },
         { kind: 'say', label: '예시 문제 줘' },
+        { kind: 'pickPhoto', label: '📎 문제 사진 보내기' },
       ],
       showHelp: false,
     }
   }
   return {
-    text: '어느 과목 · 단원이야? 모르는 문제를 적어 주거나 📎 로 사진을 보내 줘. 다 보고 나면 비슷한 문제로 확인해 볼게.',
+    text: '(시연용 답이라 내용을 실제로 풀지는 않아) 진짜 과목 쌤은 물은 것에 바로 답해. 문제를 내 달라고 하면 그 개수만큼 한 번에 내고, 풀이를 물으면 과정과 답까지 보여 줘. 📎 로 문제 사진을 보내도 돼.',
     chips: [{ kind: 'pickPhoto', label: '📎 문제 사진 보내기' }, QUIZ_CHIP],
     showHelp: false,
   }

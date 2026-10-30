@@ -5,16 +5,19 @@
  *
  * - 다시 열면 지난 대화가 이어서 보입니다. 날이 바뀌면 날짜 구분선 아래로 그날 대화가 이어집니다.
  * - [새 대화] 를 누르면 "새 대화" 구분선을 긋고 서버 세션을 새로 엽니다. 앞의 말풍선은 그대로 남습니다.
+ *   이 세션은 "깨끗한 새 대화" 라서 서버가 [지난 통화] · 다른 방 이야기를 넣지 않습니다. (isFreshSession, 2026-10-31)
  * - 서버에는 대화를 저장하지 않습니다. (lib/chatApi.ts) 이 기기에 최근 14일 · 말풍선 300개까지만 둡니다.
  * - 설정의 "모든 기록 지우기" 가 같이 지웁니다. (lib/myData.ts 의 'coach-thread')
  * - 다른 사람이 로그인하면 빈 대화방에서 시작합니다. (ownerId)
  *
  * 서버 채팅은 하루 단위 "세션" 으로 엽니다. 대화방은 이어지지만, 서버에 보내는 대화는 지금 세션의 말풍선만입니다.
  * 날이 바뀌었거나 오래 쉬었거나 길어지면 새 세션을 엽니다. 앞 세션은 조용히 정리해서(POST /calls/{id}/finish)
- * 요약을 남기고, 그 요약이 다음 세션 대본의 [지난 통화] 가 되어 AI 가 이어서 기억합니다. (pages/CoachPage.tsx)
+ * 요약을 남기고, 그 요약이 다음 세션 대본의 [지난 통화] 가 되어 AI 가 이어서 기억합니다. (pages/ChatRoomPage.tsx)
+ * 단, 학생이 [새 대화] 를 눌러 연 세션은 이어 가지 않습니다. ("새 대화 눌러도 이전 걸 계속 참고하고 이어져서")
  */
 import type { CallLine } from '@/lib/callReview'
 import {
+  fitChatLine,
   MAX_CHAT_LINES,
   MAX_CHAT_TEXT_LENGTH,
   readChatSources,
@@ -104,6 +107,12 @@ export interface CoachThread {
   isHelpShown: boolean
   /** 지금 서버 세션의 주제. 없으면 null (보통 대화). 서버가 대본을 잊어 다시 열 때도 이 주제로 엽니다. */
   topic: ThreadTopic | null
+  /**
+   * true 면 지금(또는 다음에 열) 서버 세션이 [새 대화] 를 눌러 시작한 "깨끗한 새 대화" 입니다. (2026-10-31)
+   * 열 때 fresh 를 보내서 서버가 [지난 통화] 를 넣지 않게 하고, 말 보낼 때 다른 방 이야기도 보내지 않습니다.
+   * 저장해 둬서 [새 대화] 를 누르고 새로고침해도 이어집니다. 날이 바뀌는 등 저절로 새 세션을 열 때는 false 로 돌아갑니다.
+   */
+  isFreshSession: boolean
 }
 
 /** 며칠 치 대화를 남길지 */
@@ -144,6 +153,7 @@ export function emptyThread(ownerId: string): CoachThread {
     lastServerAt: null,
     isHelpShown: false,
     topic: null,
+    isFreshSession: false,
   }
 }
 
@@ -261,6 +271,8 @@ export function loadCoachThread(ownerId: string, room: ChatRoomId): CoachThread 
     lastServerAt: typeof record.lastServerAt === 'number' ? record.lastServerAt : null,
     isHelpShown: record.isHelpShown === true,
     topic: toTopic(record.topic),
+    // 이 칸이 없던 예전에 저장한 대화방은 false (예전처럼 이어지는 세션)
+    isFreshSession: record.isFreshSession === true,
   }
 }
 
@@ -372,11 +384,12 @@ export function sessionLines(thread: CoachThread): CallLine[] {
   return thread.bubbles
     .filter((bubble) => bubble.id >= thread.sessionFrom && !bubble.isDivider)
     .map(({ speaker, text, plan, quiz }) => {
-      // 계획 · 문제 말풍선이면 계획 한 줄 · 결과 한 줄을 붙여서, AI 가 무슨 이야기인지 알게 합니다. (서버 한도 500자)
+      // 계획 · 문제 말풍선이면 계획 한 줄 · 결과 한 줄을 붙여서, AI 가 무슨 이야기인지 알게 합니다. (500자까지)
       const extra = plan ? planLineForAi(plan) : quiz ? quizLineForAi(quiz) : null
+      // 그 밖의 말(과목 쌤의 문제 목록 · 풀이처럼 긴 AI 답)은 서버 한 줄 한도(1000자)까지 자릅니다. (2026-10-31)
       return {
         speaker,
-        text: extra ? `${text}\n${extra}`.slice(0, MAX_CHAT_TEXT_LENGTH) : text,
+        text: extra ? `${text}\n${extra}`.slice(0, MAX_CHAT_TEXT_LENGTH) : fitChatLine(text),
       }
     })
 }

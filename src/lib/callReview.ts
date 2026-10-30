@@ -15,7 +15,8 @@ import { WAITING_TEXT, type SubtitleMessage } from '@/lib/transcript'
 
 // 서버가 GPT 로 정리하는 동안 기다리는 최대 시간(밀리초). 서버는 GPT 를 20초까지 기다립니다.
 const REQUEST_TIMEOUT_MS = 30_000
-// 서버가 받는 자막의 한도입니다. (BE 의 CallFinishRequest: 200줄, 한 줄 500자)
+// 서버가 받는 자막의 한도입니다. (BE 의 CallFinishRequest: 200줄, 한 줄은 2026-10-31 부터 1000자)
+// 통화 자막 한 줄은 500자면 충분하고 예전 서버(500자)에도 맞아서 500 으로 자릅니다.
 const MAX_LINES = 200
 const MAX_TEXT_LENGTH = 500
 
