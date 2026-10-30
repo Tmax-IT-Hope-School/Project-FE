@@ -3,7 +3,7 @@
  * 채팅은 "글로 하는 통화" 입니다. 통화와 같은 대본으로 AI 코치와 이야기합니다.
  *
  * 서버와 정한 약속입니다. (BE 저장소의 docs/API.md "상담 채팅") 전부 로그인이 필요합니다.
- *   열기      POST /chats?grade=2&classNo=1   { careLevel, maxHarshness, card, room?, about? }   (학년 · 반은 있으면 — 오늘 시간표를 대본에)
+ *   열기      POST /chats?grade=2&classNo=1   { careLevel, maxHarshness, card, room?, about?, fresh? }   (학년 · 반은 있으면 — 오늘 시간표를 대본에)
  *                                         -> 200 { chatId, reply, showHelp, helpLines, quickReplies?, action?, tags? }
  *             POST /chats?greet=false     (같은 본문) -> 200 { chatId, reply: null, … }  첫 인사 없이 채팅 번호만 (BE 채팅 수정 1)
  *   말 보내기  POST /chats/{chatId}/messages { lines: [{ speaker: 'ai' | 'me', text }], image? }  (이 서버 세션의 대화 전체)
@@ -15,10 +15,14 @@
  *     tags  — 후기 · 못 한 카드 대화에서 AI 가 학생 말로 짐작한 이유 값 (0~3개). 화면은 "맞아?" 로 확인만 받습니다.
  *     otherRooms — 말 보내기에 같이 보내는, 오늘 다른 대화방에서 학생이 한 말 몇 줄 (2026-10-22, lib/coachThread.ts 의 otherRoomLines).
  *                  서버가 그 한 번의 답에만 대본에 붙이고 저장하지 않습니다. 그래서 다른 방 이야기를 이 방 AI 도 압니다.
+ *     fresh — 학생이 [＋ 새 대화] 를 눌러 여는 세션이면 true (2026-10-31, BE CallSessionRequest.fresh).
+ *             서버가 그 세션 대본에 [지난 통화] 를 넣지 않고, 다른 방 이야기도 붙이지 않습니다. 앞 대화를 이어 가지 않는 새 대화입니다.
+ *             이 칸을 모르는 예전 서버는 그냥 무시합니다(400 아님). 그때는 예전처럼 이어집니다.
  *   sources (BE #342, 2026-10-18) — 📚 과목 쌤 방에서 AI 가 웹 검색을 했을 때 답에 쓴 출처 (0~3개, { title, url }).
  *     서버가 교육 · 공공 · 백과사전 사이트만 남겨 줍니다. 화면은 답 아래에 작은 링크로 보여 줍니다.
  *   정리하기  POST /calls/{chatId}/finish (lib/callReview.ts 의 finishCall). 코치 탭은 날이 바뀌면 지난 세션을 조용히 정리합니다.
  *             정리한 요약은 서버 대본의 [지난 통화] 로 들어가서, 다음 날 AI 가 "어제 약속 지켰어?" 처럼 이어서 물어봅니다.
+ *             ([새 대화] 로 연 세션(fresh)만은 [지난 통화] 를 넣지 않습니다.)
  *   실패      400 대화 모양이 틀림 · 409 이미 끝났거나 서버가 대본을 잊음 · 429 오늘 AI 사용량을 다 씀 · 503 AI 가 꺼져 있음
  *
  * - 열기 요청은 통화를 걸 때와 똑같습니다. (말투 · 학생 카드. pages/CallActivePage.tsx)
@@ -243,10 +247,12 @@ async function postChat(path: string, body: unknown): Promise<ChatReply> {
   }
 }
 
-/** 채팅을 열 때 고를 것 (대화방 3개, BE #330). 안 주면 코치 방 · 주제 없음 */
+/** 채팅을 열 때 고를 것 (대화방 3개, BE #330). 안 주면 코치 방 · 주제 없음 · 이어지는 세션 */
 export interface StartChatOptions {
   room?: ServerChatRoom
   about?: ChatAbout | null
+  /** true 면 [＋ 새 대화] 로 여는 깨끗한 세션입니다. 서버가 지난 대화를 넣지 않습니다. (2026-10-31) */
+  fresh?: boolean
 }
 
 /**
@@ -311,6 +317,8 @@ function startChatBody(options: StartChatOptions): object {
     // 생각 습관 테스트(selfReportedBiases · selfReportedWeaknesses)는 #417 에서 지워서 보내지 않습니다. (서버에서 선택 칸)
     ...(options.room ? { room: options.room } : {}),
     ...(options.about ? { about: options.about } : {}),
+    // [＋ 새 대화] 로 여는 세션만 보냅니다. (안 보내면 예전처럼 이어지는 세션)
+    ...(options.fresh ? { fresh: true } : {}),
   }
 }
 

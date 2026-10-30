@@ -222,6 +222,7 @@ function loadMissionProgress(todayKey: string): number | null {
 /**
  * 지난 서버 세션을 조용히 정리합니다. (POST /calls/{id}/finish — 요약 · 생각 습관 · 약속이 서버에 남음)
  * 정리한 요약은 다음 세션 대본의 [지난 통화] 가 되어, AI 가 "어제 약속 지켰어?" 처럼 이어서 물어봅니다.
+ * 단, [＋ 새 대화] 로 연 다음 세션(fresh)에는 서버가 넣지 않습니다. 기록 · 통계용으로만 남습니다. (2026-10-31)
  * 결과 화면으로 가지 않고, 실패해도 대화방은 그대로입니다. (이미 정리됐거나 서버가 잊었으면 4xx 라서 그냥 넘어갑니다)
  */
 function finishQuietly(chatId: string, lines: CallLine[]) {
@@ -249,8 +250,9 @@ function getChatErrorMessage(error: unknown): string {
  * 📅 계획 · 📚 과목 쌤 방은 브리핑 · 미션 · 알림 대신 그 방의 첫 인사(코드가 정한 말)로 시작합니다.
  * 계획(5번)은 📅 계획 방에서 합니다. 다른 방에서 계획 칩을 누르면 계획 방으로 넘어가서 짭니다.
  *
- *   0. [새 대화] 를 누르면 구분선을 긋고 서버 세션을 새로 엽니다. 다른 화면의 [이야기하기] 로 오면(?talk=)
- *      그 주제(후기 · 못 한 카드 · 주간 숫자 · 틀린 문제 · 검사 결과 · 하루)로 새 세션을 열어 AI 가 먼저 말합니다.
+ *   0. [새 대화] 를 누르면 구분선을 긋고 서버 세션을 새로 엽니다. 이 세션은 앞 대화를 이어 가지 않습니다.
+ *      (열 때 fresh 를 보내 서버가 [지난 통화] 를 빼고, 다른 방 이야기도 보내지 않음. 2026-10-31)
+ *      다른 화면의 [이야기하기] 로 오면(?talk=) 그 주제(후기 · 못 한 카드 · 주간 숫자 · 틀린 문제 · 검사 결과 · 하루)로 새 세션을 열어 AI 가 먼저 말합니다.
  *      후기 · 못 한 카드 대화에서 AI 가 이유를 짐작하면 "이유: 폰 · 피곤함 — 맞아?" 로 확인받아 기록에 저장합니다.
  *   1. 지난 대화가 이 기기에 남아 있어서 다시 열면 이어서 보입니다. 날이 바뀌면 날짜 구분선이 생깁니다. (lib/coachThread.ts)
  *   2. 그날 처음 열면 코치가 먼저 말을 겁니다. (아침 브리핑: 시간표 · 급식 · 시험 D-day · 오늘 카드 · 컨디션 묻기)
@@ -691,7 +693,8 @@ function RoomChat({ room }: RoomChatProps) {
     if (thread.chatId !== null && needsNewSession(thread, now)) {
       staleSession = { chatId: thread.chatId, lines: sessionLines(thread) }
       // 지난 세션의 주제([이야기하기])도 그 세션과 같이 끝납니다.
-      thread = { ...thread, chatId: null, lastServerAt: null, topic: null }
+      // 날이 바뀌어 저절로 여는 새 세션은 [새 대화] 가 아니라서 지난 대화를 이어 갑니다. (isFreshSession: false)
+      thread = { ...thread, chatId: null, lastServerAt: null, topic: null, isFreshSession: false }
     }
     const add = (message: CoachMessage) => {
       const bubble = toCoachBubble(nextBubbleId(thread.bubbles), message, now)
@@ -865,16 +868,21 @@ function RoomChat({ room }: RoomChatProps) {
       lines,
       image,
       about,
+      isFresh,
     }: {
       id: string | null
       lines: CallLine[]
       image: string | null
       about: ChatAbout | null
+      /** [＋ 새 대화] 로 시작한 세션인지 (CoachThread.isFreshSession) */
+      isFresh: boolean
     }) => {
       // 학생이 먼저 말을 보내는 길이라 AI 첫 인사 없이 채팅 번호만 받습니다. (인사는 화면에 안 쓰여서 8초쯤 버려졌음)
-      const open = () => openChatSession({ room: roomInfo.serverRoom, about })
+      // [새 대화] 로 시작한 세션이면 fresh 로 열어서 서버가 지난 대화([지난 통화])를 넣지 않게 합니다. (2026-10-31)
+      const open = () => openChatSession({ room: roomInfo.serverRoom, about, fresh: isFresh })
       // 오늘 다른 방에서 한 말도 같이 보내서, 이 방 AI 가 그 이야기를 이어 갑니다. (lib/coachThread.ts, 2026-10-22)
-      const otherRooms = otherRoomLines(user?.id ?? 'unknown', room, todayKey)
+      // [새 대화] 로 시작한 세션에는 보내지 않습니다. 앞의 이야기를 이어 가지 않는 새 대화라서입니다.
+      const otherRooms = isFresh ? [] : otherRoomLines(user?.id ?? 'unknown', room, todayKey)
       let openId = id ?? (await open())
       let reply: ChatReply
       try {
@@ -1189,6 +1197,8 @@ function RoomChat({ room }: RoomChatProps) {
       lastServerAt: null,
       sessionFrom: nextBubbleId(next.bubbles),
       topic: { about: request.about, target: request.target },
+      // [이야기하기] 주제 대화는 지금처럼 지난 대화를 이어 갑니다. ([새 대화] 만 깨끗하게 시작)
+      isFreshSession: false,
     }
     if (!isServerData) {
       const opener = demoTopicOpener(request.about.kind)
@@ -1394,6 +1404,8 @@ function RoomChat({ room }: RoomChatProps) {
         lastServerAt: null,
         sessionFrom: newSessionStart(next.bubbles),
         topic: null,
+        // 저절로 여는 새 세션은 [새 대화] 가 아니라서 지난 대화를 이어 갑니다.
+        isFreshSession: false,
       }
     }
     setThread(next)
@@ -1402,6 +1414,7 @@ function RoomChat({ room }: RoomChatProps) {
       lines: sessionLines(next),
       image: photo,
       about: next.topic?.about ?? null,
+      isFresh: next.isFreshSession,
     })
   }
 
@@ -2011,7 +2024,11 @@ function RoomChat({ room }: RoomChatProps) {
     )
   }
 
-  /** [＋ 새 대화] — 지금 서버 세션을 정리하고 "새 대화" 구분선 아래에서 방의 첫 인사로 다시 시작합니다. */
+  /**
+   * [＋ 새 대화] — 지금 서버 세션을 정리하고 "새 대화" 구분선 아래에서 방의 첫 인사로 다시 시작합니다.
+   * 새 세션은 앞 대화를 이어 가지 않습니다. ("새 대화 눌러도 이전 걸 계속 참고하고 이어져서", 2026-10-31)
+   * 정리한 기록(요약)은 서버에 그대로 남지만, 이 세션을 열 때 fresh 를 보내서 서버가 대본에 넣지 않습니다.
+   */
   function handleNewChat() {
     if (isBusy) return
     const lines = sessionLines(thread)
@@ -2034,6 +2051,8 @@ function RoomChat({ room }: RoomChatProps) {
       lastServerAt: null,
       sessionFrom: next.bubbles[next.bubbles.length - 1].id,
       topic: null,
+      // 다음에 여는 서버 세션을 깨끗한 새 대화로 엽니다. (저장해 둬서 새로고침해도 이어짐)
+      isFreshSession: true,
     })
     setFocusStep(null)
     setLongForm(null)
