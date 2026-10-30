@@ -47,9 +47,34 @@ import { getCallTone } from '@/lib/todayCare'
 // 서버가 GPT 의 답을 기다리는 시간(15초)보다 조금 넉넉하게 기다립니다.
 const REQUEST_TIMEOUT_MS = 25_000
 
-/** 서버가 받는 대화의 한도입니다. (BE ChatMessageRequest: 60줄, 한 줄 500자) */
+/** 서버가 받는 대화의 줄 수입니다. (BE ChatMessageRequest: 60줄) */
 export const MAX_CHAT_LINES = 60
+/**
+ * 학생이 쓰는 말 · 앱이 붙이는 계획/문제 한 줄의 길이입니다. 예전 서버(한 줄 500자)에도 그대로 보낼 수 있게 500 으로 둡니다.
+ */
 export const MAX_CHAT_TEXT_LENGTH = 500
+/**
+ * 서버에 보내는 대화 한 줄의 최대 길이입니다. (BE CallFinishRequest.Line.MAX_TEXT_LENGTH, 2026-10-31 에 500 → 1000)
+ * 과목 쌤의 문제 목록 · 풀이처럼 긴 AI 답을 다음 말과 함께 다시 보낼 때 씁니다. 서버도 AI 답을 1000자까지만 줍니다.
+ */
+export const MAX_CHAT_LINE_LENGTH = 1000
+
+/**
+ * 대화 한 줄을 서버 한도(MAX_CHAT_LINE_LENGTH)까지 자릅니다. 넘는 줄을 보내면 400 으로 채팅이 멈춥니다.
+ * 서버는 글자 수를 자바 방식(이모지는 2칸)으로 세서 .length 로 자르고, 이모지 한가운데면 한 칸 앞에서 자릅니다.
+ *
+ *   fitChatLine('가'.repeat(1200))         -> '가' 1000개
+ *   fitChatLine('가'.repeat(999) + '😀')   -> '가' 999개 (😀 의 반쪽만 남지 않게)
+ *   fitChatLine('좋아')                     -> '좋아'
+ */
+export function fitChatLine(text: string): string {
+  if (text.length <= MAX_CHAT_LINE_LENGTH) return text
+  let end = MAX_CHAT_LINE_LENGTH
+  // 0xD800 ~ 0xDBFF 는 이모지 같은 글자의 앞쪽 반입니다.
+  const code = text.charCodeAt(end - 1)
+  if (code >= 0xd800 && code <= 0xdbff) end -= 1
+  return text.slice(0, end)
+}
 
 /** 도움받을 곳 하나 (서버의 HelpLine 과 같은 모양) */
 export interface ChatHelpLine {

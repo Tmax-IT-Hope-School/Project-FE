@@ -17,6 +17,7 @@
  */
 import type { CallLine } from '@/lib/callReview'
 import {
+  fitChatLine,
   MAX_CHAT_LINES,
   MAX_CHAT_TEXT_LENGTH,
   readChatSources,
@@ -383,11 +384,12 @@ export function sessionLines(thread: CoachThread): CallLine[] {
   return thread.bubbles
     .filter((bubble) => bubble.id >= thread.sessionFrom && !bubble.isDivider)
     .map(({ speaker, text, plan, quiz }) => {
-      // 계획 · 문제 말풍선이면 계획 한 줄 · 결과 한 줄을 붙여서, AI 가 무슨 이야기인지 알게 합니다. (서버 한도 500자)
+      // 계획 · 문제 말풍선이면 계획 한 줄 · 결과 한 줄을 붙여서, AI 가 무슨 이야기인지 알게 합니다. (500자까지)
       const extra = plan ? planLineForAi(plan) : quiz ? quizLineForAi(quiz) : null
+      // 그 밖의 말(과목 쌤의 문제 목록 · 풀이처럼 긴 AI 답)은 서버 한 줄 한도(1000자)까지 자릅니다. (2026-10-31)
       return {
         speaker,
-        text: extra ? `${text}\n${extra}`.slice(0, MAX_CHAT_TEXT_LENGTH) : text,
+        text: extra ? `${text}\n${extra}`.slice(0, MAX_CHAT_TEXT_LENGTH) : fitChatLine(text),
       }
     })
 }

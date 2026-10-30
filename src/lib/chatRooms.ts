@@ -102,7 +102,8 @@ export const CHAT_ROOMS: ChatRoomInfo[] = [
     isDailyCoach: false,
     isPlanner: false,
     greeting: {
-      text: '안녕, 나는 과목 쌤이야. 모르는 문제나 개념을 물어봐. 📎 로 문제 사진을 보내도 돼. 답만 알려 주기보다 어디서 막혔는지부터 같이 볼게.',
+      // 이 인사도 AI 가 읽는 대화 첫 줄이라, 과목 쌤이 먼저 답하는 방식과 맞춥니다. (2026-10-31 "질문이 다시 질문으로 돌아옴")
+      text: '안녕, 나는 과목 쌤이야. 모르는 문제나 개념을 물어보면 풀이 과정까지 바로 설명해 줄게. "한국사 문제 3개 내 줘" 처럼 문제를 내 달라고 해도 돼. 📎 로 문제 사진을 보내도 돼.',
       chips: [{ kind: 'pickPhoto', label: '📎 문제 사진 보내기' }, QUIZ_CHIP, QUIZ_REVIEW_CHIP],
     },
   },
