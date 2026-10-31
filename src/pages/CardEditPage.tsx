@@ -232,6 +232,13 @@ function CardForm({
   const [committedTitle, setCommittedTitle] = useState(initialValues.title.trim())
   // 테스트 로그인이면 서버의 AI 를 쓸 수 없습니다.
   const isAiEnabled = aiChecklist !== 'off'
+  // 체크리스트 AI 에는 내가 고른 목표나 AI 가 제목을 보고 고른 목표만 알려 줍니다.
+  // 새 카드에 저절로 걸린 목표(가장 최근 목표)는 이 카드와 상관없을 수 있어서 보내지 않습니다.
+  // (2026-10-31 '한국사 풀기' 카드에 '수학 3등급' 목표가 저절로 걸려서 수학 체크리스트가 나옴)
+  const isGoalChosen =
+    touchedDefaults.includes('goalId') ||
+    (aiDefaults?.applied.goalId !== undefined && aiDefaults.applied.goalId === values.goalId)
+  const checklistGoal = isGoalChosen ? goalTitle : undefined
 
   function handleTitleBlur() {
     const title = values.title.trim()
@@ -244,12 +251,12 @@ function CardForm({
     if (aiChecklist !== 'auto' || title === '' || title === autoAskedTitle) return
     if (getFilledChecklist(values.checklist).length > 0) return
     setAutoAskedTitle(title)
-    askChecklist({ title, goal: goalTitle, auto: true })
+    askChecklist({ title, goal: checklistGoal, auto: true })
   }
 
   function handleAskChecklist() {
     setAiNotice('')
-    askChecklist({ title: values.title.trim(), goal: goalTitle, auto: false })
+    askChecklist({ title: values.title.trim(), goal: checklistGoal, auto: false })
   }
   const filledCount = getFilledChecklist(values.checklist).length
   // 체크리스트를 비워 두면 제목 한 줄로 채우므로, 예상 개수의 최댓값은 최소 1개입니다.
