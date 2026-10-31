@@ -8,7 +8,12 @@
  * ⚠️ 범위는 서버(BE StudySignals)와 같게 잘라서 보냅니다. 범위를 넘으면 서버가 400 으로 통화를 막기 때문입니다.
  */
 import { loadFocusScores, summarizeFocusWeek, type FocusScoreRecord } from '@/lib/focusScore'
-import { loadQuizResults, PHOTO_QUIZ_TOPIC, type QuizResult } from '@/lib/studyQuiz'
+import {
+  isAnswerCorrect,
+  loadQuizResults,
+  PHOTO_QUIZ_TOPIC,
+  type QuizResult,
+} from '@/lib/studyQuiz'
 
 /** 서버로 보내는 모양. 모르는 값은 null (0 과 "모름" 은 다릅니다) */
 export interface StudySignals {
@@ -62,7 +67,7 @@ function findWrongTopics(results: QuizResult[]): string[] {
     const topic = result.topic.replace(/\s+/g, ' ').trim().slice(0, MAX_TOPIC_LENGTH).trim()
     if (topic === '' || result.topic === PHOTO_QUIZ_TOPIC || topics.includes(topic)) continue
     const hasStillWrong = result.questions.some((question, index) => {
-      const isWrong = result.answers[index]?.choiceIndex !== question.answerIndex
+      const isWrong = !isAnswerCorrect(question, result.answers[index])
       if (!isWrong) return false
       // 이 결과보다 나중에 같은 문제를 맞힌 적이 있으면 "다시 맞힌 것"
       const isRetriedRight = results.some(
@@ -71,7 +76,7 @@ function findWrongTopics(results: QuizResult[]): string[] {
           later.questions.some(
             (laterQuestion, laterIndex) =>
               laterQuestion.question === question.question &&
-              later.answers[laterIndex]?.choiceIndex === laterQuestion.answerIndex,
+              isAnswerCorrect(laterQuestion, later.answers[laterIndex]),
           ),
       )
       return !isRetriedRight

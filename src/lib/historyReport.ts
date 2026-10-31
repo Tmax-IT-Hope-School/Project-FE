@@ -8,7 +8,7 @@ import { getWeekday } from '@/lib/routines'
 import { getSessionCardId } from '@/lib/sessionRecords'
 import { getStudyMs } from '@/lib/studyTime'
 import type { ServerQuizCount } from '@/lib/quizResultsApi'
-import type { QuizResult } from '@/lib/studyQuiz'
+import { isAnswerCorrect, type QuizResult } from '@/lib/studyQuiz'
 import type { WeeklyPick } from '@/lib/weeklyPicks'
 import type { Card, StudySession } from '@/types'
 
@@ -344,7 +344,7 @@ export function quizMarks(
       if (!isInRange) return
       marks.push({
         subject: firstSubject ?? subject,
-        correct: answer.choiceIndex === question.answerIndex,
+        correct: isAnswerCorrect(question, answer),
       })
     })
   }

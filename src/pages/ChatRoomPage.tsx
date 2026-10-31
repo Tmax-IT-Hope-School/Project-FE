@@ -151,15 +151,21 @@ import {
 import {
   MAX_QUIZ_MATERIAL_LENGTH,
   MAX_QUIZ_TOPIC_LENGTH,
+  MAX_SHORT_INPUT_LENGTH,
   PHOTO_QUIZ_TOPIC,
   answerQuiz,
+  answerQuizText,
   countCorrect,
+  isAnswerCorrect,
+  isShortQuestion,
   loadQuizResults,
   loadYesterdayWrong,
   makeDemoQuiz,
   newQuiz,
   nextQuizStep,
   parseQuizText,
+  quizCountOf,
+  quizShortCountOf,
   requestQuizOrDemo,
   requestedQuizCountOf,
   retryOneQuestion,
@@ -168,6 +174,7 @@ import {
   wrongForReview,
   wrongQuestionsOf,
   type CoachQuiz,
+  type QuizAnswer,
   type QuizInput,
   type QuizQuestion,
   type QuizReply,
@@ -464,6 +471,8 @@ interface QuizForm {
   photo: string | null
   /** "문제 5개 내 줘" 처럼 말한 문제 수. 말하지 않았으면 없음 (3개) */
   count?: number
+  /** 그중 주관식 수. 없으면 문제 수로 정합니다. (lib/studyQuiz.ts 의 quizShortCountOf) */
+  shortCount?: number
 }
 
 /** 위기 표현이 감지돼서 문제 대신 하는 말 (아래에 상담 전화 한 줄이 같이 보임) */
@@ -912,7 +921,7 @@ function RoomChat({ room }: RoomChatProps) {
       // AI 가 고른 빠른 답 · 행동이 있으면 그 칩을, 없으면 코드가 칩을 붙입니다. (핑계 협상 · 계획 · 시험)
       // 위기 안내에는 칩이 없고, 계획 방에는 계획 칩이 늘 붙습니다. (lib/coachBriefing.ts)
       const studentText = variables.lines[variables.lines.length - 1]?.text ?? ''
-      // 과목 쌤이 확인 문제(start_quiz)를 골랐으면 칩을 기다리지 않고 바로 4지선다 문제를 냅니다. (2026-10-31 "객관식으로 눌러 풀던 게 사라짐")
+      // 과목 쌤이 확인 문제(start_quiz)를 골랐으면 칩을 기다리지 않고 바로 확인 문제(5지선다 · 주관식)를 냅니다. (2026-10-31 "객관식으로 눌러 풀던 게 사라짐")
       const quizTopic =
         roomInfo.id === 'tutor' && !reply.showHelp && reply.action?.type === 'start_quiz'
           ? reply.action.title
@@ -955,6 +964,11 @@ function RoomChat({ room }: RoomChatProps) {
           image: null,
           cardId: null,
           count: requestedQuizCountOf(studentText) ?? undefined,
+          // "주관식으로" · "객관식만" 같은 말을 보고 주관식 수를 정합니다. (그 밖에는 3문제 중 1개)
+          shortCount: quizShortCountOf(
+            studentText,
+            quizCountOf(requestedQuizCountOf(studentText) ?? undefined),
+          ),
         })
       }
     },
@@ -1347,11 +1361,18 @@ function RoomChat({ room }: RoomChatProps) {
               image: null,
               cardId: null,
               count: quizRequest.count ?? undefined,
+              shortCount: quizShortCountOf(text, quizCountOf(quizRequest.count ?? undefined)),
             },
             text,
           )
         } else {
-          openQuizForm({ count: quizRequest.count ?? undefined }, text)
+          openQuizForm(
+            {
+              count: quizRequest.count ?? undefined,
+              shortCount: quizShortCountOf(text, quizCountOf(quizRequest.count ?? undefined)),
+            },
+            text,
+          )
         }
         return
       }
@@ -1721,6 +1742,7 @@ function RoomChat({ room }: RoomChatProps) {
         image: quizForm.photo,
         cardId: quizForm.cardId,
         count: quizForm.count,
+        shortCount: quizForm.shortCount,
       },
       myText,
     )
@@ -2130,7 +2152,7 @@ function RoomChat({ room }: RoomChatProps) {
     if (!quiz || isBusy) return
     const wrong = quiz.questions
       .map((question, index) => ({ question, answer: quiz.answers[index] }))
-      .filter(({ question, answer }) => answer && answer.choiceIndex !== question.answerIndex)
+      .filter(({ question, answer }) => answer && !isAnswerCorrect(question, answer))
     if (wrong.length === 0) return
     navigate(
       startTalk({
@@ -2250,6 +2272,9 @@ function RoomChat({ room }: RoomChatProps) {
                         isLatest={bubble.id === latestQuizId}
                         onAnswer={(choiceIndex) =>
                           changeQuiz(bubble.id, (quiz) => answerQuiz(quiz, choiceIndex, Date.now()))
+                        }
+                        onAnswerText={(text) =>
+                          changeQuiz(bubble.id, (quiz) => answerQuizText(quiz, text, Date.now()))
                         }
                         onNext={() =>
                           changeQuiz(bubble.id, (quiz) => nextQuizStep(quiz, Date.now()))
@@ -3225,14 +3250,71 @@ function isQuizActive(quiz: CoachQuiz | undefined): boolean {
   return quiz !== undefined && (quiz.status === 'open' || quiz.status === 'guessCheck')
 }
 
-/** 보기 번호 글자 */
-const CHOICE_MARKS = ['①', '②', '③', '④']
+/** 보기 번호 글자 (수능처럼 5지선다, 예전 4지선다 문제도 같은 글자) */
+const CHOICE_MARKS = ['①', '②', '③', '④', '⑤']
+
+interface ShortAnswerFieldProps {
+  /** 입력칸 id (문제 묶음 · 문제 번호로 만들어 겹치지 않게) */
+  id: string
+  /** 이미 낸 답. 아직 안 냈으면 null */
+  answer: QuizAnswer | null
+  /** 낸 답이 맞았는지 (냈을 때만 씀) */
+  isRight: boolean
+  onSubmit: (text: string) => void
+}
+
+/**
+ * 주관식(단답형) 답 칸. 낱말 · 숫자 하나를 쓰고 [확인] 을 누르면 냅니다. Enter 로도 냅니다.
+ * 낸 뒤에는 쓴 답을 그대로 보여 주고(바꿀 수 없음) 맞으면 초록, 틀리면 빨강 테두리입니다.
+ */
+function ShortAnswerField({ id, answer, isRight, onSubmit }: ShortAnswerFieldProps) {
+  const [text, setText] = useState('')
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (text.trim() === '') return
+    onSubmit(text)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2">
+      <label htmlFor={id} className="sr-only">
+        답
+      </label>
+      <input
+        id={id}
+        value={answer?.text ?? text}
+        onChange={(event) => setText(event.target.value)}
+        disabled={answer !== null}
+        maxLength={MAX_SHORT_INPUT_LENGTH}
+        placeholder="낱말이나 숫자로 답해 줘"
+        autoComplete="off"
+        className={cn(
+          'focus:ring-brand/40 h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 disabled:text-slate-700',
+          answer !== null && isRight && 'border-emerald-300 bg-emerald-50',
+          answer !== null && !isRight && 'border-red-300 bg-red-50',
+        )}
+      />
+      {answer === null && (
+        <button
+          type="submit"
+          disabled={text.trim() === ''}
+          className="bg-brand h-11 shrink-0 cursor-pointer rounded-2xl px-4 text-[15px] font-semibold text-white disabled:cursor-default disabled:opacity-40"
+        >
+          확인
+        </button>
+      )}
+    </form>
+  )
+}
 
 interface QuizCardProps {
   quiz: CoachQuiz
   /** true 면 가장 최근 문제 말풍선입니다. 아니면 결과 한 줄로 접습니다. */
   isLatest: boolean
   onAnswer: (choiceIndex: number) => void
+  /** 주관식 문제에 쓴 답을 냅니다. */
+  onAnswerText: (text: string) => void
   /** [다음] · [결과 보기] */
   onNext: () => void
   /** 찍은 것 같을 때 [다시 풀기] — 한 문제만 다시 */
@@ -3247,12 +3329,14 @@ interface QuizCardProps {
 
 /**
  * 코치 말풍선 아래의 문제 카드. 한 문제씩 보여 주고, 고르면 정답 · 오답 색과 해설을 보여 줍니다.
+ * 객관식은 ①~⑤ 보기를 누르고, 주관식은 답 칸에 써서 냅니다. 지문이 있으면 문제 위 회색 상자에 보여 줍니다.
  * 다 풀면 "3개 중 2개 맞았어" 와 [틀린 것 다시 보기] · [다른 주제로] 를 보여 줍니다.
  */
 function QuizCard({
   quiz,
   isLatest,
   onAnswer,
+  onAnswerText,
   onNext,
   onRetry,
   onKeepResult,
@@ -3277,67 +3361,102 @@ function QuizCard({
   const question = quiz.questions[quiz.current]
   const answer = quiz.answers[quiz.current]
   const isLastStep = quiz.retryIndex !== null || quiz.current === total - 1
+  const isShort = isShortQuestion(question)
+  const isRight = isAnswerCorrect(question, answer)
 
   return (
     <div className="mt-2 w-full rounded-[20px] border border-slate-200 bg-white p-3 sm:max-w-md">
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 text-[15px] font-bold break-words text-slate-900">📝 {quiz.topic}</p>
         {quiz.status === 'open' && (
-          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 tabular-nums">
-            {quiz.current + 1}/{total}
+          <span className="flex shrink-0 items-center gap-1">
+            {isShort && (
+              <span className="bg-brand-light text-brand rounded-full px-2 py-0.5 text-xs font-semibold">
+                주관식
+              </span>
+            )}
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 tabular-nums">
+              {quiz.current + 1}/{total}
+            </span>
           </span>
         )}
       </div>
 
       {quiz.status === 'open' && (
         <div className="mt-2 flex flex-col gap-2">
-          <p className="text-[15px] break-words whitespace-pre-wrap text-slate-900">
+          {/* 지문: 길면 상자 안에서만 스크롤해서 보기 버튼이 화면 밖으로 밀려나지 않게 합니다. */}
+          {question.passage && (
+            <p className="max-h-48 overflow-y-auto rounded-xl bg-slate-50 px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap text-slate-700">
+              {question.passage}
+            </p>
+          )}
+          <p className="text-[15px] leading-relaxed font-medium break-words whitespace-pre-wrap text-slate-900">
             {question.question}
           </p>
-          <div role="group" aria-label="보기" className="flex flex-col gap-2">
-            {question.choices.map((choice, index) => {
-              const isAnswer = index === question.answerIndex
-              const isPicked = answer?.choiceIndex === index
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  disabled={answer !== null}
-                  onClick={() => onAnswer(index)}
-                  className={cn(
-                    'flex min-h-10 w-full cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-[15px] break-words text-slate-800 disabled:cursor-default',
-                    // 고른 뒤: 정답은 초록, 내가 고른 오답은 빨강, 나머지는 흐리게
-                    answer !== null &&
-                      isAnswer &&
-                      'border-emerald-300 bg-emerald-50 text-emerald-800',
-                    answer !== null &&
-                      isPicked &&
-                      !isAnswer &&
-                      'border-red-300 bg-red-50 text-red-700',
-                    answer !== null && !isAnswer && !isPicked && 'opacity-60',
-                  )}
-                >
-                  <span aria-hidden className="shrink-0">
-                    {CHOICE_MARKS[index]}
-                  </span>
-                  <span className="min-w-0 flex-1">{choice}</span>
-                </button>
-              )
-            })}
-          </div>
+          {isShort ? (
+            <ShortAnswerField
+              key={`${quiz.id}-${quiz.current}`}
+              id={`quiz-short-${quiz.id}-${quiz.current}`}
+              answer={answer}
+              isRight={isRight}
+              onSubmit={onAnswerText}
+            />
+          ) : (
+            <div role="group" aria-label="보기" className="flex flex-col gap-2">
+              {question.choices.map((choice, index) => {
+                const isAnswer = index === question.answerIndex
+                const isPicked = answer?.choiceIndex === index
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    disabled={answer !== null}
+                    onClick={() => onAnswer(index)}
+                    className={cn(
+                      'flex min-h-10 w-full cursor-pointer items-start gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-[15px] break-words text-slate-800 disabled:cursor-default',
+                      // 고른 뒤: 정답은 초록, 내가 고른 오답은 빨강, 나머지는 흐리게
+                      answer !== null &&
+                        isAnswer &&
+                        'border-emerald-300 bg-emerald-50 text-emerald-800',
+                      answer !== null &&
+                        isPicked &&
+                        !isAnswer &&
+                        'border-red-300 bg-red-50 text-red-700',
+                      answer !== null && !isAnswer && !isPicked && 'opacity-60',
+                    )}
+                  >
+                    {/* 번호 칸 너비를 맞춰서 보기 글의 시작이 가지런하게 */}
+                    <span aria-hidden className="w-5 shrink-0 text-center">
+                      {CHOICE_MARKS[index]}
+                    </span>
+                    <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">{choice}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {answer !== null && (
             <>
               <p
                 role="status"
                 className={cn(
                   'text-[15px] font-semibold',
-                  answer.choiceIndex === question.answerIndex ? 'text-emerald-700' : 'text-red-600',
+                  isRight ? 'text-emerald-700' : 'text-red-600',
                 )}
               >
-                {answer.choiceIndex === question.answerIndex ? '⭕ 맞았어!' : '❌ 아쉽다'}
+                {isRight ? '⭕ 맞았어!' : '❌ 아쉽다'}
               </p>
+              {/* 주관식은 정답 표기를 보여 줍니다. (여러 개면 '또는' 으로) */}
+              {isShort && (
+                <p className="text-sm break-words text-slate-800">
+                  정답:{' '}
+                  <span className="font-semibold">{(question.answers ?? []).join(' 또는 ')}</span>
+                </p>
+              )}
               {question.explanation && (
-                <p className="text-sm break-words text-slate-600">{question.explanation}</p>
+                <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-slate-600">
+                  {question.explanation}
+                </p>
               )}
               <button
                 type="button"
@@ -3383,7 +3502,7 @@ function QuizCard({
           </p>
           <ul className="flex flex-col gap-1">
             {quiz.questions.map((item, index) => {
-              const isRight = quiz.answers[index]?.choiceIndex === item.answerIndex
+              const isRight = isAnswerCorrect(item, quiz.answers[index])
               return (
                 <li key={index} className="flex gap-2 text-sm text-slate-600">
                   <span aria-label={isRight ? '맞음' : '틀림'} className="shrink-0">
