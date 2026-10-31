@@ -101,6 +101,8 @@ export interface QuizInput {
   image: string | null
   /** 카드로 낸 문제면 그 카드 번호 (서버에는 보내지 않음) */
   cardId: string | null
+  /** 문제 수 1 ~ 5. "문제 5개 내 줘" 처럼 말했을 때만 있고, 없으면 QUIZ_COUNT(3)개 */
+  count?: number
 }
 
 /** 문제를 받은 결과 */
@@ -121,6 +123,17 @@ export interface QuizReply {
 
 /** 한 번에 내는 문제 수 (서버는 1 ~ 5개를 받습니다) */
 export const QUIZ_COUNT = 3
+/** 한 번에 낼 수 있는 가장 많은 문제 수 (서버 StudyQuizRequest 의 count 최대) */
+export const MAX_QUIZ_COUNT = 5
+
+/**
+ * 문제 수를 1 ~ 5 로 맞춥니다. 없거나 숫자가 아니면 QUIZ_COUNT(3) 입니다.
+ *   quizCountOf(undefined) -> 3 · quizCountOf(7) -> 5 · quizCountOf(0) -> 1
+ */
+export function quizCountOf(count: number | undefined): number {
+  if (count === undefined || !Number.isInteger(count)) return QUIZ_COUNT
+  return Math.min(MAX_QUIZ_COUNT, Math.max(1, count))
+}
 /** 주제 한 줄 · 붙여 넣는 글의 최대 글자 수 (서버와 같음) */
 export const MAX_QUIZ_TOPIC_LENGTH = 100
 export const MAX_QUIZ_MATERIAL_LENGTH = 2000
@@ -273,20 +286,57 @@ export function quizLineForAi(quiz: CoachQuiz): string {
 
 // ---- 채팅에서 문제를 부탁하는 말 ----
 
-/** "문제 내 줘" · "퀴즈 풀래" 처럼 문제를 부탁하는 말 */
-const QUIZ_REQUEST_PATTERN = /(문제|퀴즈)\s*(좀|를|을)?\s*(내|풀|만들어)/
-/** 부탁하는 말에서 주제만 남기려고 지우는 글 */
-const QUIZ_REQUEST_WORDS =
-  /(확인\s*)?(문제|퀴즈)\s*(좀|를|을)?\s*(내|풀|만들어)?\s*(줘|주라|줄래|볼래|래|봐|줄 수 있어)?[?.!]*/g
+/** 문제 수를 말하는 부분: "3개" · "세 개" · "5문제" · "하나" · "몇 개" */
+const COUNT_WORDS = '(?:\\d+|하나|한|둘|두|셋|세|넷|네|다섯|몇)\\s*(?:개|문제)?'
 
 /**
- * 학생이 쓴 말이 문제를 내 달라는 부탁이면 주제를 꺼냅니다. 아니면 null
- *
- *   parseQuizText('미적분 3단원 문제 내 줘') -> { topic: '미적분 3단원' }
- *   parseQuizText('퀴즈 내 줘')             -> { topic: '' }   (주제를 고르는 칸을 엶)
- *   parseQuizText('오늘 문제 많이 풀었어')    -> null           ("내 줘" 가 아님)
+ * "문제 내 줘" · "한국사 문제 3개 내 줘" · "문제 세 개만 만들어 줘" · "퀴즈 풀래" 처럼 문제를 부탁하는 말
+ * - '문제' 뒤에 (문제 수) (만 · 좀 · 더 · 를 · 을) 이 와도 되고, 그다음에 내 · 만들어 · 출제 · 풀래 · 줘 가 와야 합니다.
+ * - '내가 · 내용 · 내일' 의 '내' 는 부탁이 아닙니다. ("이 문제 내가 푼 거 맞아?") '만들어' 의 '만' 은 '~만' 이 아닙니다.
+ * - "이 문제 풀어 줘" 는 문제를 내 달라는 게 아니라 풀어 달라는 말이라서 AI 에게 보냅니다. (2026-10-31)
  */
-export function parseQuizText(text: string): { topic: string } | null {
+const QUIZ_REQUEST_PATTERN = new RegExp(
+  `(문제|퀴즈)\\s*(${COUNT_WORDS})?(\\s*(만(?!들)|좀|더|를|을))*\\s*(내(?![가용일])|만들어|출제|풀래|풀고\\s*싶|풀어\\s*볼래|줘|주라|줄래|주세요)`,
+)
+/** 부탁하는 말에서 주제만 남기려고 지우는 글 (문제 수 · 부탁하는 말) */
+const QUIZ_REQUEST_WORDS = new RegExp(
+  `(확인\\s*)?(${COUNT_WORDS}\\s*)?(문제|퀴즈)\\s*(${COUNT_WORDS})?(\\s*(만(?!들)|좀|더|를|을))*\\s*(내|만들어|출제해|출제|풀래|풀고\\s*싶어|풀어\\s*볼래)?\\s*(줘|주라|줄래|볼래|래|봐|줄 수 있어|주세요)?[?.!]*`,
+  'g',
+)
+/** 숫자 대신 글로 쓴 문제 수 */
+const COUNT_BY_WORD: Record<string, number> = {
+  하나: 1,
+  한: 1,
+  둘: 2,
+  두: 2,
+  셋: 3,
+  세: 3,
+  넷: 4,
+  네: 4,
+  다섯: 5,
+}
+
+/**
+ * 부탁하는 말에 든 문제 수. 말하지 않았거나 "몇 개" 면 null
+ *   requestedQuizCountOf('문제 5개 내 줘') -> 5 · requestedQuizCountOf('세 문제만') -> 3 · requestedQuizCountOf('미적분 3단원 문제 내 줘') -> null
+ */
+export function requestedQuizCountOf(text: string): number | null {
+  const match = text.match(/(\d+|하나|한|둘|두|셋|세|넷|네|다섯)\s*(개|문제)/)
+  if (!match) return null
+  const count = /^\d+$/.test(match[1]) ? Number(match[1]) : COUNT_BY_WORD[match[1]]
+  return quizCountOf(count)
+}
+
+/**
+ * 학생이 쓴 말이 문제를 내 달라는 부탁이면 주제(와 문제 수)를 꺼냅니다. 아니면 null
+ *
+ *   parseQuizText('미적분 3단원 문제 내 줘')   -> { topic: '미적분 3단원', count: null }
+ *   parseQuizText('한국사 문제 3개 내 줘')     -> { topic: '한국사', count: 3 }
+ *   parseQuizText('퀴즈 내 줘')               -> { topic: '', count: null }   (주제를 고르는 칸을 엶)
+ *   parseQuizText('오늘 문제 많이 풀었어')      -> null                        ("내 줘" 가 아님)
+ *   parseQuizText('이 문제 풀어 줘')           -> null                        (풀어 달라는 말 → AI 가 설명)
+ */
+export function parseQuizText(text: string): { topic: string; count: number | null } | null {
   const isRequest =
     QUIZ_REQUEST_PATTERN.test(text) && !/(풀었|냈|만들었)/.test(text.replace(/\s/g, ''))
   if (!isRequest) return null
@@ -298,7 +348,7 @@ export function parseQuizText(text: string): { topic: string } | null {
     .replace(/\s*(으로|로|에 대해|관련)$/, '')
     .trim()
     .slice(0, MAX_QUIZ_TOPIC_LENGTH)
-  return { topic }
+  return { topic, count: requestedQuizCountOf(text) }
 }
 
 // ---- 결과 저장 ----
@@ -458,7 +508,7 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
       checklist: input.checklist.slice(0, 5).map((item) => item.slice(0, 50)),
       material: input.material ? input.material.slice(0, MAX_QUIZ_MATERIAL_LENGTH) : null,
       image: input.image,
-      count: QUIZ_COUNT,
+      count: quizCountOf(input.count),
     }),
     signal: AbortSignal.timeout(input.image ? PHOTO_QUIZ_TIMEOUT_MS : QUIZ_TIMEOUT_MS),
   })
@@ -480,7 +530,7 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
   const questions = record.questions
     .map(toQuizQuestion)
     .filter((question) => question !== null)
-    .slice(0, QUIZ_COUNT)
+    .slice(0, quizCountOf(input.count))
   if (questions.length === 0) return empty
   return { ...empty, questions, unit: toUnit(record.unit) }
 }
@@ -677,13 +727,13 @@ const DEMO_DEFAULT: QuizQuestion[] = [
  *   makeDemoQuiz({ topic: '미적분 3단원', … }) -> 수학 예시 3문제
  *   makeDemoQuiz({ topic: '오늘 배운 것', … }) -> 공부 방법 예시 3문제
  */
-export function makeDemoQuiz(input: Pick<QuizInput, 'topic' | 'checklist'>): QuizReply {
+export function makeDemoQuiz(input: Pick<QuizInput, 'topic' | 'checklist' | 'count'>): QuizReply {
   const text = `${input.topic} ${input.checklist.join(' ')}`.toLowerCase()
   const set = DEMO_SETS.find((item) => item.words.some((word) => text.includes(word)))
   return {
     showHelp: false,
     notStudy: false,
-    questions: (set?.questions ?? DEMO_DEFAULT).slice(0, QUIZ_COUNT),
+    questions: (set?.questions ?? DEMO_DEFAULT).slice(0, quizCountOf(input.count)),
     // 시연용 예시는 단원을 정하지 않습니다. (서버에도 보내지 않음)
     unit: null,
     isDemo: true,
