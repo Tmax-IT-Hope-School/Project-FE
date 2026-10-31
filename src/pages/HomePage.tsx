@@ -11,6 +11,7 @@ import { useCards } from '@/hooks/useCards'
 import { useGoals } from '@/hooks/useGoals'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { useSchoolClass } from '@/hooks/useSchoolClass'
 import { isInApp } from '@/lib/appBridge'
 import { loadCardMarks } from '@/lib/cardMarks'
 import { getCardsOnDate } from '@/lib/cards'
@@ -42,7 +43,7 @@ import {
   schoolNoticesQuery,
   type SchoolNotice,
 } from '@/lib/schoolNotices'
-import { dayLabelOf, loadSchoolClass, schoolTodayQuery, type SchoolClass } from '@/lib/schoolToday'
+import { dayLabelOf, schoolTodayQuery, type SchoolClass } from '@/lib/schoolToday'
 import {
   clearSettingChanges,
   describeSettingChange,
@@ -872,12 +873,12 @@ interface SchoolTodaySectionProps {
 /**
  * 오늘 시간표 · 급식 · 다가오는 일정입니다. 서버에서 받는 동안은 스켈레톤, 못 받으면 안내를 보여 줍니다. (AsyncBoundary)
  * 홈은 시간표를 보여 주기만 합니다. 학년 · 반은 설정의 계정 묶음에서 정합니다. (2026-10-19 "반 저장도 설정에서 해, 홈에선 시간표만")
- * 반을 아직 안 정했으면 시간표 자리에 설정으로 가는 링크가 나옵니다. 반은 이 기기에만 저장합니다. (lib/schoolToday.ts)
+ * 반을 아직 안 정했으면 시간표 자리에 설정으로 가는 링크가 나옵니다. 반은 이 기기와 서버에 저장합니다. (lib/schoolClassSync.ts)
  */
 function SchoolTodaySection({ todayKey, tab }: SchoolTodaySectionProps) {
   const isServerData = useIsServerData()
-  // 설정에서 정한 반. 홈에서는 바꾸지 않아서 처음에 한 번만 읽습니다.
-  const [schoolClass] = useState(loadSchoolClass)
+  // 설정에서 정한 반. 로그인 직후 서버에서 받아 오면 바로 바뀌어서 시간표가 나옵니다. (hooks/useSchoolClass.ts)
+  const schoolClass = useSchoolClass()
 
   return (
     <AsyncBoundary
