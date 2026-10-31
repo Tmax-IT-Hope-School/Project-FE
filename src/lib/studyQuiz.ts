@@ -2,7 +2,9 @@
  * 코치 채팅의 "확인 문제(문제 말풍선)" 에 쓰는 함수들입니다. 화면은 pages/CoachPage.tsx 입니다. (2026-10-18 채팅 고도화 2단계)
  * 사용자: "제대로 공부했나 문제를 내 보기도 하면서"
  *
- * - 문제는 서버 AI 가 냅니다. POST /ai/quiz (주제 · 체크리스트 · 붙여 넣은 글 · 사진) → 4지선다 문제 1 ~ 5개
+ * - 문제는 서버 AI 가 냅니다. POST /ai/quiz (주제 · 체크리스트 · 붙여 넣은 글 · 사진) → 문제 1 ~ 5개
+ *   객관식은 수능처럼 5지선다(①~⑤), 한 묶음에 주관식 단답형(낱말 · 숫자 하나)을 섞을 수 있습니다. (2026-10-31)
+ *   예전에 저장한 4지선다 문제 · 결과도 그대로 읽고 채점합니다.
  * - 채점은 이 기기에서 합니다. (정답이 응답에 같이 옵니다. 시험이 아니라 스스로 확인하는 것이라 괜찮습니다)
  * - 결과는 이 기기에 남깁니다. ('study-quiz-results', 최근 100개) 틀린 문제는 다음 날 코치가 다시 꺼냅니다.
  *   진짜 로그인이면 맞은 수 · 단원만 서버에도 보냅니다. (lib/quizResultsApi.ts · hooks/useQuizResultSync.ts, #653)
@@ -14,21 +16,32 @@ import { api, ApiError } from '@/lib/api'
 import { moveDateKey } from '@/lib/date'
 import { loadData, saveData } from '@/lib/storage'
 
-/** 문제 하나 (서버가 준 모양 그대로) */
+/** 문제 종류: 객관식(보기 고르기) · 주관식 단답형(낱말 · 숫자 하나 쓰기) */
+export type QuizKind = 'choice' | 'short'
+
+/** 문제 하나 */
 export interface QuizQuestion {
+  /** 문제 종류. 없으면 객관식입니다. (2026-10-31 전에 저장한 문제는 모두 객관식) */
+  kind?: QuizKind
   question: string
-  /** 보기 4개 */
+  /** 그 문제를 풀려면 읽어야 하는 글(지문). 없으면 null 이거나 없음 */
+  passage?: string | null
+  /** 객관식 보기 5개 (예전 문제는 4개). 주관식이면 빈 목록 */
   choices: string[]
-  /** 정답 보기의 번호 (0 ~ 3) */
+  /** 정답 보기의 번호 (0부터). 주관식이면 -1 */
   answerIndex: number
+  /** 주관식 정답으로 인정하는 글들 (예: ['3', '삼']). 객관식이면 없음 */
+  answers?: string[]
   /** 왜 그게 답인지 한두 문장 */
   explanation: string
 }
 
 /** 학생이 문제 하나에 고른 답 */
 export interface QuizAnswer {
-  /** 고른 보기의 번호 (0 ~ 3) */
+  /** 고른 보기의 번호 (0부터). 주관식이면 -1 */
   choiceIndex: number
+  /** 주관식에 쓴 답. 객관식이면 없음 */
+  text?: string
   /** 문제를 보고 고르기까지 걸린 시간 (밀리초) */
   ms: number
 }
@@ -103,6 +116,8 @@ export interface QuizInput {
   cardId: string | null
   /** 문제 수 1 ~ 5. "문제 5개 내 줘" 처럼 말했을 때만 있고, 없으면 QUIZ_COUNT(3)개 */
   count?: number
+  /** 그중 주관식 수. 없으면 문제 수로 정합니다. (quizShortCountOf) */
+  shortCount?: number
 }
 
 /** 문제를 받은 결과 */
@@ -125,6 +140,14 @@ export interface QuizReply {
 export const QUIZ_COUNT = 3
 /** 한 번에 낼 수 있는 가장 많은 문제 수 (서버 StudyQuizRequest 의 count 최대) */
 export const MAX_QUIZ_COUNT = 5
+/** 객관식 보기 수. 수능처럼 5지선다입니다. (2026-10-31 사용자 "5지선다 아님?") */
+export const QUIZ_CHOICE_COUNT = 5
+/** 예전에 저장한 문제 · 아직 바뀌지 않은 서버의 보기 수 (읽을 때만 받아 줌) */
+const OLD_CHOICE_COUNT = 4
+/** 주관식 정답 표기 한 개의 최대 글자 수 (서버와 같음) */
+const MAX_SHORT_ANSWER_LENGTH = 20
+/** 주관식에 쓸 수 있는 글자 수 */
+export const MAX_SHORT_INPUT_LENGTH = 30
 
 /**
  * 문제 수를 1 ~ 5 로 맞춥니다. 없거나 숫자가 아니면 QUIZ_COUNT(3) 입니다.
@@ -159,36 +182,95 @@ const PHOTO_QUIZ_TIMEOUT_MS = 45_000
 
 // ---- 찍기 감지 · 채점 (순수 함수) ----
 
+/** 주관식 문제인지 */
+export function isShortQuestion(question: QuizQuestion): boolean {
+  return question.kind === 'short'
+}
+
 /**
- * 찍은 것 같은지 봅니다.
+ * 주관식 답을 견줄 때 쓰는 모양. 전각 글자(３ · Ａ)는 반각으로, 영어는 소문자로 바꾸고,
+ * 빈칸과 끝의 문장부호를 없앱니다. 띄어쓰기 · 대소문자가 달라도 같은 답으로 봅니다.
  *
- *   isGuessed([{ choiceIndex: 0, ms: 5000 } ×3], [0, 2, 1]) -> true   (다 1번인데 틀린 게 있음)
- *   isGuessed([{ choiceIndex: 0, ms: 5000 } ×3], [0, 0, 0]) -> false  (다 1번이지만 다 맞음)
- *   isGuessed([{ ms: 1500 }, { ms: 1000 }, { ms: 2000 }], …) -> true   (평균 1.5초)
- *   isGuessed([{ choiceIndex: 2, ms: 8000 }, { choiceIndex: 0, ms: 6000 }], …) -> false
+ *   normalizeShortAnswer(' Photo Synthesis. ') -> 'photosynthesis'
+ *   normalizeShortAnswer('３') -> '3'
  */
-export function isGuessed(answers: QuizAnswer[], answerIndexes: number[]): boolean {
+export function normalizeShortAnswer(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[.。!?~]+$/, '')
+}
+
+/**
+ * 이 답이 맞았는지. 객관식은 고른 번호, 주관식은 쓴 글이 정답 표기 중 하나와 같은지 봅니다. (너그럽게, normalizeShortAnswer)
+ *
+ *   isAnswerCorrect({ kind: 'short', answers: ['3', '삼'], … }, { choiceIndex: -1, text: ' 3 ', ms: 9000 }) -> true
+ *   isAnswerCorrect({ choices: [...], answerIndex: 2, … }, { choiceIndex: 2, ms: 4000 }) -> true
+ */
+export function isAnswerCorrect(
+  question: QuizQuestion,
+  answer: QuizAnswer | null | undefined,
+): boolean {
+  if (!answer) return false
+  if (isShortQuestion(question)) {
+    if (answer.text === undefined) return false
+    const mine = normalizeShortAnswer(answer.text)
+    return (
+      mine !== '' && (question.answers ?? []).some((right) => normalizeShortAnswer(right) === mine)
+    )
+  }
+  return answer.choiceIndex === question.answerIndex
+}
+
+/**
+ * 화면에 기호 그대로 보이는 마크다운 · LaTeX 표시를 지웁니다. (서버도 지우지만, 예전 서버 · 저장된 문제를 위해 한 번 더)
+ * 곱하기 별 하나(2*3) · 빈칸 밑줄(___)은 둡니다.
+ *
+ *   plainQuizText('**수열**의 `극한` $x^2$') -> '수열의 극한 x^2'
+ */
+export function plainQuizText(text: string): string {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/\$/g, '')
+    .replace(/\\[()[\]]/g, '')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .trim()
+}
+
+/**
+ * 찍은 것 같은지 봅니다. (questions 와 answers 는 같은 순서, 다 푼 뒤)
+ * "모두 같은 번호" 는 객관식끼리만 봅니다. 주관식은 번호가 없어서 평균 시간만 셉니다.
+ *
+ *   보기 3문제 다 ①인데 틀린 게 있음 -> true · 다 ①이지만 다 맞음 -> false
+ *   평균 1.5초 -> true · 객관식 2 + 주관식 1 -> 같은 번호는 안 봄 (객관식이 3개보다 적음)
+ */
+export function isGuessed(questions: QuizQuestion[], answers: QuizAnswer[]): boolean {
   if (answers.length === 0) return false
   const averageMs = answers.reduce((sum, answer) => sum + answer.ms, 0) / answers.length
   if (averageMs < GUESS_FAST_MS) return true
-  if (answers.length < GUESS_MIN_QUESTIONS) return false
-  const isAllSame = answers.every((answer) => answer.choiceIndex === answers[0].choiceIndex)
-  const hasWrong = answers.some((answer, index) => answer.choiceIndex !== answerIndexes[index])
+  const choicePairs = questions
+    .map((question, index) => ({ question, answer: answers[index] }))
+    .filter((pair) => pair.answer !== undefined && !isShortQuestion(pair.question))
+  if (choicePairs.length < GUESS_MIN_QUESTIONS) return false
+  const firstPick = choicePairs[0].answer.choiceIndex
+  const isAllSame = choicePairs.every((pair) => pair.answer.choiceIndex === firstPick)
+  const hasWrong = choicePairs.some((pair) => !isAnswerCorrect(pair.question, pair.answer))
   return isAllSame && hasWrong
 }
 
 /** 맞은 개수 */
 export function countCorrect(quiz: CoachQuiz): number {
-  return quiz.answers.filter(
-    (answer, index) => answer !== null && answer.choiceIndex === quiz.questions[index].answerIndex,
-  ).length
+  return quiz.answers.filter((answer, index) => isAnswerCorrect(quiz.questions[index], answer))
+    .length
 }
 
 /** 틀린 문제들 */
 export function wrongQuestionsOf(quiz: Pick<CoachQuiz, 'questions' | 'answers'>): QuizQuestion[] {
   return quiz.questions.filter((question, index) => {
     const answer = quiz.answers[index]
-    return answer !== null && answer !== undefined && answer.choiceIndex !== question.answerIndex
+    return answer !== null && answer !== undefined && !isAnswerCorrect(question, answer)
   })
 }
 
@@ -225,6 +307,15 @@ export function answerQuiz(quiz: CoachQuiz, choiceIndex: number, now: number): C
   return { ...quiz, answers }
 }
 
+/** 지금 주관식 문제에 쓴 답을 냅니다. 빈 답이거나 이미 냈으면 그대로 둡니다. (한 번 내면 바꿀 수 없음) */
+export function answerQuizText(quiz: CoachQuiz, text: string, now: number): CoachQuiz {
+  const trimmed = text.trim().slice(0, MAX_SHORT_INPUT_LENGTH)
+  if (trimmed === '' || quiz.status !== 'open' || quiz.answers[quiz.current] !== null) return quiz
+  const answers = [...quiz.answers]
+  answers[quiz.current] = { choiceIndex: -1, text: trimmed, ms: Math.max(0, now - quiz.shownAt) }
+  return { ...quiz, answers }
+}
+
 /**
  * [다음] · [결과 보기]: 다음 문제로 가거나, 마지막이면 끝냅니다.
  * 처음 다 풀었을 때 찍은 것 같으면 결과 대신 "다시 볼까?" 를 묻습니다. (다시 푼 뒤에는 묻지 않음)
@@ -237,17 +328,14 @@ export function nextQuizStep(quiz: CoachQuiz, now: number): CoachQuiz {
     return { ...quiz, current: quiz.current + 1, shownAt: now }
   }
   const answers = quiz.answers.filter((answer) => answer !== null)
-  const guessed = isGuessed(
-    answers,
-    quiz.questions.map((question) => question.answerIndex),
-  )
+  const guessed = isGuessed(quiz.questions, answers)
   return guessed ? { ...quiz, wasGuessed: true, status: 'guessCheck' } : { ...quiz, status: 'done' }
 }
 
 /** [다시 풀기]: 틀린 첫 문제(없으면 첫 문제) 하나만 다시 풉니다. */
 export function retryOneQuestion(quiz: CoachQuiz, now: number): CoachQuiz {
   const wrongIndex = quiz.questions.findIndex(
-    (question, index) => quiz.answers[index]?.choiceIndex !== question.answerIndex,
+    (question, index) => !isAnswerCorrect(question, quiz.answers[index]),
   )
   const index = wrongIndex === -1 ? 0 : wrongIndex
   const answers = [...quiz.answers]
@@ -328,6 +416,26 @@ export function requestedQuizCountOf(text: string): number | null {
 }
 
 /**
+ * 문제 종류를 말하는 낱말(과 뒤의 '으로 · 로'). 부탁을 알아듣기 전에 지웁니다.
+ * ('수학 문제 객관식으로 내 줘' -> '수학 문제 내 줘', '한국사 주관식 문제 내 줘' -> 주제 '한국사')
+ */
+const QUIZ_STYLE_WORDS = /(객관식|주관식|단답형?|서술형|[45]\s*지\s*선다형?|섞어서|섞어)(으로|로)?/g
+
+/**
+ * 한 묶음에 주관식(단답형)을 몇 개 넣을지 코드가 정합니다. (2026-10-31 사용자 "객관식 주관식 섞어서 내도 되는데 깔끔하게")
+ * - "객관식 · 5지선다" 를 말하면 0개, "주관식 · 단답" 을 말하면 모두 주관식입니다.
+ * - 그 밖에는 3문제 이상이면 1개(예: 객관식 2 + 주관식 1), 1 ~ 2문제는 객관식만입니다.
+ *   주관식은 답이 하나로 떨어지는 단답형만 내서, 한 묶음에 하나만 섞어 채점이 헷갈릴 일을 줄입니다.
+ *
+ *   quizShortCountOf('', 3) -> 1 · quizShortCountOf('주관식으로 내 줘', 3) -> 3 · quizShortCountOf('5지선다로', 3) -> 0
+ */
+export function quizShortCountOf(text: string, count: number): number {
+  if (/(객관식|지\s*선다)/.test(text)) return 0
+  if (/(주관식|단답|서술형)/.test(text)) return count
+  return count >= QUIZ_COUNT ? 1 : 0
+}
+
+/**
  * 학생이 쓴 말이 문제를 내 달라는 부탁이면 주제(와 문제 수)를 꺼냅니다. 아니면 null
  *
  *   parseQuizText('미적분 3단원 문제 내 줘')   -> { topic: '미적분 3단원', count: null }
@@ -337,10 +445,12 @@ export function requestedQuizCountOf(text: string): number | null {
  *   parseQuizText('이 문제 풀어 줘')           -> null                        (풀어 달라는 말 → AI 가 설명)
  */
 export function parseQuizText(text: string): { topic: string; count: number | null } | null {
+  // "객관식으로 · 섞어서" 같은 말은 먼저 지워서, '문제 3개 객관식으로 내 줘' 도 부탁으로 알아듣게 합니다.
+  const plain = text.replace(QUIZ_STYLE_WORDS, ' ').replace(/\s+/g, ' ')
   const isRequest =
-    QUIZ_REQUEST_PATTERN.test(text) && !/(풀었|냈|만들었)/.test(text.replace(/\s/g, ''))
+    QUIZ_REQUEST_PATTERN.test(plain) && !/(풀었|냈|만들었)/.test(plain.replace(/\s/g, ''))
   if (!isRequest) return null
-  const topic = text
+  const topic = plain
     .replace(QUIZ_REQUEST_WORDS, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -348,7 +458,7 @@ export function parseQuizText(text: string): { topic: string; count: number | nu
     .replace(/\s*(으로|로|에 대해|관련)$/, '')
     .trim()
     .slice(0, MAX_QUIZ_TOPIC_LENGTH)
-  return { topic, count: requestedQuizCountOf(text) }
+  return { topic, count: requestedQuizCountOf(plain) }
 }
 
 // ---- 결과 저장 ----
@@ -357,21 +467,43 @@ function isText(value: unknown): value is string {
   return typeof value === 'string'
 }
 
-/** 서버 · 저장소에서 꺼낸 문제 하나를 확인합니다. 모양이 틀리면 null */
+/**
+ * 서버 · 저장소에서 꺼낸 문제 하나를 확인합니다. 모양이 틀리면 null
+ * - 객관식: 보기 5개(예전 문제 · 예전 서버는 4개) · 정답 번호가 보기 안
+ * - 주관식: 서버는 type: 'SHORT', 이 기기는 kind: 'short'. 정답 표기(answers) 1 ~ 5개
+ * - 마크다운 · LaTeX 기호는 지웁니다. (plainQuizText) 지문(passage)은 그대로 둡니다.
+ */
 export function toQuizQuestion(value: unknown): QuizQuestion | null {
   if (typeof value !== 'object' || value === null) return null
   const item = value as Record<string, unknown>
-  if (!isText(item.question) || item.question.trim() === '') return null
-  if (!Array.isArray(item.choices) || item.choices.length !== 4) return null
-  if (!item.choices.every((choice) => isText(choice) && choice.trim() !== '')) return null
+  if (!isText(item.question) || plainQuizText(item.question) === '') return null
+  const question = plainQuizText(item.question)
+  const explanation = isText(item.explanation) ? plainQuizText(item.explanation) : ''
+  const passage = isText(item.passage) && item.passage.trim() !== '' ? item.passage.trim() : null
+  if (item.kind === 'short' || item.type === 'SHORT') {
+    if (!Array.isArray(item.answers)) return null
+    const answers = item.answers
+      .filter(isText)
+      .map((answer) => plainQuizText(answer).slice(0, MAX_SHORT_ANSWER_LENGTH))
+      .filter((answer) => answer !== '')
+      .slice(0, 5)
+    if (answers.length === 0) return null
+    return { kind: 'short', question, passage, choices: [], answerIndex: -1, answers, explanation }
+  }
+  if (!Array.isArray(item.choices)) return null
+  const size = item.choices.length
+  if (size !== QUIZ_CHOICE_COUNT && size !== OLD_CHOICE_COUNT) return null
+  if (!item.choices.every((choice) => isText(choice) && plainQuizText(choice) !== '')) return null
   const answerIndex = item.answerIndex
   if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex)) return null
-  if (answerIndex < 0 || answerIndex > 3) return null
+  if (answerIndex < 0 || answerIndex >= size) return null
   return {
-    question: item.question.trim(),
-    choices: (item.choices as string[]).map((choice) => choice.trim()),
+    kind: 'choice',
+    question,
+    passage,
+    choices: (item.choices as string[]).map(plainQuizText),
     answerIndex,
-    explanation: isText(item.explanation) ? item.explanation.trim() : '',
+    explanation,
   }
 }
 
@@ -379,7 +511,9 @@ function toQuizAnswer(value: unknown): QuizAnswer | null {
   if (typeof value !== 'object' || value === null) return null
   const answer = value as Record<string, unknown>
   if (typeof answer.choiceIndex !== 'number' || typeof answer.ms !== 'number') return null
-  return { choiceIndex: answer.choiceIndex, ms: answer.ms }
+  return isText(answer.text)
+    ? { choiceIndex: answer.choiceIndex, text: answer.text, ms: answer.ms }
+    : { choiceIndex: answer.choiceIndex, ms: answer.ms }
 }
 
 /** 서버 · 저장소에서 꺼낸 단원. 글자가 아니거나 비었으면 null ('  함수 ' -> '함수') */
@@ -453,7 +587,7 @@ function rightQuestionsOn(results: QuizResult[], dateKey: string): string[] {
   for (const result of results) {
     if (result.date !== dateKey) continue
     result.questions.forEach((question, index) => {
-      if (result.answers[index]?.choiceIndex === question.answerIndex) right.push(question.question)
+      if (isAnswerCorrect(question, result.answers[index])) right.push(question.question)
     })
   }
   return right
@@ -509,6 +643,9 @@ export async function requestQuiz(input: QuizInput): Promise<QuizReply> {
       material: input.material ? input.material.slice(0, MAX_QUIZ_MATERIAL_LENGTH) : null,
       image: input.image,
       count: quizCountOf(input.count),
+      // 보기 수 · 주관식 수를 모르는 예전 서버는 이 두 칸을 넘기고 4지선다 · 객관식만 줍니다. (그래도 읽을 수 있음)
+      choiceCount: QUIZ_CHOICE_COUNT,
+      shortCount: shortCountOf(input),
     }),
     signal: AbortSignal.timeout(input.image ? PHOTO_QUIZ_TIMEOUT_MS : QUIZ_TIMEOUT_MS),
   })
@@ -563,45 +700,63 @@ export async function requestQuizOrDemo(input: QuizInput): Promise<QuizReply> {
   }
 }
 
+/** 이번 요청의 주관식 수. 따로 정하지 않았으면 문제 수로 정합니다. (quizShortCountOf) */
+function shortCountOf(input: Pick<QuizInput, 'count' | 'shortCount'>): number {
+  const count = quizCountOf(input.count)
+  const wanted = input.shortCount ?? quizShortCountOf('', count)
+  return Math.min(count, Math.max(0, Math.floor(wanted)))
+}
+
 // ---- 시연용 예시 문제 (테스트 로그인 · 서버 준비 전) ----
 
-/** 주제 낱말 → 예시 문제 묶음. 위에서부터 맞는 것을 고릅니다. 사실이 틀리지 않게 교과 기본 개념만 넣었습니다. */
-const DEMO_SETS: { words: string[]; questions: QuizQuestion[] }[] = [
+/**
+ * 주제 낱말 → 예시 문제 묶음. 위에서부터 맞는 것을 고릅니다. 사실이 틀리지 않게 교과 기본 개념만 넣었습니다.
+ * questions 는 5지선다, short 는 섞어 낼 때 쓰는 주관식 단답형 하나입니다. (2026-10-31)
+ */
+const DEMO_SETS: { words: string[]; questions: QuizQuestion[]; short: QuizQuestion }[] = [
   {
     words: ['미적분', '수열', '극한', '함수', '미분', '수학', '확률', '기하'],
     questions: [
       {
         question: 'lim (n→∞) 1/n 의 값은?',
-        choices: ['1', '0', '∞', '정할 수 없다'],
+        choices: ['1', '0', '∞', '정할 수 없다', '-1'],
         answerIndex: 1,
         explanation: 'n 이 한없이 커지면 1/n 은 0 에 한없이 가까워져.',
       },
       {
         question: '수열 aₙ = (1/2)ⁿ 의 극한은?',
-        choices: ['1/2', '1', '0', '발산한다'],
+        choices: ['1/2', '1', '0', '발산한다', '1/4'],
         answerIndex: 2,
         explanation: '공비의 절댓값이 1 보다 작은 등비수열은 0 으로 수렴해.',
       },
       {
         question: 'f(x) = x² 일 때 f′(3) 의 값은?',
-        choices: ['6', '3', '9', '2'],
+        choices: ['6', '3', '9', '2', '12'],
         answerIndex: 0,
         explanation: 'f′(x) = 2x 라서 f′(3) = 6 이야.',
       },
     ],
+    short: {
+      kind: 'short',
+      question: 'lim (n→∞) 2/n 의 값을 숫자로 써 봐.',
+      choices: [],
+      answerIndex: -1,
+      answers: ['0', '영'],
+      explanation: 'n 이 한없이 커지면 2/n 도 0 에 한없이 가까워져.',
+    },
   },
   {
     words: ['영어', '단어', '문법', '독해', 'english'],
     questions: [
       {
         question: "'abundant' 와 뜻이 가장 가까운 것은?",
-        choices: ['scarce', 'tiny', 'plentiful', 'empty'],
+        choices: ['scarce', 'tiny', 'plentiful', 'empty', 'rare'],
         answerIndex: 2,
         explanation: "abundant 는 '풍부한' 이라는 뜻이라 plentiful 과 가까워.",
       },
       {
         question: 'She has lived here ___ 2020. 빈칸에 알맞은 것은?',
-        choices: ['since', 'for', 'during', 'while'],
+        choices: ['since', 'for', 'during', 'while', 'until'],
         answerIndex: 0,
         explanation: '시작한 때(2020) 앞에는 since, 기간(3년) 앞에는 for 를 써.',
       },
@@ -612,82 +767,137 @@ const DEMO_SETS: { words: string[]; questions: QuizQuestion[] }[] = [
           'Tom is writing a letter.',
           'Tom will write a letter.',
           'The letter was written by Tom.',
+          'Tom has written a letter.',
         ],
         answerIndex: 3,
         explanation: 'be동사 + 과거분사(was written) 모양이 수동태야.',
       },
     ],
+    short: {
+      kind: 'short',
+      question: "'풍부한' 이라는 뜻의 영어 낱말을 써 봐. (a 로 시작)",
+      choices: [],
+      answerIndex: -1,
+      answers: ['abundant'],
+      explanation: "abundant 는 '풍부한', 반대말은 scarce 야.",
+    },
   },
   {
     words: ['국어', '문학', '시', '소설', '문법', '독서'],
     questions: [
       {
         question: '직유법이 쓰인 것은?',
-        choices: ['내 마음은 호수요', '구름처럼 흘러가는 시간', '님은 갔습니다', '산에는 꽃 피네'],
+        choices: [
+          '내 마음은 호수요',
+          '구름처럼 흘러가는 시간',
+          '님은 갔습니다',
+          '산에는 꽃 피네',
+          '바람이 속삭인다',
+        ],
         answerIndex: 1,
         explanation: "'~처럼 · ~같이' 로 직접 빗대면 직유법이야. '내 마음은 호수요' 는 은유법.",
       },
       {
         question: '시 안에서 말하는 사람을 무엇이라 할까?',
-        choices: ['작가', '독자', '화자', '청자'],
+        choices: ['작가', '독자', '화자', '청자', '편집자'],
         answerIndex: 2,
         explanation: '시 속에서 말하는 이는 화자야. 시를 쓴 작가와 같지 않을 수 있어.',
       },
       {
         question: "'먹었다' 의 '-었-' 이 나타내는 것은?",
-        choices: ['과거 시제', '높임', '부정', '추측'],
+        choices: ['과거 시제', '높임', '부정', '추측', '미래 시제'],
         answerIndex: 0,
         explanation: "'-었-' 은 일이 이미 일어났음을 나타내는 과거 시제 선어말 어미야.",
       },
     ],
+    short: {
+      kind: 'short',
+      question: '시 속에서 말하는 사람을 두 글자로 써 봐.',
+      choices: [],
+      answerIndex: -1,
+      answers: ['화자'],
+      explanation: '시 속에서 말하는 이는 화자야. 시를 쓴 작가와 같지 않을 수 있어.',
+    },
   },
   {
     words: ['과학', '물리', '화학', '생명', '생물', '지구'],
     questions: [
       {
         question: '가속도가 힘에 비례하고 질량에 반비례한다는 법칙은?',
-        choices: ['관성 법칙', '뉴턴 운동 제2법칙', '작용 반작용 법칙', '만유인력 법칙'],
+        choices: [
+          '관성 법칙',
+          '뉴턴 운동 제2법칙',
+          '작용 반작용 법칙',
+          '만유인력 법칙',
+          '에너지 보존 법칙',
+        ],
         answerIndex: 1,
         explanation: 'F = ma 로 쓰는 뉴턴 운동 제2법칙(가속도 법칙)이야.',
       },
       {
         question: '광합성이 일어나는 세포 소기관은?',
-        choices: ['미토콘드리아', '핵', '리보솜', '엽록체'],
+        choices: ['미토콘드리아', '핵', '리보솜', '엽록체', '골지체'],
         answerIndex: 3,
         explanation: '빛에너지로 포도당을 만드는 광합성은 엽록체에서 일어나.',
       },
       {
         question: '물(H₂O) 분자 하나에 들어 있는 수소 원자는 몇 개?',
-        choices: ['2개', '1개', '3개', '4개'],
+        choices: ['2개', '1개', '3개', '4개', '0개'],
         answerIndex: 0,
         explanation: 'H₂O 의 H 옆 숫자 2 가 수소 원자 2개라는 뜻이야.',
       },
     ],
+    short: {
+      kind: 'short',
+      question: '물(H₂O) 분자 하나에 들어 있는 산소 원자는 몇 개? 숫자로 써 봐.',
+      choices: [],
+      answerIndex: -1,
+      answers: ['1', '1개', '하나', '한개'],
+      explanation: 'O 옆에 숫자가 없으면 1개라는 뜻이야.',
+    },
   },
   {
     words: ['한국사', '역사', '사회', '세계사', '정치', '경제'],
     questions: [
       {
         question: '훈민정음을 만든 왕은?',
-        choices: ['태조', '세종', '정조', '영조'],
+        choices: ['태조', '세종', '정조', '영조', '광해군'],
         answerIndex: 1,
         explanation: '조선의 세종이 1443년에 훈민정음을 만들고 1446년에 펴냈어.',
       },
       {
         question: '3·1 운동이 일어난 해는?',
-        choices: ['1910년', '1945년', '1919년', '1950년'],
+        choices: ['1910년', '1945년', '1919년', '1950년', '1905년'],
         answerIndex: 2,
         explanation: '3·1 운동은 1919년 3월 1일에 일어났어.',
       },
       {
         question: '우리나라 국회의원의 임기는?',
-        choices: ['4년', '5년', '6년', '2년'],
+        choices: ['4년', '5년', '6년', '2년', '3년'],
         answerIndex: 0,
         explanation: '국회의원의 임기는 4년이야. (대통령은 5년 단임)',
       },
     ],
+    short: {
+      kind: 'short',
+      question: '훈민정음을 만든 조선의 왕은? 두 글자로 써 봐.',
+      choices: [],
+      answerIndex: -1,
+      answers: ['세종', '세종대왕'],
+      explanation: '조선의 세종이 1443년에 훈민정음을 만들고 1446년에 펴냈어.',
+    },
   },
 ]
+
+/** 어떤 주제에도 맞지 않을 때 섞어 내는 주관식 (공부 방법) */
+const DEMO_DEFAULT_SHORT: QuizQuestion = {
+  kind: 'short',
+  question: '안 보고 스스로 떠올려 보는 공부법을 무슨 연습이라고 할까? 두 글자로 써 봐. (○○ 연습)',
+  choices: [],
+  answerIndex: -1,
+  answers: ['인출', '인출연습'],
+  explanation: '배운 것을 안 보고 꺼내 보는 인출 연습이 다시 읽기보다 오래 남아.',
+}
 
 /** 어떤 주제에도 맞지 않을 때의 예시 (공부 방법) */
 const DEMO_DEFAULT: QuizQuestion[] = [
@@ -698,6 +908,7 @@ const DEMO_DEFAULT: QuizQuestion[] = [
       '안 보고 스스로 떠올려 보기',
       '교과서를 다시 읽기만 하기',
       '밤새 한 번에 몰아서 보기',
+      '정리 노트를 예쁘게 꾸미기',
     ],
     answerIndex: 1,
     explanation: '안 보고 떠올려 보는 것(인출 연습)이 다시 읽기보다 오래 남아.',
@@ -709,13 +920,20 @@ const DEMO_DEFAULT: QuizQuestion[] = [
       '시험 전날만 보기',
       '며칠에 나눠서 복습하기',
       '한 번 보고 끝내기',
+      '음악을 크게 틀고 보기',
     ],
     answerIndex: 2,
     explanation: '며칠에 나눠서 보면(분산 학습) 한 번에 몰아서 볼 때보다 오래 기억해.',
   },
   {
     question: '틀린 문제를 다시 볼 때 가장 좋은 방법은?',
-    choices: ['왜 틀렸는지 적고 다시 풀기', '정답만 외우기', '틀린 문제는 건너뛰기', '해설만 읽기'],
+    choices: [
+      '왜 틀렸는지 적고 다시 풀기',
+      '정답만 외우기',
+      '틀린 문제는 건너뛰기',
+      '해설만 읽기',
+      '친구 답을 베끼기',
+    ],
     answerIndex: 0,
     explanation: '틀린 이유를 적고 다시 풀어야 같은 실수를 덜 해.',
   },
@@ -723,17 +941,24 @@ const DEMO_DEFAULT: QuizQuestion[] = [
 
 /**
  * 시연용 예시 문제. 주제 · 체크리스트 낱말로 과목을 골라 그 과목의 기본 문제를 냅니다.
+ * 주관식은 묶음마다 하나라서 1개까지만 섞습니다. (객관식 먼저, 주관식은 끝에)
  *
- *   makeDemoQuiz({ topic: '미적분 3단원', … }) -> 수학 예시 3문제
- *   makeDemoQuiz({ topic: '오늘 배운 것', … }) -> 공부 방법 예시 3문제
+ *   makeDemoQuiz({ topic: '미적분 3단원', … }) -> 수학 5지선다 2문제 + 주관식 1문제
+ *   makeDemoQuiz({ topic: '오늘 배운 것', count: 2, … }) -> 공부 방법 5지선다 2문제
  */
-export function makeDemoQuiz(input: Pick<QuizInput, 'topic' | 'checklist' | 'count'>): QuizReply {
+export function makeDemoQuiz(
+  input: Pick<QuizInput, 'topic' | 'checklist' | 'count' | 'shortCount'>,
+): QuizReply {
   const text = `${input.topic} ${input.checklist.join(' ')}`.toLowerCase()
   const set = DEMO_SETS.find((item) => item.words.some((word) => text.includes(word)))
+  const count = quizCountOf(input.count)
+  const shortCount = Math.min(1, shortCountOf(input))
+  const choiceQuestions = (set?.questions ?? DEMO_DEFAULT).slice(0, count - shortCount)
+  const shortQuestions = shortCount > 0 ? [set?.short ?? DEMO_DEFAULT_SHORT] : []
   return {
     showHelp: false,
     notStudy: false,
-    questions: (set?.questions ?? DEMO_DEFAULT).slice(0, quizCountOf(input.count)),
+    questions: [...choiceQuestions, ...shortQuestions],
     // 시연용 예시는 단원을 정하지 않습니다. (서버에도 보내지 않음)
     unit: null,
     isDemo: true,

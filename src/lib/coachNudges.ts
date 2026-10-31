@@ -40,7 +40,7 @@ import { loadSchoolExamDates } from '@/lib/schoolEvents'
 import { loadSchoolDay } from '@/lib/schoolToday'
 import { loadData, saveData } from '@/lib/storage'
 import { loadStudyFocus } from '@/lib/studyFocus'
-import { loadQuizResults, wrongForReview } from '@/lib/studyQuiz'
+import { isAnswerCorrect, loadQuizResults, wrongForReview } from '@/lib/studyQuiz'
 import { COACH_PATH } from '@/lib/chatRooms'
 import { STATS_PATH } from '@/lib/tabMenu'
 import { queryOptions } from '@tanstack/react-query'
@@ -620,7 +620,7 @@ export function buildNudgeRequest(dateKey: string, todayKey: string): NudgeReque
   for (const result of [...loadQuizResults()].reverse()) {
     if (result.date < weekAgo || result.date >= dateKey) continue
     const hasWrong = result.questions.some(
-      (question, index) => result.answers[index]?.choiceIndex !== question.answerIndex,
+      (question, index) => !isAnswerCorrect(question, result.answers[index]),
     )
     const topic = result.topic.trim().slice(0, 30)
     if (hasWrong && topic !== '' && !topics.includes(topic)) topics.push(topic)
