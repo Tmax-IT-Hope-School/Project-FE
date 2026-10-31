@@ -161,6 +161,7 @@ import {
   nextQuizStep,
   parseQuizText,
   requestQuizOrDemo,
+  requestedQuizCountOf,
   retryOneQuestion,
   saveQuizResult,
   toQuizResult,
@@ -461,6 +462,8 @@ interface QuizForm {
   material: string
   /** 줄인 사진(data URL). 이 화면의 기억에만 두고 어디에도 저장하지 않습니다. */
   photo: string | null
+  /** "문제 5개 내 줘" 처럼 말한 문제 수. 말하지 않았으면 없음 (3개) */
+  count?: number
 }
 
 /** 위기 표현이 감지돼서 문제 대신 하는 말 (아래에 상담 전화 한 줄이 같이 보임) */
@@ -858,6 +861,17 @@ function RoomChat({ room }: RoomChatProps) {
     if (isDailyCoach) saveData(MISSION_PROGRESS_KEY, `${todayKey}:${doneMissionCount}`)
   }, [isDailyCoach, todayKey, doneMissionCount])
 
+  // 확인 문제를 받습니다. (lib/studyQuiz.ts) 과목 쌤의 답(talk)이 바로 부를 수 있게 talk 보다 위에 둡니다.
+  //   진짜 로그인: 서버 AI. 서버가 아직 준비 안 됐으면(404 · 503 · 429) 시연용 예시 문제로 대신합니다.
+  //   테스트 로그인: 시연용 예시 문제
+  const quizTalk = useMutation({
+    mutationFn: async (input: QuizInput): Promise<QuizReply> =>
+      isServerData ? requestQuizOrDemo(input) : makeDemoQuiz(input),
+    onSuccess: (result, input) => {
+      setThread((current) => applyQuizReply(current, result, input))
+    },
+  })
+
   // 진짜 로그인일 때 AI 의 답을 받습니다. 세션이 없으면 그때 처음 열고,
   // 서버가 대본을 잊었으면(409 — 서버가 다시 켜짐 등) 새로 열어서 한 번 더 보냅니다.
   // 서버 채팅은 이 방(room)과, [이야기하기] 로 연 세션이면 그 주제(about)로 엽니다. (BE #330)
@@ -898,12 +912,19 @@ function RoomChat({ room }: RoomChatProps) {
       // AI 가 고른 빠른 답 · 행동이 있으면 그 칩을, 없으면 코드가 칩을 붙입니다. (핑계 협상 · 계획 · 시험)
       // 위기 안내에는 칩이 없고, 계획 방에는 계획 칩이 늘 붙습니다. (lib/coachBriefing.ts)
       const studentText = variables.lines[variables.lines.length - 1]?.text ?? ''
-      const chips = replyChipsFor({
+      // 과목 쌤이 확인 문제(start_quiz)를 골랐으면 칩을 기다리지 않고 바로 4지선다 문제를 냅니다. (2026-10-31 "객관식으로 눌러 풀던 게 사라짐")
+      const quizTopic =
+        roomInfo.id === 'tutor' && !reply.showHelp && reply.action?.type === 'start_quiz'
+          ? reply.action.title
+          : null
+      const replyChips = replyChipsFor({
         reply,
         studentText,
         isPlanner: roomInfo.isPlanner,
         nowCard,
       })
+      // 바로 내는 문제와 같은 [📝 문제 풀기] 칩은 빼서 두 번 내지 않게 합니다.
+      const chips = quizTopic ? replyChips.filter((chip) => chip.kind !== 'quiz') : replyChips
       setThread((current) => {
         const reasonCheck = reasonCheckOf(current, reply.tags)
         return {
@@ -925,6 +946,17 @@ function RoomChat({ room }: RoomChatProps) {
       // AI 가 학생과 오늘 계획을 정했으면(day_plan) 칩을 기다리지 않고 바로 짭니다. (계획 방만, #695)
       const ask = roomInfo.isPlanner && !reply.showHelp ? dayPlanAskOf(reply.action) : null
       if (ask) startAskedPlan(ask, reply.reply)
+      // talk 가 아직 끝나기 전이라 startQuiz(isBusy 검사) 대신 바로 부릅니다. (startAskedPlan 과 같은 방법)
+      if (quizTopic) {
+        quizTalk.mutate({
+          topic: quizTopic,
+          checklist: [],
+          material: null,
+          image: null,
+          cardId: null,
+          count: requestedQuizCountOf(studentText) ?? undefined,
+        })
+      }
     },
   })
 
@@ -1090,16 +1122,6 @@ function RoomChat({ room }: RoomChatProps) {
     },
   })
 
-  // 확인 문제를 받습니다. (lib/studyQuiz.ts)
-  //   진짜 로그인: 서버 AI. 서버가 아직 준비 안 됐으면(404 · 503 · 429) 시연용 예시 문제로 대신합니다.
-  //   테스트 로그인: 시연용 예시 문제
-  const quizTalk = useMutation({
-    mutationFn: async (input: QuizInput): Promise<QuizReply> =>
-      isServerData ? requestQuizOrDemo(input) : makeDemoQuiz(input),
-    onSuccess: (result, input) => {
-      setThread((current) => applyQuizReply(current, result, input))
-    },
-  })
   // AI 의 답이나 계획 · 문제를 기다리는 중인지 (그동안은 새 말 · 칩을 막습니다)
   const isBusy =
     talk.isPending ||
@@ -1324,11 +1346,12 @@ function RoomChat({ room }: RoomChatProps) {
               material: null,
               image: null,
               cardId: null,
+              count: quizRequest.count ?? undefined,
             },
             text,
           )
         } else {
-          openQuizForm({}, text)
+          openQuizForm({ count: quizRequest.count ?? undefined }, text)
         }
         return
       }
@@ -1697,6 +1720,7 @@ function RoomChat({ room }: RoomChatProps) {
         material: material === '' ? null : material.slice(0, MAX_QUIZ_MATERIAL_LENGTH),
         image: quizForm.photo,
         cardId: quizForm.cardId,
+        count: quizForm.count,
       },
       myText,
     )
