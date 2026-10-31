@@ -964,7 +964,7 @@ function RoomChat({ room }: RoomChatProps) {
           image: null,
           cardId: null,
           count: requestedQuizCountOf(studentText) ?? undefined,
-          // "주관식으로" · "객관식만" 같은 말을 보고 주관식 수를 정합니다. (그 밖에는 3문제 중 1개)
+          // "주관식도" · "섞어서" 같은 말이 있을 때만 주관식을 섞습니다. (그 밖에는 모두 객관식)
           shortCount: quizShortCountOf(
             studentText,
             quizCountOf(requestedQuizCountOf(studentText) ?? undefined),
