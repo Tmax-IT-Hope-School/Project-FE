@@ -26,7 +26,8 @@ import type { Card, StudySession } from '@/types'
  *   휴식 날          GET /rest-days?from=&to=
  *   체크인           GET /checkins?from=&to=
  *
- * ■ 처음에는 최근 6개월(186일), 그 뒤로는 지난번에 받은 날부터 오늘까지만 받습니다. (서버는 한 번에 31일까지)
+ * ■ 처음에는 최근 6개월(186일), 그 뒤로는 지난번에 받은 날부터 오늘까지 받습니다. (서버는 한 번에 31일까지)
+ *   단, 최근 4주(28일)는 앱을 열 때마다 다시 받습니다. 다른 기기에서 늦게 올라온 기록이나 서버에 나중에 더해진 기록도 빠지지 않게요.
  * ■ 받아 온 것은 "이미 서버로 보낸 것" 으로 적어 둡니다. 서버에 있던 것을 다시 보내면 겹치거나 거절되기 때문입니다.
  *   (공부 기록 → session-sync, 미루기 · 실패 · 휴식 · 사후 입력 → mark-sync)
  * ■ 예전에는 "모든 기록 지우기" 로 지운 기록이 되살아날까 봐 받아 오지 않았습니다.
@@ -37,6 +38,10 @@ import type { Card, StudySession } from '@/types'
 
 /** 서버 응답을 기다리는 최대 시간(밀리초) */
 const REQUEST_TIMEOUT_MS = 10000
+
+// 받은 뒤에도 앱을 열 때마다 다시 받는 최근 날 수입니다. 통계의 "최근 4주 실행률" 과 같은 28일입니다. (2026-10-31)
+// 이미 이 기기에 있는 기록은 pickNewSessions 등이 빼서 두 번 들어가지 않습니다.
+const REPULL_RECENT_DAYS = 28
 
 // 어디까지 받았는지 적어 두는 이름입니다. (실제 키는 'study-server-history-pull')
 // "모든 기록 지우기" 로 지우지 않습니다. 서버 것이 덜 지워졌을 때 그 기록을 다시 받아 오지 않으려는 것입니다.
@@ -59,11 +64,12 @@ export function loadServerPullState(): ServerPullState | null {
 
 /**
  * 이번에 받을 날짜들을 31일씩 나눕니다. 오래된 것부터.
- * 처음(또는 다른 계정)이면 최근 6개월, 아니면 지난번에 받은 날부터 오늘까지입니다.
+ * 처음(또는 다른 계정)이면 최근 6개월, 아니면 "지난번에 받은 날" 과 "최근 4주의 첫날" 중 더 이른 날부터 오늘까지입니다.
  * (지난번에 받은 날도 다시 받습니다. 그날 늦게 끝난 기록이 있을 수 있어서입니다)
  *
  *   getPullRanges(null, '7', '2026-10-27')                                   -> 6조각 (2026-04-25 ~ 2026-10-27)
- *   getPullRanges({ userId: '7', through: '2026-10-25' }, '7', '2026-10-27') -> [{ from: '2026-10-25', to: '2026-10-27' }]
+ *   getPullRanges({ userId: '7', through: '2026-10-25' }, '7', '2026-10-27') -> [{ from: '2026-09-30', to: '2026-10-27' }] (최근 4주)
+ *   getPullRanges({ userId: '7', through: '2026-08-01' }, '7', '2026-10-27') -> 3조각 (2026-08-01 ~ 2026-10-27)
  *   getPullRanges({ userId: '3', through: '2026-10-25' }, '7', '2026-10-27') -> 6조각 (다른 계정)
  */
 export function getPullRanges(
@@ -74,7 +80,11 @@ export function getPullRanges(
   const all = getServerRanges(todayKey)
   if (state === null || state.userId !== userId) return all
   const oldest = all[0].from
-  const from = state.through < oldest ? oldest : state.through > todayKey ? todayKey : state.through
+  const lastPulled = state.through > todayKey ? todayKey : state.through
+  // 최근 4주의 첫날 (오늘 포함 28일)
+  const recentStart = moveDateKey(todayKey, -(REPULL_RECENT_DAYS - 1))
+  const wanted = lastPulled < recentStart ? lastPulled : recentStart
+  const from = wanted < oldest ? oldest : wanted
   const ranges: { from: string; to: string }[] = []
   for (let start = from; start <= todayKey; start = moveDateKey(start, SESSION_MAX_RANGE_DAYS)) {
     const end = moveDateKey(start, SESSION_MAX_RANGE_DAYS - 1)
