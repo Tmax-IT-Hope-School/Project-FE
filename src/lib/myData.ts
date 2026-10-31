@@ -35,7 +35,7 @@ const DIARY_KEYS = ['diary', 'reflection-entries', 'diary-draft']
  *   goals, goal-draft, goal-sync-pending, goal-sync-rejected  목표. 지울지 남길지 아직 정하지 않았습니다. (QA "확인 필요")
  *   fixed-blocks  고정 일정(학교 · 학원 시간). 루틴처럼 내가 정한 틀이라 남깁니다.
  *   auto-settings, coach-nudges-off, mission-alerts-off  설정 값과 알림 끄기. 설정이라 남깁니다.
- *   school-class, school-day, school-exam-dates, school-replan-dismissed  우리 반 · 학교 일정(NEIS 에서 받은 것). 기록이 아니라 남깁니다.
+ *   school-class, school-class-unsent, school-day, school-exam-dates, school-replan-dismissed  우리 반(과 서버에 못 보낸 표시) · 학교 일정(NEIS 에서 받은 것). 기록이 아니라 남깁니다.
  *   google-calendar  구글 캘린더 연결. 계정 연결이라 남깁니다.
  *   psych-test, thinking-test (+ -draft, -sent), onboarding-*, my-hypotheses, signup-done  온보딩 · 검사 답과 가입 표시. onboarding-answers 와 같은 이유로 남깁니다.
  *   demo-manifest  시연 데이터로 무엇을 넣었는지 적은 표. 이 버튼이 남기는 온보딩 답 등에도 시연 값이 들어 있어서,
