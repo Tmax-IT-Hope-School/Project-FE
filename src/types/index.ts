@@ -531,7 +531,7 @@ export interface OnboardingAnswers {
   /**
    * 학년. 새로 고를 때는 '고1' ~ '고3' 만 있습니다. (2026-10-18, 고등학생만 가입)
    * 'N수' · '대학생' 은 예전에 저장된 답을 읽을 때만 나옵니다. (BE 의 Grade 도 예전 데이터 때문에 그대로 둡니다)
-   * 반은 여기 말고 학년 · 반 저장소(study-school-class, lib/schoolToday.ts)에 있습니다. 이 기기에만 두고 서버에는 보내 저장하지 않습니다.
+   * 반은 여기 말고 학년 · 반 저장소(study-school-class, lib/schoolToday.ts)에 있습니다. 서버(BE /auth/school-class)에도 저장합니다. (lib/schoolClassSync.ts)
    */
   grade: '고1' | '고2' | '고3' | 'N수' | '대학생'
   /** 평소 기상 시각 ('HH:MM'). 관리 설정의 수면 보호 */

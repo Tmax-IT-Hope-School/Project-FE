@@ -24,7 +24,7 @@ interface SchoolClassPickerProps {
 }
 
 /**
- * 학년 · 반을 고르는 작은 칸입니다. 고른 반은 서버에 저장하지 않고 이 기기에만 둡니다. (lib/schoolToday.ts)
+ * 학년 · 반을 고르는 작은 칸입니다. 고른 반은 이 기기와 서버에 저장합니다. (lib/schoolToday.ts · lib/schoolClassSync.ts)
  * 설정의 계정 묶음이 씁니다. 홈 시간표와 같은 저장소(study-school-class)를 씁니다.
  * 반 칸에는 우리 학교 그 학년에 실제로 있는 반만 나옵니다. (NEIS 학급정보, 2026-10-23) 목록을 받는 동안은 회색 칸입니다.
  *
