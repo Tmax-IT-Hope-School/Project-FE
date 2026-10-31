@@ -5,6 +5,7 @@
  * **다 검사한 뒤에** 보여 주려고서입니다. (검사 전 글자가 먼저 화면에 나오면 걸러야 할 말이 잠깐이라도 보일 수 있음)
  * 그래서 화면이 받은 답을 이렇게 보여 줍니다.
  *   1. 두세 문장으로 긴 답은 문장 단위로 말풍선 2~3개로 나눕니다. (splitReply)
+ *      줄을 바꾼 답(번호 목록 · 풀이 단계)은 나누지 않고 하나로 둡니다. 나누면 줄바꿈이 빈칸으로 바뀌어 목록이 흐트러집니다.
  *   2. 말풍선마다 타자 치듯 글자가 나타나고, 다음 말풍선은 0.5초 쉬고 나옵니다. (revealSchedule · visibleLength)
  *   3. 칩 · 계획 · 문제 카드는 글이 다 나온 뒤에 보입니다. (화면 쪽: pages/ChatRoomPage.tsx)
  * React 를 쓰지 않는 순수 함수입니다.
@@ -43,16 +44,19 @@ function sentenceEnds(text: string): number[] {
 /**
  * 답을 말풍선 1~3개로 나눕니다. 짧거나 한 문장이면 그대로 하나입니다.
  * 문장이 4개 이상이면 앞에서부터 고르게 묶어 3개 이하로 합칩니다. (4문장 → 2 · 2, 5문장 → 2 · 2 · 1)
+ * 줄바꿈이 든 답은 그대로 하나입니다. (과목 쌤의 번호 목록 · 풀이처럼 줄 모양이 뜻을 가진 답, 2026-10-31)
  *
  *   splitReply('좋아!')                                                 -> ['좋아!']
  *   splitReply('어제 순공 1시간 40분이었어. 꽤 했네! 오늘은 영어부터 할까?')
  *     -> ['어제 순공 1시간 40분이었어.', '꽤 했네!', '오늘은 영어부터 할까?']
  *   splitReply('평균 3.5점이야. 1. 개념 2. 문제 순서로 가자. 어때?')
  *     -> ['평균 3.5점이야.', '1. 개념 2. 문제 순서로 가자.', '어때?']   (3.5 · 1. 에서 안 끊음)
+ *   splitReply('풀이는 이래.\n1. 양변에 2를 곱해.\n2. x = 3 이야.')
+ *     -> ['풀이는 이래.\n1. 양변에 2를 곱해.\n2. x = 3 이야.']   (줄바꿈이 있어서 그대로)
  */
 export function splitReply(text: string): string[] {
   const trimmed = text.trim()
-  if (trimmed.length < MIN_SPLIT_LENGTH) return [trimmed]
+  if (trimmed.length < MIN_SPLIT_LENGTH || trimmed.includes('\n')) return [trimmed]
   const sentences: string[] = []
   let start = 0
   for (const end of sentenceEnds(trimmed)) {
