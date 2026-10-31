@@ -2,7 +2,7 @@ import type { AnswerCheck } from '@/lib/answerChecksApi'
 import { moveDateKey, toDayKey } from '@/lib/date'
 import { mockSubjects } from '@/lib/mock'
 import type { ServerQuizCount } from '@/lib/quizResultsApi'
-import type { QuizResult } from '@/lib/studyQuiz'
+import { isAnswerCorrect, type QuizResult } from '@/lib/studyQuiz'
 import { getStudyMs } from '@/lib/studyTime'
 import type { Card, StudySession, Subject } from '@/types'
 
@@ -172,7 +172,7 @@ function splitAttempts(results: QuizResult[], cards: Card[], subjects: Subject[]
     result.questions.forEach((question, index) => {
       const answer = result.answers[index]
       if (!answer) return
-      const correct = answer.choiceIndex === question.answerIndex
+      const correct = isAnswerCorrect(question, answer)
       const before = seen.get(question.question)
       if (!before) {
         // 찍은 것 같은 묶음은 점수에 넣지 않습니다. (그래도 "본 문제" 로 남겨서, 다시 풀면 오답 다시 풀기로 셉니다)

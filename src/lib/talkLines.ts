@@ -13,11 +13,11 @@ import type { SelfAnalysis } from '@/lib/analysisFacts'
 import type { FocusScoreRecord } from '@/lib/focusScore'
 import { getScaleLevel, psychScales, type PsychScale } from '@/lib/psychTest'
 import { SHORTFALL_REASONS } from '@/lib/sessionTags'
-import type { QuizAnswer, QuizQuestion } from '@/lib/studyQuiz'
+import { isShortQuestion, type QuizAnswer, type QuizQuestion } from '@/lib/studyQuiz'
 import type { Card, ShortfallReason, StudySession } from '@/types'
 
 /** 보기 번호 글자 (문제 말풍선과 같음) */
-const CHOICE_MARKS = ['①', '②', '③', '④']
+const CHOICE_MARKS = ['①', '②', '③', '④', '⑤']
 
 /** 'YYYY-MM-DD' → '10월 18일' */
 function monthDay(dateKey: string): string {
@@ -142,6 +142,7 @@ export function analysisLines(analysis: SelfAnalysis, days: number): string[] {
  *
  *   quizWrongLines('수열의 극한', [{ question: { question: 'lim 1/n 은?', choices: ['0','1','∞','없다'], answerIndex: 0, … }, answer: { choiceIndex: 1, … } }])
  *     -> ['주제: 수열의 극한', '문제: lim 1/n 은? / 학생 답: ② 1 / 정답: ① 0 / 해설: …']
+ *   주관식이면 쓴 글과 정답 표기: '문제: … / 학생 답: "2" / 정답: "0" / 해설: …'
  */
 export function quizWrongLines(
   topic: string,
@@ -149,6 +150,13 @@ export function quizWrongLines(
 ): string[] {
   const lines = [`주제: ${topic}`]
   for (const { question, answer } of wrong.slice(0, 3)) {
+    if (isShortQuestion(question)) {
+      const written = answer?.text ? `"${answer.text}"` : '안 풂'
+      lines.push(
+        `문제: ${question.question} / 학생 답: ${written} / 정답: "${(question.answers ?? []).join('" 또는 "')}" / 해설: ${question.explanation}`,
+      )
+      continue
+    }
     const mine = answer
       ? `${CHOICE_MARKS[answer.choiceIndex]} ${question.choices[answer.choiceIndex]}`
       : '안 풂'
