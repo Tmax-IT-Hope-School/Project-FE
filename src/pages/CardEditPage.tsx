@@ -72,9 +72,10 @@ interface CardFormProps {
   /** "과목" 에서 고를 수 있는 내 과목 (#652) */
   subjectOptions: Subject[]
   /**
-   * 체크리스트 AI 추천(#413)
-   * - 'auto': 제목을 적고 나가면 체크리스트가 비어 있을 때 저절로 받아 둡니다 (+ 버튼)
-   * - 'manual': 버튼으로만 받습니다 (성향상 2주 뒤 "직접 써 볼까요?")
+   * 체크리스트 AI 추천(#413). AI 는 버튼을 눌렀을 때만 부릅니다.
+   *   (2026-10-31 사용자 "시작시간 누르자마자 AI가 분석을 한다니까 AI 계획하기 버튼이 있어야되는거 아님?")
+   * - 'auto': [✨ AI 로 계획하기] · [AI 추천 받기] 버튼을 보여 줍니다
+   * - 'manual': 버튼은 그대로, 성향상 2주 뒤라 "직접 써 볼까요?" 한 줄을 더 보여 줍니다
    * - 'off': 테스트 로그인이라 서버에 물을 수 없습니다
    */
   aiChecklist: 'auto' | 'manual' | 'off'
@@ -124,11 +125,10 @@ function FailCauseOptions({ title, value, onToggle }: FailCauseOptionsProps) {
   )
 }
 
-/** AI 가 체크리스트를 만들어 달라는 부탁 하나. auto 는 제목 칸에서 나갈 때 저절로 부탁한 것입니다. */
+/** AI 가 체크리스트를 만들어 달라는 부탁 하나 ([✨ AI 로 계획하기] · [AI 추천 받기] 를 눌렀을 때) */
 interface ChecklistAsk {
   title: string
   goal?: string
-  auto: boolean
 }
 
 /** 카드 만들기 · 고치기 폼 */
@@ -165,39 +165,38 @@ function CardForm({
 
   // 체크리스트 AI 추천 (#413, BE POST /ai/checklist). 실패해도 저장은 그대로 됩니다.
   const [aiNotice, setAiNotice] = useState('')
-  // 같은 제목으로 저절로 두 번 묻지 않게, 마지막으로 저절로 물어본 제목을 기억합니다.
-  const [autoAskedTitle, setAutoAskedTitle] = useState('')
   const { mutate: askChecklist, isPending: isAskingChecklist } = useMutation({
     mutationFn: (ask: ChecklistAsk) => requestChecklist(ask.title, ask.goal),
-    onSuccess: (items, ask) => {
+    onSuccess: (items) => {
       if (!items) {
-        // 저절로 부탁한 것은 조용히 넘어갑니다. 버튼을 눌렀을 때만 알려 줍니다.
-        if (!ask.auto) setAiNotice('지금은 AI 추천을 못 받았어요. 직접 적어 주세요.')
+        setAiNotice('지금은 AI 추천을 못 받았어요. 직접 적어 주세요.')
         return
       }
       setAiNotice('')
       const stamp = Date.now()
-      setValues((prev) => {
-        // 저절로 부탁한 사이에 내가 직접 적기 시작했으면 덮지 않습니다.
-        if (ask.auto && getFilledChecklist(prev.checklist).length > 0) return prev
-        return { ...prev, checklist: mergeAiChecklist(prev.checklist, items, stamp) }
-      })
+      // 다시 누르면 지난번 AI 항목(내가 안 고친 것)은 새 추천으로 바꿉니다. 내가 적거나 고친 항목은 그대로 둡니다.
+      setValues((prev) => ({
+        ...prev,
+        checklist: mergeAiChecklist(
+          prev.checklist.filter((item) => !isAiChecklistItem(item)),
+          items,
+          stamp,
+        ),
+      }))
     },
   })
   const goalTitle = goalOptions.find((goal) => goal.id === values.goalId)?.title
 
-  // 카드 기본값 AI 추천 (#419 표 2번, BE POST /ai/card-defaults). 새 카드에서 제목을 적고 나가면
-  // 내가 아직 안 건드린 목표 · 유형 · 길이를 AI 가 먼저 채워 둡니다. 마음에 안 들면 [되돌리기].
+  // 카드 기본값 AI 추천 (#419 표 2번, BE POST /ai/card-defaults). 새 카드에서 [✨ AI 로 계획하기] 를 누르면
+  // 내가 아직 안 건드린 목표 · 유형 · 길이를 AI 가 채워 둡니다. 마음에 안 들면 [되돌리기].
   const [touchedDefaults, setTouchedDefaults] = useState<DefaultField[]>([])
   const [aiDefaults, setAiDefaults] = useState<(AppliedDefaults & { evidence: string }) | null>(
     null,
   )
-  // 같은 제목으로 두 번 묻지 않게, 마지막으로 물어본 제목을 기억합니다.
-  const [defaultsAskedTitle, setDefaultsAskedTitle] = useState('')
   // 길이 고르기(MinutesPicker)는 처음 값으로 "버튼 / 직접" 을 정해 둡니다. AI 가 길이를 바꾸면
   // 이 숫자를 올려서 다시 그립니다. 그래야 50분처럼 버튼에 없는 값이 '직접' 칸에 보입니다.
   const [minutesPickerKey, setMinutesPickerKey] = useState(0)
-  const { mutate: askDefaults } = useMutation({
+  const { mutate: askDefaults, isPending: isAskingDefaults } = useMutation({
     mutationFn: requestCardDefaults,
     onSuccess: (suggestion) => {
       // 못 받았으면(AI 꺼짐 · 한도 · 실패) 조용히 넘어갑니다. 칸은 원래 값 그대로입니다.
@@ -241,23 +240,28 @@ function CardForm({
   const checklistGoal = isGoalChosen ? goalTitle : undefined
 
   function handleTitleBlur() {
+    setCommittedTitle(values.title.trim())
+  }
+
+  /**
+   * [✨ AI 로 계획하기] 제목을 보고 AI 가 목표 · 유형 · 길이(새 카드만)와 체크리스트를 채웁니다.
+   * 제목 칸에서 나갈 때 저절로 부르지 않고, 이 버튼을 눌렀을 때만 부릅니다.
+   */
+  function handlePlanWithAi() {
     const title = values.title.trim()
+    if (title === '') return
     setCommittedTitle(title)
+    setAiNotice('')
     // 기본값 추천은 새 카드에서만 받습니다. (고치는 카드의 목표 · 유형 · 길이는 내가 이미 정한 값입니다)
-    if (isAiEnabled && !editingCard && title !== '' && title !== defaultsAskedTitle) {
-      setDefaultsAskedTitle(title)
-      askDefaults(title)
-    }
-    if (aiChecklist !== 'auto' || title === '' || title === autoAskedTitle) return
-    if (getFilledChecklist(values.checklist).length > 0) return
-    setAutoAskedTitle(title)
-    askChecklist({ title, goal: checklistGoal, auto: true })
+    if (!editingCard) askDefaults(title)
+    askChecklist({ title, goal: checklistGoal })
   }
 
   function handleAskChecklist() {
     setAiNotice('')
-    askChecklist({ title: values.title.trim(), goal: checklistGoal, auto: false })
+    askChecklist({ title: values.title.trim(), goal: checklistGoal })
   }
+  const isPlanningWithAi = isAskingDefaults || isAskingChecklist
   const filledCount = getFilledChecklist(values.checklist).length
   // 체크리스트를 비워 두면 제목 한 줄로 채우므로, 예상 개수의 최댓값은 최소 1개입니다.
   const checklistTotal = Math.max(1, filledCount)
@@ -443,6 +447,23 @@ function CardForm({
               placeholder="예: 수학 문제집"
               error={shownErrors.title}
             />
+            {isAiEnabled && (
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="secondary"
+                  onClick={handlePlanWithAi}
+                  disabled={values.title.trim() === '' || isPlanningWithAi}
+                  className="w-full bg-violet-50 text-violet-700 hover:bg-violet-100"
+                >
+                  {isPlanningWithAi ? 'AI 가 계획하는 중…' : '✨ AI 로 계획하기'}
+                </Button>
+                <p className="text-xs break-keep text-slate-500">
+                  {editingCard
+                    ? '제목을 보고 체크리스트를 채워 줘요.'
+                    : '제목을 보고 길이 · 목표 · 체크리스트를 채워 줘요.'}
+                </p>
+              </div>
+            )}
 
             {/* 카드 기본값 AI 추천 (#419 표 2번). 목표 · 유형은 "더 보기" 안에 있어서, 무엇을 채웠는지 여기서 한 줄로 알려 줍니다. */}
             {aiDefaults && (
