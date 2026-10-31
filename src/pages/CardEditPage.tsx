@@ -74,7 +74,7 @@ interface CardFormProps {
   /**
    * 체크리스트 AI 추천(#413). AI 는 버튼을 눌렀을 때만 부릅니다.
    *   (2026-10-31 사용자 "시작시간 누르자마자 AI가 분석을 한다니까 AI 계획하기 버튼이 있어야되는거 아님?")
-   * - 'auto': [✨ AI 로 계획하기] · [AI 추천 받기] 버튼을 보여 줍니다
+   * - 'auto': 제목 아래 [✨ AI 로 계획하기] 버튼을 보여 줍니다 (AI 버튼은 이것 하나)
    * - 'manual': 버튼은 그대로, 성향상 2주 뒤라 "직접 써 볼까요?" 한 줄을 더 보여 줍니다
    * - 'off': 테스트 로그인이라 서버에 물을 수 없습니다
    */
@@ -125,7 +125,7 @@ function FailCauseOptions({ title, value, onToggle }: FailCauseOptionsProps) {
   )
 }
 
-/** AI 가 체크리스트를 만들어 달라는 부탁 하나 ([✨ AI 로 계획하기] · [AI 추천 받기] 를 눌렀을 때) */
+/** AI 가 체크리스트를 만들어 달라는 부탁 하나 ([✨ AI 로 계획하기] 를 눌렀을 때) */
 interface ChecklistAsk {
   title: string
   goal?: string
@@ -257,10 +257,6 @@ function CardForm({
     askChecklist({ title, goal: checklistGoal })
   }
 
-  function handleAskChecklist() {
-    setAiNotice('')
-    askChecklist({ title: values.title.trim(), goal: checklistGoal })
-  }
   const isPlanningWithAi = isAskingDefaults || isAskingChecklist
   const filledCount = getFilledChecklist(values.checklist).length
   // 체크리스트를 비워 두면 제목 한 줄로 채우므로, 예상 개수의 최댓값은 최소 1개입니다.
@@ -462,6 +458,7 @@ function CardForm({
                     ? '제목을 보고 체크리스트를 채워 줘요.'
                     : '제목을 보고 길이 · 목표 · 체크리스트를 채워 줘요.'}
                 </p>
+                {aiNotice && <p className="text-xs break-keep text-red-600">{aiNotice}</p>}
               </div>
             )}
 
@@ -597,25 +594,15 @@ function CardForm({
             </ul>
             {aiChecklist === 'manual' && (
               <p className="text-sm break-keep text-slate-600">
-                이번엔 직접 써 볼까요? 막히면 [AI 추천 받기] 를 눌러도 돼요.
+                이번엔 직접 써 볼까요? 막히면 위의 [✨ AI 로 계획하기] 를 눌러도 돼요.
               </p>
             )}
+            {/* AI 로 채우기는 제목 아래 [✨ AI 로 계획하기] 하나로 합쳤습니다. (2026-10-31 "두개 겹치는거아냐?") */}
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={handleAddChecklistItem}>
                 + 항목 더하기
               </Button>
-              {aiChecklist !== 'off' && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleAskChecklist}
-                  disabled={values.title.trim() === '' || isAskingChecklist}
-                >
-                  {isAskingChecklist ? 'AI 가 만드는 중…' : 'AI 추천 받기'}
-                </Button>
-              )}
             </div>
-            {aiNotice && <p className="text-xs break-keep text-slate-500">{aiNotice}</p>}
             <p className="text-xs break-keep text-slate-500">
               비워 두면 제목으로 한 줄 채워요.
               {aiChecklist !== 'off' && ' AI 가 넣은 항목도 고치거나 지울 수 있어요.'}
