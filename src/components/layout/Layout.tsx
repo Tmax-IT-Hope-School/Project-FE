@@ -20,6 +20,7 @@ import { useMarkSync } from '@/hooks/useMarkSync'
 import { useOnboardingCompletionSync } from '@/hooks/useOnboardingCompletionSync'
 import { usePsychTestSync } from '@/hooks/usePsychTestSync'
 import { useQuizResultSync } from '@/hooks/useQuizResultSync'
+import { useSchoolClassSync } from '@/hooks/useSchoolClassSync'
 import { useScrollToTopOnPageChange } from '@/hooks/useScrollToTopOnPageChange'
 import { useServerHistoryPull } from '@/hooks/useServerHistoryPull'
 import { useSessionSync } from '@/hooks/useSessionSync'
@@ -65,6 +66,8 @@ export function Layout() {
   useUnsentCheckInRetry()
   usePsychTestSync()
   useOnboardingCompletionSync()
+  // 진짜 로그인이면 학년 · 반을 서버와 맞춥니다. 새 기기에서 로그인해도 홈 시간표가 바로 나옵니다. (2026-10-31)
+  useSchoolClassSync()
   // 다른 화면으로 옮기면 맨 위부터 보이게 합니다. (같은 화면 안의 탭 · 날짜 바꾸기와 뒤로 가기는 그대로 둡니다)
   useScrollToTopOnPageChange()
   const { pathname } = useLocation()

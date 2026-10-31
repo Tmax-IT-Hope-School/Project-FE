@@ -9,7 +9,8 @@
  *              events: [{ date, name, grades: [], exam, dDay }] }
  *   - grade · classNo 는 둘 다 보내거나 둘 다 뺍니다. 빼면 timetable 이 null 입니다.
  *   - timetablePartial 이 true 면 뒤 교시가 잘렸을 수 있습니다. (서버에 NEIS 키가 없으면 5교시까지만 옴)
- *   - 반은 서버에 저장하지 않고 이 기기에 저장해 두었다가 요청마다 보냅니다. (loadSchoolClass · saveSchoolClass)
+ *   - 반은 이 기기에 저장해 두었다가 요청마다 보냅니다. (loadSchoolClass · saveSchoolClass)
+ *     서버(BE /auth/school-class)에도 저장해서, 새 기기에서 로그인해도 받아 옵니다. (lib/schoolClassSync.ts, 2026-10-31)
  *   - 테스트 로그인이면 서버를 부르지 않고 시연용 예시(buildDemoSchoolToday)를 씁니다. 화면에 "시연용 예시" 라고 붙입니다.
  */
 import { ApiError, api } from '@/lib/api'
@@ -99,7 +100,13 @@ export interface SchoolClass {
 }
 
 // 저장소에 넣는 이름입니다. (실제 키는 storage.ts 가 앞에 'study-' 를 붙여서 'study-school-class' 가 됩니다)
-const CLASS_STORAGE_KEY = 'school-class'
+export const CLASS_STORAGE_KEY = 'school-class'
+
+// 이 기기에서 바꾼 반을 아직 서버에 못 보냈으면 true 를 적어 두는 칸입니다. (lib/schoolClassSync.ts 가 보내고 지움)
+const CLASS_UNSENT_KEY = 'school-class-unsent'
+
+/** 반을 저장하거나 지우면 나가는 이벤트. 홈 시간표 · 설정이 듣고 다시 그립니다. (hooks/useSchoolClass.ts) */
+export const SCHOOL_CLASS_CHANGED_EVENT = 'study-school-class-changed'
 
 function isWholeNumberBetween(value: unknown, min: number, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
@@ -115,17 +122,37 @@ export function loadSchoolClass(): SchoolClass | null {
   return { grade: record.grade, classNo: record.classNo }
 }
 
-/** 학년 · 반을 이 기기에 저장합니다. */
-export function saveSchoolClass(schoolClass: SchoolClass): void {
+/**
+ * 학년 · 반을 이 기기에 저장합니다.
+ * from 이 'device'(설정에서 고름)면 서버에 보낼 것으로 표시하고, 'server'(서버에서 받아 옴)면 다시 보내지 않습니다.
+ */
+export function saveSchoolClass(
+  schoolClass: SchoolClass,
+  from: 'device' | 'server' = 'device',
+): void {
   saveData(CLASS_STORAGE_KEY, schoolClass)
+  if (from === 'device') saveData(CLASS_UNSENT_KEY, true)
+  window.dispatchEvent(new Event(SCHOOL_CLASS_CHANGED_EVENT))
 }
 
 /**
  * 저장해 둔 학년 · 반을 지웁니다. 온보딩에서 학년을 다르게 고르면, 다른 학년의 반 번호는 쓸 수 없어서 지웁니다.
- * 그러면 홈 시간표 칸이 반을 다시 묻습니다.
+ * 그러면 홈 시간표 칸이 반을 다시 묻습니다. 서버의 반도 지우도록 보낼 것으로 표시합니다.
  */
 export function clearSchoolClass(): void {
   removeData(CLASS_STORAGE_KEY)
+  saveData(CLASS_UNSENT_KEY, true)
+  window.dispatchEvent(new Event(SCHOOL_CLASS_CHANGED_EVENT))
+}
+
+/** 이 기기에서 바꾼 반을 아직 서버에 못 보냈으면 true */
+export function isSchoolClassUnsent(): boolean {
+  return loadData<unknown>(CLASS_UNSENT_KEY, false) === true
+}
+
+/** 서버에 보냈으니 "못 보냄" 표시를 지웁니다. */
+export function markSchoolClassSent(): void {
+  removeData(CLASS_UNSENT_KEY)
 }
 
 /** 학년마다 고를 수 있는 반 번호 (작은 것부터). 예: { 1: [1, …, 10], 2: [1, …, 12], 3: [1, …, 11] } */

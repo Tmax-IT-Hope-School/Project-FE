@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { useSchoolClass } from '@/hooks/useSchoolClass'
 import { logoutOnServer } from '@/lib/accountApi'
 import {
   SETTINGS_TEXT_MAX_LENGTH,
@@ -75,7 +76,7 @@ import {
   turnOnWebPush,
   type WebPushStatus,
 } from '@/lib/webPush'
-import { loadSchoolClass, saveSchoolClass, type SchoolClass } from '@/lib/schoolToday'
+import { saveSchoolClass, type SchoolClass } from '@/lib/schoolToday'
 import { loadSchoolTrack, saveSchoolTrack, type SchoolTrack } from '@/lib/schoolTrack'
 import { loadSignupProfile } from '@/lib/signup'
 import { deleteServerSessions } from '@/lib/sessionsApi'
@@ -201,12 +202,13 @@ export function SettingsPage() {
   }
 
   // 학년 · 반 (홈 시간표 칸과 같은 저장소). 저장하면 "저장했어요" 를 잠깐 보여 줍니다.
-  const [schoolClass, setSchoolClass] = useState<SchoolClass | null>(loadSchoolClass)
+  // 로그인 직후 서버에서 받아 온 반도 바로 보이게 훅으로 읽습니다. (hooks/useSchoolClass.ts)
+  const schoolClass = useSchoolClass()
   const [isClassSaved, setIsClassSaved] = useState(false)
 
   function handleSaveClass(next: SchoolClass) {
+    // 이 기기에 저장하면 서버로도 보냅니다. (hooks/useSchoolClassSync.ts)
     saveSchoolClass(next)
-    setSchoolClass(next)
     setIsClassSaved(true)
   }
 
@@ -329,7 +331,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* 학년 · 반은 홈의 시간표 칸과 같은 저장소(study-school-class)를 씁니다. 서버에는 저장하지 않습니다. */}
+          {/* 학년 · 반은 홈의 시간표 칸과 같은 저장소(study-school-class)를 쓰고, 서버에도 저장합니다. (lib/schoolClassSync.ts) */}
           <SchoolClassPicker
             key={schoolClass ? `${schoolClass.grade}-${schoolClass.classNo}` : 'none'}
             initial={schoolClass}
@@ -337,7 +339,7 @@ export function SettingsPage() {
             description={
               schoolClass
                 ? `지금 ${schoolClass.grade}학년 ${schoolClass.classNo}반이에요. 홈 시간표와 코치가 이 반 기준으로 말해요.`
-                : '학년 · 반을 알려 주면 홈에 시간표가 나오고, 코치가 오늘 배운 과목으로 말을 걸어요.'
+                : '아직 반을 저장하지 않았어요. 고르고 [반 저장]을 누르면 홈에 시간표가 나오고, 코치가 오늘 배운 과목으로 말을 걸어요.'
             }
             saveLabel="반 저장"
             className="mt-5"
