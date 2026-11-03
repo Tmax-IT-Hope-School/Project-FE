@@ -13,21 +13,14 @@ import { useCards } from '@/hooks/useCards'
 import { useGoals } from '@/hooks/useGoals'
 import { useIsServerData } from '@/hooks/useIsServerData'
 import { useQueryParam } from '@/hooks/useQueryParam'
-import { useStudySessions } from '@/hooks/useStudySessions'
-import { useSubjects } from '@/hooks/useSubjects'
 import { failCauseOptionsQuery, requestCardDefaults, requestChecklist } from '@/lib/aiCardApi'
 import {
-  ALERT_MINUTES_OPTIONS,
-  ALERT_TEXT_MAX_LENGTH,
   CARD_TITLE_MAX_LENGTH,
   CHECKLIST_ITEM_MAX_LENGTH,
-  EXPECTED_DONE_REASONS,
   applyCardDefaults,
   buildCard,
   cardToForm,
   createEmptyForm,
-  getFilledChecklist,
-  getRecentPlanAccuracy,
   isAiChecklistItem,
   mergeAiChecklist,
   shouldSuggestSelfChecklist,
@@ -53,7 +46,7 @@ import {
   type SleepWindow,
 } from '@/lib/scheduleCheck'
 import { loadAutoSettings } from '@/lib/settingsMapping'
-import type { Card as CardData, FixedBlock, Goal, Subject } from '@/types'
+import type { Card as CardData, FixedBlock, Goal } from '@/types'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -63,14 +56,8 @@ interface CardFormProps {
   editingCard?: CardData
   /** 성향 설정(#385): 예상 실패 원인을 꼭 받을지 */
   failCauseRequired: boolean
-  /** 성향 설정(#385): 선택 칸을 처음부터 펼쳐 둘지 */
-  optionalOpenByDefault: boolean
-  /** 최근 4주 계획 정확도. 기록이 모자라면 null */
-  accuracy: { rate: number; samples: number } | null
-  /** "목표 연결" 에서 고를 수 있는 목표 (진행 중인 목표 + 이 카드에 이미 걸린 목표) */
+  /** AI 추천이 고를 수 있는 목표 (진행 중인 목표 + 이 카드에 이미 걸린 목표) */
   goalOptions: Goal[]
-  /** "과목" 에서 고를 수 있는 내 과목 (#652) */
-  subjectOptions: Subject[]
   /**
    * 체크리스트 AI 추천(#413). AI 는 버튼을 눌렀을 때만 부릅니다.
    *   (2026-10-31 사용자 "시작시간 누르자마자 AI가 분석을 한다니까 AI 계획하기 버튼이 있어야되는거 아님?")
@@ -136,10 +123,7 @@ function CardForm({
   initialValues,
   editingCard,
   failCauseRequired,
-  optionalOpenByDefault,
-  accuracy,
   goalOptions,
-  subjectOptions,
   aiChecklist,
   sleepWindow,
   allCards,
@@ -151,14 +135,6 @@ function CardForm({
   const [triedSave, setTriedSave] = useState(false)
   // 편집 화면을 연 시각. 저장할 때까지 걸린 시간을 planningMs 로 남깁니다. (「4.3」 계획 시간 측정)
   const [openedAt] = useState(() => Date.now())
-
-  // 선택 칸을 펼쳤는지는 주소에 둡니다. (/cards/new?more=open) 새로고침해도 그대로입니다.
-  const [moreParam, setMoreParam] = useQueryParam(
-    'more',
-    optionalOpenByDefault ? 'open' : 'closed',
-    { replace: true },
-  )
-  const isMoreOpen = moreParam === 'open'
 
   const errors = validateCardForm(values, { failCauseRequired })
   const shownErrors = triedSave ? errors : {}
@@ -258,12 +234,6 @@ function CardForm({
   }
 
   const isPlanningWithAi = isAskingDefaults || isAskingChecklist
-  const filledCount = getFilledChecklist(values.checklist).length
-  // 체크리스트를 비워 두면 제목 한 줄로 채우므로, 예상 개수의 최댓값은 최소 1개입니다.
-  const checklistTotal = Math.max(1, filledCount)
-  const expectedDone =
-    values.expectedDone === null ? checklistTotal : Math.min(values.expectedDone, checklistTotal)
-  const isLowered = expectedDone < checklistTotal
 
   // 수면 보호 시간과 겹치면 저장 버튼을 막습니다. (「4.3」 규칙, 겹침 계산은 lib/scheduleCheck.ts)
   const isSleepBlocked = isOverlappingSleep(values.startTime, values.durationMinutes, sleepWindow)
@@ -354,28 +324,12 @@ function CardForm({
     }))
   }
 
-  /** 예상 달성 개수를 바꿉니다. 전부로 되돌리면 이유는 지웁니다. */
-  function handleChangeExpectedDone(next: number) {
-    const clamped = Math.min(Math.max(next, 0), checklistTotal)
-    setValues((prev) => ({
-      ...prev,
-      expectedDone: clamped >= checklistTotal ? null : clamped,
-      expectedDoneReason: clamped >= checklistTotal ? '' : prev.expectedDoneReason,
-    }))
-  }
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     // 버튼이 막혀 있어도 엔터로 제출될 수 있어서 한 번 더 막습니다.
     if (isSleepBlocked) return
     setTriedSave(true)
-    if (Object.keys(errors).length > 0) {
-      // 접힌 칸에 틀린 곳이 있으면 펼쳐서 보여 줍니다.
-      if (errors.expectedDoneReason || (errors.failCauses && !failCauseRequired)) {
-        setMoreParam('open')
-      }
-      return
-    }
+    if (Object.keys(errors).length > 0) return
     // 고치는 카드는 전에 쓴 계획 시간에 이번에 쓴 시간을 더합니다.
     const planningMs = (editingCard?.planningMs ?? 0) + (Date.now() - openedAt)
     const card = buildCard(values, {
@@ -386,12 +340,12 @@ function CardForm({
     onSave(card)
   }
 
-  // 예상 실패 원인 칸. 성향상 꼭 받아야 하면 필수 칸 쪽에, 아니면 접힌 칸 안에 둡니다.
+  // 예상 실패 원인 칸. 성향상 꼭 받아야 할 때만 보여 줍니다.
   const failCauseField = (
     <div className="flex flex-col gap-2">
       <Input
         id="card-fail-causes"
-        label={failCauseRequired ? '예상 실패 원인 (필수)' : '예상 실패 원인'}
+        label="예상 실패 원인 (필수)"
         value={values.failCauses}
         onChange={(event) => change('failCauses', event.target.value)}
         placeholder="예: 폰을 책상에 두면 계속 보게 돼요"
@@ -414,21 +368,6 @@ function CardForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
-      {/* 계획 정확도 한 줄. 내 계획이 얼마나 맞는지 먼저 보고 쓰게 합니다. (더닝-크루거 대응) */}
-      <p className="rounded-xl bg-white px-4 py-3 text-[13px] break-keep text-slate-600">
-        {accuracy ? (
-          <>
-            최근 4주 계획 정확도{' '}
-            <strong className="text-slate-900 tabular-nums">
-              {Math.round(accuracy.rate * 100)}%
-            </strong>{' '}
-            · 체크리스트를 계획한 만큼 해낸 비율이에요 (카드 {accuracy.samples}번)
-          </>
-        ) : (
-          '카드를 5번 끝내면 최근 4주 계획 정확도를 보여 줄게요.'
-        )}
-      </p>
-
       {/* 필수 묶음: 생각하는 순서대로 ① 무엇을 → ② 언제 → ③ 체크리스트. 칸 사이는 선(divide-y)으로 나눕니다. */}
       <Card title="꼭 적을 것">
         <div className="flex flex-col divide-y divide-slate-100">
@@ -462,7 +401,7 @@ function CardForm({
               </div>
             )}
 
-            {/* 카드 기본값 AI 추천 (#419 표 2번). 목표 · 유형은 "더 보기" 안에 있어서, 무엇을 채웠는지 여기서 한 줄로 알려 줍니다. */}
+            {/* 카드 기본값 AI 추천 (#419 표 2번). 목표 · 유형은 화면에 칸이 없어서, 무엇을 채웠는지 여기서 한 줄로 알려 줍니다. */}
             {aiDefaults && (
               <div className="flex flex-col gap-2 rounded-xl bg-violet-50 px-4 py-3">
                 <p className="text-sm break-keep text-slate-700">
@@ -613,197 +552,6 @@ function CardForm({
         </div>
       </Card>
 
-      {/* 선택 칸: 성향에 따라 펼쳐 두거나 접어 둡니다 (#385)
-          필수 묶음(흰 바탕)보다 한 단계 낮게 보이도록, 바탕 없이 선만 둘렀습니다. */}
-      <Card className="border border-slate-200 bg-transparent">
-        <button
-          type="button"
-          aria-expanded={isMoreOpen}
-          onClick={() => setMoreParam(isMoreOpen ? 'closed' : 'open')}
-          className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 text-left"
-        >
-          <span className="min-w-0">
-            <span className="block text-[15px] font-semibold text-slate-700">더 정하기 (선택)</span>
-            <span className="block truncate text-xs text-slate-500">
-              과목 · 목표 · 우선순위 · 유형 · 예상 달성 개수 · 알림
-            </span>
-          </span>
-          <span aria-hidden className="shrink-0 text-slate-400">
-            {isMoreOpen ? '▲' : '▼'}
-          </span>
-        </button>
-
-        {isMoreOpen && (
-          <div className="mt-5 flex flex-col gap-5">
-            {/* 과목: 고르면 이 카드로 잰 공부 시간이 기록 탭에서 그 과목으로 묶입니다. 안 골라도 저장돼요 (#652) */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">과목</p>
-              <div className="flex flex-wrap gap-2">
-                <ChipButton
-                  selected={values.subjectId === ''}
-                  onClick={() => change('subjectId', '')}
-                >
-                  과목 없음
-                </ChipButton>
-                {subjectOptions.map((subject) => (
-                  <ChipButton
-                    key={subject.id}
-                    selected={values.subjectId === subject.id}
-                    onClick={() => change('subjectId', subject.id)}
-                    className="max-w-full truncate"
-                  >
-                    {subject.name}
-                  </ChipButton>
-                ))}
-              </div>
-            </div>
-
-            {/* 목표 연결: 카테고리 대신 목표로 카드를 묶습니다. 기본은 가장 최근 목표 (「4.3」) */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">목표</p>
-              <div className="flex flex-wrap gap-2">
-                <ChipButton selected={values.goalId === ''} onClick={() => change('goalId', '')}>
-                  목표 없음
-                </ChipButton>
-                {goalOptions.map((goal) => (
-                  <ChipButton
-                    key={goal.id}
-                    selected={values.goalId === goal.id}
-                    onClick={() => change('goalId', goal.id)}
-                    className="max-w-full truncate"
-                  >
-                    {goal.title}
-                  </ChipButton>
-                ))}
-              </div>
-              {goalOptions.length === 0 && (
-                <Link to="/goals/new" className="text-brand inline-flex h-10 items-center text-sm">
-                  + 목표 만들기
-                </Link>
-              )}
-            </div>
-
-            {/* 우선순위: 드래그 대신 절대/유연 토글 (「4.3」 규칙) */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">우선순위</p>
-              <SegmentedToggle
-                label="우선순위"
-                options={[
-                  { value: 'flexible', label: '유연' },
-                  { value: 'absolute', label: '절대' },
-                ]}
-                value={values.priority}
-                onChange={(next) => change('priority', next)}
-              />
-              <p className="text-xs break-keep text-slate-500">
-                {values.priority === 'absolute'
-                  ? '절대 카드에는 미루기 버튼이 없어요. 과제 제출처럼 꼭 그 시간에 해야 할 때 골라요.'
-                  : '유연 카드는 미루거나 줄일 수 있어요. 절대로 바꾸면 미루기 버튼이 없어져요.'}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">유형</p>
-              <SegmentedToggle
-                label="유형"
-                options={[
-                  { value: 'self', label: '자습' },
-                  { value: 'lecture', label: '인강' },
-                ]}
-                value={values.type}
-                onChange={(next) => change('type', next)}
-              />
-            </div>
-
-            {/* 예상 달성 개수: 그대로 두면 "전부" 라는 예측으로 저장됩니다 */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">몇 개까지 할 수 있을 것 같나요?</p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleChangeExpectedDone(expectedDone - 1)}
-                  disabled={expectedDone <= 0}
-                  aria-label="예상 개수 줄이기"
-                  className="w-10 shrink-0 px-0"
-                >
-                  −
-                </Button>
-                <p className="min-w-0 flex-1 text-center text-sm font-semibold text-slate-900 tabular-nums">
-                  {expectedDone} / {checklistTotal}개{isLowered ? '' : ' (전부)'}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleChangeExpectedDone(expectedDone + 1)}
-                  disabled={!isLowered}
-                  aria-label="예상 개수 늘리기"
-                  className="w-10 shrink-0 px-0"
-                >
-                  +
-                </Button>
-              </div>
-              {isLowered && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-slate-500">왜 낮췄나요? (하나)</p>
-                  <div className="flex flex-wrap gap-2">
-                    {EXPECTED_DONE_REASONS.map((reason) => (
-                      <ChipButton
-                        key={reason}
-                        selected={values.expectedDoneReason === reason}
-                        onClick={() => change('expectedDoneReason', reason)}
-                      >
-                        {reason}
-                      </ChipButton>
-                    ))}
-                  </div>
-                  {shownErrors.expectedDoneReason && (
-                    <p className="text-xs text-red-600">{shownErrors.expectedDoneReason}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {!failCauseRequired && failCauseField}
-            <p className="-mt-3 text-xs break-keep text-slate-500">
-              쉼표로 여러 개 적을 수 있어요. 내 행동에서 나오는 원인을 하나는 넣어 주세요.
-            </p>
-
-            {/* 알림: 방식 · 몇 분 전 · 문구 */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-700">알림</p>
-              <SegmentedToggle
-                label="알림 방식"
-                options={[
-                  { value: 'message', label: '메시지' },
-                  { value: 'call', label: 'AI 전화' },
-                ]}
-                value={values.alertMethod}
-                onChange={(next) => change('alertMethod', next)}
-              />
-              <div className="flex flex-wrap gap-2">
-                {ALERT_MINUTES_OPTIONS.map((minutes) => (
-                  <ChipButton
-                    key={minutes}
-                    selected={values.alertMinutesBefore === minutes}
-                    onClick={() => change('alertMinutesBefore', minutes)}
-                  >
-                    {minutes === 0 ? '정각' : `${minutes}분 전`}
-                  </ChipButton>
-                ))}
-              </div>
-              <Input
-                value={values.alertText}
-                onChange={(event) => change('alertText', event.target.value)}
-                maxLength={ALERT_TEXT_MAX_LENGTH}
-                aria-label="알림 문구"
-                placeholder="알림 문구 (비우면 기본 문구)"
-              />
-            </div>
-          </div>
-        )}
-      </Card>
-
       {isSleepBlocked && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm break-keep text-red-700">
           수면 보호 시간({sleepWindow.label})과 겹쳐서 저장할 수 없어요. 시작 시각이나 길이를 바꿔
@@ -839,16 +587,14 @@ function CardForm({
  * 카드 만들기 · 고치기 화면 (최종 기획서 「4.3 카드」, #392)
  * - /cards/new?date=2026-10-17  → 그 날짜로 새 카드
  * - /cards/카드id/edit          → 그 카드 고치기
- * 필수는 제목 · 언제 · 체크리스트뿐이고, 나머지는 "더 정하기" 안에 접어 둡니다.
+ * 칸은 제목 · 언제 · 체크리스트뿐입니다. 과목 · 목표 · 우선순위 · 유형 · 예상 개수 · 알림은 기본값으로 저장하고,
+ * 고치는 카드는 전에 있던 값을 그대로 둡니다. (2026-11-03 "더 정하기도 안쓸거야 없애")
  */
 export function CardEditPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
   const todayKey = getTodayKey()
   const { cards, addCard, updateCard, deleteCard } = useCards()
-  const { sessions } = useStudySessions()
-  // "과목" 칸에서 고를 내 과목 (진짜 로그인은 서버의 과목, 테스트 로그인은 이 기기의 과목)
-  const subjects = useSubjects()
   // "이 카드를 지울까요?" 확인창이 열려 있는지
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   // 주소의 ?date= 는 누구나 고칠 수 있어서, 진짜 날짜가 아니면 오늘로 봅니다.
@@ -865,8 +611,7 @@ export function CardEditPage() {
   })
 
   const editingCard = cardId ? cards.find((card) => card.id === cardId) : undefined
-  const accuracy = getRecentPlanAccuracy(cards, sessions, todayKey)
-  // 목표 연결 칸: 진행 중인 목표 + (고치는 카드에 이미 끝난 목표가 걸려 있으면) 그 목표
+  // AI 추천이 고를 목표: 진행 중인 목표 + (고치는 카드에 이미 끝난 목표가 걸려 있으면) 그 목표
   const { goals, activeGoals } = useGoals()
   const linkedGoal = goals.find((goal) => goal.id === editingCard?.goalId)
   const goalOptions =
@@ -942,10 +687,7 @@ export function CardEditPage() {
         }
         editingCard={editingCard}
         failCauseRequired={settings.failCauseRequired.value}
-        optionalOpenByDefault={settings.optionalFieldsOpen.value}
-        accuracy={accuracy}
         goalOptions={goalOptions}
-        subjectOptions={subjects}
         aiChecklist={aiChecklist}
         sleepWindow={sleepWindow}
         allCards={cards}
