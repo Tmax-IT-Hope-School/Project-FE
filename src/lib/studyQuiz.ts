@@ -691,13 +691,20 @@ function fallbackNoticeOf(error: unknown): string | null {
   return null
 }
 
+/** 서버가 문제 없이 답했는지. 위기 안내 · 공부 자료 아님은 다시 물어도 같아서 뺍니다. */
+function isQuizNotMade(reply: QuizReply): boolean {
+  return reply.questions === null && !reply.showHelp && !reply.notStudy
+}
+
 /**
  * 서버로 문제를 받아 보고, 아직 준비가 안 됐으면(404 · 503 · 429) 시연용 예시로 대신합니다.
+ * 서버가 문제 없이 답하면(AI 가 늦음 · 쓸 문제 없음) 학생이 다시 부탁하기 전에 한 번 더 받아 봅니다. (2026-11-03)
  * 그 밖의 실패(연결 끊김 · 400 등)는 그대로 던져서 화면이 [다시 보내기] 를 보여 줍니다.
  */
 export async function requestQuizOrDemo(input: QuizInput): Promise<QuizReply> {
   try {
-    return await requestQuiz(input)
+    const reply = await requestQuiz(input)
+    return isQuizNotMade(reply) ? await requestQuiz(input) : reply
   } catch (error) {
     const notice = fallbackNoticeOf(error)
     if (notice === null) throw error

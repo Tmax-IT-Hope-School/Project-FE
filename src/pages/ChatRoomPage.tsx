@@ -534,7 +534,8 @@ function applyQuizReply(thread: CoachThread, result: QuizReply, input: QuizInput
   if (result.questions === null) {
     return withBubble(thread, {
       speaker: 'ai',
-      text: '이번엔 문제를 못 만들었어. 주제를 조금 더 자세히 적어 줄래?',
+      // 주제 탓이 아니라 AI 가 늦거나 답이 규칙에 안 맞은 경우라서, 주제를 고치라고 하지 않습니다. (2026-11-03)
+      text: '문제를 만들다 잠깐 막혔어. 조금 있다가 다시 부탁해 줄래?',
       chips: [QUIZ_CHIP],
     })
   }
