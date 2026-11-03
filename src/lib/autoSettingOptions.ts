@@ -48,7 +48,6 @@ export const AUTO_SETTING_ROWS: AutoSettingRow[] = [
     { value: 'ai', label: 'AI 가 채움' },
     { value: 'suggestSelf', label: '2주 뒤 직접' },
   ]),
-  row('optionalFieldsOpen', '선택 입력칸', onOff('펼침', '접음')),
   row('failCauseRequired', '예상 실패 원인', onOff('꼭 적기', '선택')),
   row('planPatternHint', '계획 패턴 안내', [
     { value: 'show', label: '보여 주기만' },
