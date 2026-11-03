@@ -5,6 +5,7 @@ import { useIsServerData } from '@/hooks/useIsServerData'
 import { clearCalendarAlarms } from '@/lib/calendarAlarmsApi'
 import {
   CALENDAR_SCOPE,
+  canWriteCalendar,
   disconnectCalendar,
   getCalendarStatus,
   saveCalendarToken,
@@ -16,6 +17,7 @@ import {
  *
  *   const connection = useCalendarConnect()
  *   connection.status        -> 'unavailable' | 'off' | 'expired' | 'on'
+ *   connection.canWrite      -> 카드를 구글 일정으로 넣을 수 있는지 (읽기 권한만 받은 옛 연결이면 false, #736)
  *   connection.connect()     -> 구글 창을 띄워 캘린더 권한 받기 (버튼을 누른 그 순간에 불러야 합니다)
  *   connection.disconnect()  -> 연결 끊기 (구글 쪽 허락도 취소 · 서버에 올린 알림용 일정도 지움)
  */
@@ -26,6 +28,7 @@ export function useCalendarConnect() {
   const { scriptLoadedSuccessfully } = useGoogleOAuth()
   // 지금 연결 상태. 연결 · 끊기 뒤에 다시 읽어서 바꿉니다.
   const [status, setStatus] = useState<CalendarStatus>(() => getCalendarStatus())
+  const [canWrite, setCanWrite] = useState(() => canWriteCalendar())
   const [isConnecting, setIsConnecting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -34,6 +37,7 @@ export function useCalendarConnect() {
     setIsConnecting(false)
     setErrorMessage(failMessage)
     setStatus(getCalendarStatus())
+    setCanWrite(canWriteCalendar())
   }
 
   // 누르면 구글 창을 띄워 캘린더 권한을 받는 함수를 만듭니다. (@react-oauth/google)
@@ -75,10 +79,12 @@ export function useCalendarConnect() {
     if (isServerData) void clearCalendarAlarms().catch(() => {})
     setErrorMessage(null)
     setStatus(getCalendarStatus())
+    setCanWrite(canWriteCalendar())
   }
 
   return {
     status,
+    canWrite,
     /** 구글 창을 띄울 준비가 됐는지. false 면 연결 버튼을 잠깐 막아 둡니다 */
     isReady: scriptLoadedSuccessfully,
     isConnecting,
