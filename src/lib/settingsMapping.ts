@@ -25,8 +25,6 @@ export interface AutoSettingValues {
   parkingLot: boolean
   /** 체크리스트 작성 — 계속 AI 기본값 / 2주 뒤 "직접 써볼까요?" 제안 */
   checklistWriter: 'ai' | 'suggestSelf'
-  /** 카드 폼의 선택 입력칸을 펼쳐 둘지 */
-  optionalFieldsOpen: boolean
   /** 예상 실패 원인을 필수로 받을지 (내부 원인 1개) */
   failCauseRequired: boolean
   /** 계획 패턴 안내 — 보여 주기만 / 체크리스트 개수를 최근 달성 수에 맞춰 제안 */
@@ -54,7 +52,6 @@ export const DEFAULT_AUTO_SETTINGS: AutoSettingValues = {
   timerMode: 'minimal',
   parkingLot: false,
   checklistWriter: 'ai',
-  optionalFieldsOpen: false,
   failCauseRequired: false,
   planPatternHint: 'show',
   proof: 'optional',
@@ -131,7 +128,6 @@ export function proposeFromTest(levels: ScaleLevels): SettingProposal[] {
         '기록이 부담 없다고 해서 2주 뒤 직접 써 보기를 제안할게요',
       ),
     )
-    out.push(propose('optionalFieldsOpen', true, '기록이 부담 없다고 해서 선택 칸을 펼쳐 뒀어요'))
   }
   if (is('externalAttribution', 'high')) {
     out.push(
